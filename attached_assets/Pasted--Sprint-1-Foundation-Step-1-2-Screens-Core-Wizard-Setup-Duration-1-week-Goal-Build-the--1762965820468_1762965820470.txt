@@ -1,0 +1,255 @@
+🚀 Sprint 1 — Foundation + Step 1–2 Screens (Core Wizard + Setup)
+
+Duration: 1 week
+Goal: Build the scaffold, routing, state, and two first screens (Project Setup + Database Config).
+
+🔧 Tasks
+1. Project Bootstrapping
+
+Create base project with Next.js App Router, Tailwind, Shadcn/UI, and Lucide Icons.
+
+Add theme config: dark mode only, soft shadows, consistent spacing system.
+
+Setup Zustand store for step data persistence across screens.
+
+Implement multi-step layout: header with logo, progress bar, and “Previous/Next” navigation buttons.
+
+Add Framer Motion for step transitions (slide in/out, fade).
+
+2. Step 1 — Project Setup
+
+Inputs:
+
+Project Name
+
+Description
+
+Author
+
+License (dropdown)
+
+Node.js version (dropdown)
+
+Package manager (toggle buttons)
+
+Reusable components:
+
+<InputField />
+
+<Dropdown />
+
+<ToggleGroup />
+
+Live validation (project name kebab-case, required fields)
+
+Add Next button validation guard (disabled until valid)
+
+Store values in Zustand.
+
+3. Step 2 — Database Configuration
+
+Database type dropdown (MongoDB, PostgreSQL, MySQL)
+
+Provider dropdown (Neon, Supabase, Atlas)
+
+Connection string field with masking
+
+Auto-migration toggle (Push / Manual)
+
+Add tooltip explaining each option
+
+Integrate basic field validation (regex for connection string)
+
+4. Navigation System
+
+Unified “StepManager” component that handles:
+
+Step transitions
+
+Progress indicator (step/total)
+
+State persistence
+
+“Next” disabled if validation fails
+
+5. Styling + Polish
+
+Full-screen centered card layout
+
+Consistent padding (p-6 to p-8)
+
+Use Tailwind’s space-y utilities for vertical rhythm
+
+Add hover:shadow-lg to buttons for tactile response
+
+⚙️ Sprint 2 — Model Builder + Auth Setup + Relationship Diagram
+
+Duration: 1.5 weeks
+Goal: Add schema builder (drag/drop fields, relationships) + authentication setup screen with RBAC matrix.
+
+🔧 Tasks
+1. Step 3 — Model Definition
+
+Drag-and-Drop Entity Builder:
+
+Use DnD Kit or custom builder for fields
+
+Add / Remove fields with inline validation
+
+Dropdown for type (UUID, String, Boolean, Int)
+
+Validation toggles: Required, Unique, Primary Key
+
+Relationship Section:
+
+Add relationships dynamically (One-to-Many, Many-to-Many)
+
+Select target model
+
+Entity Diagram Visualization:
+
+Use React Flow for live diagram
+
+Auto-sync diagram when models update
+
+Display nodes as cards (model name + fields)
+
+Connect relationships with labeled edges
+
+Zustand sync for models (each field saved in structure):
+
+models: [
+  { name: "User", fields: [{ name: "id", type: "UUID", required: true }] }
+]
+
+2. Step 4 — Authentication & Authorization
+
+Authentication Provider: (JWT, OAuth, NextAuth)
+
+JWT Settings: Secret Key, Expiration
+
+RBAC System:
+
+Define user roles (comma-separated)
+
+Permission Matrix (4x roles)
+
+Reusable <PermissionMatrix /> component
+
+Use Tailwind grid to layout matrix cells with checkboxes
+
+Validation: Require at least one role and secret key.
+
+3. UX Enhancements
+
+“Auto-save” on field blur
+
+Progress persistence (localStorage backup)
+
+“Previous/Next” animated transitions
+
+Tooltip for complex sections (e.g., relationships, RBAC)
+
+4. Styling
+
+Dark neutral background (#0D1117)
+
+Card contrast (#161B22)
+
+Text hierarchy:
+
+h1: text-xl font-semibold
+
+h2: text-sm text-gray-400 uppercase tracking-wide
+
+Blue accents for active states (text-blue-400, border-blue-500)
+
+🧩 Sprint 3 — Features, Review & Generation Preview
+
+Duration: 1 week
+Goal: Finalize wizard with feature selection, config summary, and backend-ready JSON preview.
+
+🔧 Tasks
+1. Step 5 — Feature Selection
+
+Grid of selectable feature cards:
+
+Authentication
+
+ORM
+
+CI/CD
+
+Linting & Formatting
+
+Testing Framework
+
+Docker Support
+
+Card behavior:
+
+Toggle on click
+
+Highlight with blue border when selected
+
+Animate selection with scale and glow
+
+Store selection in Zustand array
+
+2. Step 6 — Review & Generate
+
+Display all config data in grouped sections:
+
+Project Setup
+
+Database
+
+Models
+
+Auth
+
+Features
+
+Each section has an “Edit” button (jumps to that step)
+
+Add code preview panel:
+
+Render JSON config using Prism.js syntax highlighting
+
+“Copy config” + “Download config.json”
+
+Simulate “Generating project…” loader with progress bar + spinner animation
+
+On completion → show download button (mock ZIP).
+
+3. Polish & QA
+
+Add global keyboard navigation:
+
+Enter → Next
+
+Backspace → Previous
+
+Add step breadcrumbs (hover preview of steps)
+
+Final responsive polish for mobile (breakpoint md).
+
+🧱 Tech Architecture Summary
+Layer	Library / Tool	Purpose
+UI	Next.js + Tailwind + Shadcn/UI	Layout + Components
+Animations	Framer Motion	Transitions
+State	Zustand	Persist multi-step data
+Drag-Drop	DnD Kit	Model Builder
+Diagram	React Flow	Entity Relationships
+Code Preview	Prism.js	JSON syntax highlighting
+Validation	Zod	Schema validation
+Storage	LocalStorage	Step persistence
+✅ Deliverables After 3 Sprints
+
+Fully functional 6-step project setup wizard identical in style and flow to the screenshots.
+
+Reusable components library (input, toggle, dropdown, matrix, card).
+
+Exportable JSON config ready to be sent to backend generator.
+
+Polished developer-grade UI with real transitions and responsive behavior.
