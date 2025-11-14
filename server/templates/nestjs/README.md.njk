@@ -1,0 +1,186 @@
+# {{ projectName }}
+
+{{ description }}
+
+## 📋 Description
+
+This project was generated using [FoundationWizard](https://github.com/yourusername/foundation-wizard), an automated NestJS project generator.
+
+**Author:** {{ author }}  
+**License:** {{ license }}
+
+## 🚀 Tech Stack
+
+- **Framework:** NestJS 10
+- **Language:** TypeScript
+- **Database:** {{ databaseType }}
+{% if databaseType === 'MongoDB' %}
+- **ORM:** Mongoose
+{% else %}
+- **ORM:** TypeORM
+{% endif %}
+- **Node Version:** {{ nodeVersion }}
+- **Package Manager:** {{ packageManager }}
+
+## 📦 Installation
+
+```bash
+# Install dependencies
+{% if packageManager === 'pnpm' %}
+pnpm install
+{% elif packageManager === 'yarn' %}
+yarn install
+{% else %}
+npm install
+{% endif %}
+```
+
+## 🔧 Configuration
+
+1. Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+2. Update the environment variables in `.env`:
+```env
+DATABASE_URL={{ connectionString }}
+PORT=3000
+```
+
+## 🏃 Running the app
+
+```bash
+# Development
+{% if packageManager === 'pnpm' %}
+pnpm run start:dev
+{% elif packageManager === 'yarn' %}
+yarn start:dev
+{% else %}
+npm run start:dev
+{% endif %}
+
+# Production mode
+{% if packageManager === 'pnpm' %}
+pnpm run start:prod
+{% elif packageManager === 'yarn' %}
+yarn start:prod
+{% else %}
+npm run start:prod
+{% endif %}
+```
+
+## 🐳 Docker Support
+
+### Using Docker Compose (Recommended)
+
+```bash
+# Start all services (app + database)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Using Dockerfile only
+
+```bash
+# Build image
+docker build -t {{ projectName }} .
+
+# Run container
+docker run -p 3000:3000 --env-file .env {{ projectName }}
+```
+
+## 🧪 Testing
+
+```bash
+# Unit tests
+{% if packageManager === 'pnpm' %}
+pnpm run test
+{% elif packageManager === 'yarn' %}
+yarn test
+{% else %}
+npm run test
+{% endif %}
+
+# E2E tests
+{% if packageManager === 'pnpm' %}
+pnpm run test:e2e
+{% elif packageManager === 'yarn' %}
+yarn test:e2e
+{% else %}
+npm run test:e2e
+{% endif %}
+
+# Test coverage
+{% if packageManager === 'pnpm' %}
+pnpm run test:cov
+{% elif packageManager === 'yarn' %}
+yarn test:cov
+{% else %}
+npm run test:cov
+{% endif %}
+```
+
+## 📝 API Endpoints
+
+### Health Check
+```
+GET /health
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Hello World
+```
+GET /
+```
+
+Response:
+```
+Hello from {{ projectName }}!
+```
+
+## 📁 Project Structure
+
+```
+{{ projectName }}/
+├── src/
+│   ├── app.controller.ts
+│   ├── app.module.ts
+│   ├── app.service.ts
+│   └── main.ts
+├── test/
+├── .env.example
+├── .eslintrc.js
+├── .gitignore
+├── .prettierrc
+├── docker-compose.yml
+├── Dockerfile
+├── nest-cli.json
+├── package.json
+├── README.md
+└── tsconfig.json
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is licensed under the {{ license }} License.
+
+---
+
+Generated with ❤️ by [FoundationWizard](https://github.com/yourusername/foundation-wizard)

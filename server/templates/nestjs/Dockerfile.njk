@@ -1,0 +1,54 @@
+# Build stage
+FROM node:{{ nodeVersion }}-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+{% if packageManager === 'pnpm' %}
+RUN npm install -g pnpm
+RUN pnpm install --frozen-lockfile
+{% elif packageManager === 'yarn' %}
+COPY yarn.lock ./
+RUN yarn install --frozen-lockfile
+{% else %}
+RUN npm ci
+{% endif %}
+
+# Copy source code
+COPY . .
+
+# Build application
+{% if packageManager === 'pnpm' %}
+RUN pnpm run build
+{% elif packageManager === 'yarn' %}
+RUN yarn build
+{% else %}
+RUN npm run build
+{% endif %}
+
+# Production stage
+FROM node:{{ nodeVersion }}-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+{% if packageManager === 'pnpm' %}
+RUN npm install -g pnpm
+RUN pnpm install --prod --frozen-lockfile
+{% elif packageManager === 'yarn' %}
+COPY yarn.lock ./
+RUN yarn install --prod --frozen-lockfile
+{% else %}
+RUN npm ci --only=production
+{% endif %}
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+
+# Expose port
+EXPOSE 3000
+
+# Start application
+CMD ["node", "dist/main"]

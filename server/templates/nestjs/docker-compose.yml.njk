@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: {{ projectName }}-app
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL={{ connectionString }}
+    depends_on:
+{% if databaseType === 'MongoDB' %}
+      - mongodb
+{% elif databaseType === 'PostgreSQL' %}
+      - postgres
+{% elif databaseType === 'MySQL' %}
+      - mysql
+{% endif %}
+    networks:
+      - app-network
+
+{% if databaseType === 'MongoDB' %}
+  mongodb:
+    image: mongo:7
+    container_name: {{ projectName }}-mongodb
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - app-network
+{% elif databaseType === 'PostgreSQL' %}
+  postgres:
+    image: postgres:16-alpine
+    container_name: {{ projectName }}-postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB={{ projectName | replace('-', '_') }}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+{% elif databaseType === 'MySQL' %}
+  mysql:
+    image: mysql:8
+    container_name: {{ projectName }}-mysql
+    restart: unless-stopped
+    ports:
+      - '3306:3306'
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE={{ projectName | replace('-', '_') }}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
+{% endif %}
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+{% if databaseType === 'MongoDB' %}
+  mongodb_data:
+{% elif databaseType === 'PostgreSQL' %}
+  postgres_data:
+{% elif databaseType === 'MySQL' %}
+  mysql_data:
+{% endif %}

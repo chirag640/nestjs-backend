@@ -1,0 +1,30 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+{% if databaseType === 'MongoDB' %}
+import { MongooseModule } from '@nestjs/mongoose';
+{% else %}
+import { TypeOrmModule } from '@nestjs/typeorm';
+{% endif %}
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+{% if databaseType === 'MongoDB' %}
+    MongooseModule.forRoot(process.env.DATABASE_URL || '{{ connectionString }}'),
+{% else %}
+    TypeOrmModule.forRoot({
+      type: '{{ databaseType | lower }}',
+      url: process.env.DATABASE_URL || '{{ connectionString }}',
+      autoLoadEntities: true,
+      synchronize: {{ autoMigration === 'push' }},
+    }),
+{% endif %}
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
