@@ -389,14 +389,13 @@ In Step 5, enable/disable:
 
 ## Security Best Practices
 
-1. **Change JWT_SECRET**: Always use a strong, random secret (min 32 characters)
-2. **Short Access Tokens**: Keep access tokens short-lived (15-60 minutes)
-3. **Enable Token Rotation**: Reduces risk of stolen refresh tokens
-4. **Enable Token Blacklist**: Allows proper logout functionality
-5. **Use HTTPS**: Always use HTTPS in production
-6. **Enable Helmet**: Protects against common vulnerabilities
-7. **Validate Input**: Enable global ValidationPipe
-8. **Strong Passwords**: Enforce password strength in frontend
+1. **Set JWT_SECRET**: Always set a strong, random secret (min 32 characters). The generated application will fail to start if JWT_SECRET is not configured (no insecure fallback).2. **Short Access Tokens**: Keep access tokens short-lived (15-60 minutes)
+2. **Enable Token Rotation**: Reduces risk of stolen refresh tokens
+3. **Enable Token Blacklist**: Allows proper logout functionality
+4. **Use HTTPS**: Always use HTTPS in production
+5. **Enable Helmet**: Protects against common vulnerabilities
+6. **Validate Input**: Enable global ValidationPipe
+7. **Strong Passwords**: Enforce password strength in frontend
 
 ## Testing Sprint 3
 

@@ -12,7 +12,8 @@ export class {{ model.name }}Repository {
 
   async create(data: Partial<{{ model.name }}>): Promise<{{ model.name }}> {
     const created = new this.{{ model.nameCamel }}Model(data);
-    return created.save();
+    const saved = await created.save();
+    return saved.toObject();
   }
 
   async findAll(): Promise<{{ model.name }}[]> {

@@ -245,62 +245,36 @@ export default function Step6Review() {
             </Alert>
           )}
 
-          {/* Generation Section */}
+          {/* Actions Section */}
           <div className="pt-4 space-y-4">
-            {!isGenerating && !isComplete && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Click "Continue" to generate your project and preview it in the
+                browser before downloading.
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex gap-2">
               <Button
-                className="w-full"
-                size="lg"
-                onClick={generateProject}
-                disabled={validationErrors.length > 0}
-                data-testid="button-generate"
+                variant="outline"
+                className="flex-1"
+                onClick={downloadConfig}
+                data-testid="button-download-config"
               >
-                Generate & Download Project
+                <Download className="w-4 h-4 mr-2" />
+                Download Config
               </Button>
-            )}
-
-            {isGenerating && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Generating project...
-                  </span>
-                  <span className="font-medium">{generationProgress}%</span>
-                </div>
-                <Progress value={generationProgress} className="h-2" />
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Please wait while we generate your project</span>
-                </div>
-              </div>
-            )}
-
-            {isComplete && (
-              <Card className="p-6 bg-primary/5 border-primary/20">
-                <div className="text-center space-y-4">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
-                    <Download className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold mb-2">
-                      Project Ready!
-                    </h4>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Your project configuration has been generated successfully
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={downloadConfig}
-                    data-testid="button-download-final"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download Configuration
-                  </Button>
-                </div>
-              </Card>
-            )}
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={copyToClipboard}
+                data-testid="button-copy-config"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy Config
+              </Button>
+            </div>
           </div>
         </div>
       </div>

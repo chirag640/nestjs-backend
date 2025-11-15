@@ -1,11 +1,12 @@
-import { useWizardStore } from '@/lib/store';
-import Step1ProjectSetup from './steps/Step1ProjectSetup';
-import Step2DatabaseConfig from './steps/Step2DatabaseConfig';
-import Step3ModelBuilder from './steps/Step3ModelBuilder';
-import Step4AuthSetup from './steps/Step4AuthSetup';
-import Step5FeatureSelection from './steps/Step5FeatureSelection';
-import Step6Review from './steps/Step6Review';
-import { useEffect } from 'react';
+import { useWizardStore } from "@/lib/store";
+import Step1ProjectSetup from "./steps/Step1ProjectSetup";
+import Step2DatabaseConfig from "./steps/Step2DatabaseConfig";
+import Step3ModelBuilder from "./steps/Step3ModelBuilder";
+import Step4AuthSetup from "./steps/Step4AuthSetup";
+import Step5FeatureSelection from "./steps/Step5FeatureSelection";
+import Step6Review from "./steps/Step6Review";
+import Step7Preview from "./steps/Step7Preview";
+import { useEffect } from "react";
 
 export default function Wizard() {
   const currentStep = useWizardStore((state) => state.currentStep);
@@ -13,20 +14,20 @@ export default function Wizard() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
         const target = e.target as HTMLElement;
-        if (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT') {
+        if (target.tagName !== "TEXTAREA" && target.tagName !== "INPUT") {
           e.preventDefault();
           nextStep();
         }
-      } else if (e.key === 'Backspace' && e.ctrlKey) {
+      } else if (e.key === "Backspace" && e.ctrlKey) {
         e.preventDefault();
         previousStep();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [nextStep, previousStep]);
 
   switch (currentStep) {
@@ -42,6 +43,8 @@ export default function Wizard() {
       return <Step5FeatureSelection />;
     case 6:
       return <Step6Review />;
+    case 7:
+      return <Step7Preview />;
     default:
       return <Step1ProjectSetup />;
   }

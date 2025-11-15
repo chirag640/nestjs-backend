@@ -23,7 +23,7 @@ interface WizardStore {
   isStepValid: (step: number) => boolean;
 }
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 export const useWizardStore = create<WizardStore>()(
   persist(

@@ -1,10 +1,13 @@
 import {
+{% set validatorSet = [] %}
 {% for field in model.fields %}
-  {% if field.required %}
   {% for validator in field.validators %}
-  {{ validator | replace('()', '') }},
+    {% set cleanValidator = validator | replace('()', '') %}
+    {% if cleanValidator not in validatorSet %}
+      {% set _ = validatorSet.append(cleanValidator) %}
+  {{ cleanValidator }},
+    {% endif %}
   {% endfor %}
-  {% endif %}
 {% endfor %}
   IsOptional,
 } from 'class-validator';
