@@ -1,0 +1,19 @@
+import {
+{% for field in model.fields %}
+  {% for validator in field.validators %}
+  {{ validator | replace('()', '') }},
+  {% endfor %}
+{% endfor %}
+  IsOptional,
+} from 'class-validator';
+
+export class {{ model.updateDtoName }} {
+{% for field in model.fields %}
+  @IsOptional()
+  {% for validator in field.validators %}
+  @{{ validator }}
+  {% endfor %}
+  {{ field.name }}?: {{ field.tsType }};
+
+{% endfor %}
+}

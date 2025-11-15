@@ -1,0 +1,22 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
+
+export type {{ model.name }}Document = {{ model.name }} & Document;
+
+@Schema({% if model.timestamps %}{ timestamps: true }{% endif %})
+export class {{ model.name }} {
+{% for field in model.fields %}
+  @Prop({
+    type: {{ field.mongooseType }},
+    required: {{ field.required | lower }},
+    {% if field.unique %}unique: true,{% endif %}
+    {% if field.indexed %}index: true,{% endif %}
+    {% if field.defaultValue !== undefined and field.defaultValue !== null %}default: {% if field.type === 'string' %}'{{ field.defaultValue }}'{% else %}{{ field.defaultValue }}{% endif %},{% endif %}
+    {% if field.enum %}enum: ['{{ field.enum | join("', '") }}'],{% endif %}
+  })
+  {{ field.name }}: {{ field.tsType }};
+
+{% endfor %}
+}
+
+export const {{ model.name }}Schema = SchemaFactory.createForClass({{ model.name }});

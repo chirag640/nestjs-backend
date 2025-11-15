@@ -2,7 +2,10 @@ import { z } from "zod";
 
 // Step 1: Project Setup
 export const projectSetupSchema = z.object({
-  projectName: z.string().min(1, "Project name is required").regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only"),
+  projectName: z
+    .string()
+    .min(1, "Project name is required")
+    .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only"),
   description: z.string().min(1, "Description is required"),
   author: z.string().min(1, "Author is required"),
   license: z.enum(["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "ISC"]),
@@ -22,14 +25,27 @@ export const databaseConfigSchema = z.object({
 
 export type DatabaseConfig = z.infer<typeof databaseConfigSchema>;
 
-// Step 3: Model Definition
+// Step 3: Model Definition (Enhanced for Sprint 2)
 export const fieldSchema = z.object({
   id: z.string(),
-  name: z.string().min(1, "Field name is required"),
-  type: z.enum(["UUID", "String", "Boolean", "Int", "Float", "DateTime"]),
-  required: z.boolean(),
-  unique: z.boolean(),
-  primaryKey: z.boolean(),
+  name: z
+    .string()
+    .min(1, "Field name is required")
+    .regex(/^[a-z][a-zA-Z0-9]*$/, "Field name must be camelCase"),
+  type: z.enum(["string", "number", "boolean", "date", "objectId"]),
+  required: z.boolean().default(false),
+  unique: z.boolean().default(false),
+  indexed: z.boolean().default(false),
+  defaultValue: z
+    .union([z.string(), z.number(), z.boolean(), z.null()])
+    .optional(),
+  // Validation rules
+  minLength: z.number().optional(),
+  maxLength: z.number().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  pattern: z.string().optional(), // regex pattern for string validation
+  enum: z.array(z.string()).optional(), // for enum types
 });
 
 export type Field = z.infer<typeof fieldSchema>;
@@ -46,15 +62,19 @@ export type Relationship = z.infer<typeof relationshipSchema>;
 
 export const modelSchema = z.object({
   id: z.string(),
-  name: z.string().min(1, "Model name is required"),
-  fields: z.array(fieldSchema),
+  name: z
+    .string()
+    .min(1, "Model name is required")
+    .regex(/^[A-Z][a-zA-Z0-9]*$/, "Model name must be PascalCase"),
+  fields: z.array(fieldSchema).min(1, "Model must have at least one field"),
+  timestamps: z.boolean().default(true), // auto-add createdAt/updatedAt
 });
 
 export type Model = z.infer<typeof modelSchema>;
 
 export const modelDefinitionSchema = z.object({
   models: z.array(modelSchema),
-  relationships: z.array(relationshipSchema),
+  relationships: z.array(relationshipSchema).default([]),
 });
 
 export type ModelDefinition = z.infer<typeof modelDefinitionSchema>;
@@ -72,14 +92,9 @@ export type AuthConfig = z.infer<typeof authConfigSchema>;
 
 // Step 5: Feature Selection
 export const featureSelectionSchema = z.object({
-  features: z.array(z.enum([
-    "authentication",
-    "orm",
-    "ci-cd",
-    "linting",
-    "testing",
-    "docker"
-  ])),
+  features: z.array(
+    z.enum(["authentication", "orm", "ci-cd", "linting", "testing", "docker"])
+  ),
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;

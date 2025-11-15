@@ -40,7 +40,7 @@ export interface TemplateContext {
  */
 export function renderTemplate(
   templatePath: string,
-  context: TemplateContext
+  context: TemplateContext | Record<string, any>
 ): string {
   try {
     return env.render(templatePath, context);
@@ -55,7 +55,7 @@ export function renderTemplate(
  */
 export function renderString(
   template: string,
-  context: TemplateContext
+  context: TemplateContext | Record<string, any>
 ): string {
   try {
     return nunjucks.renderString(template, context);

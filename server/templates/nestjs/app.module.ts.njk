@@ -7,6 +7,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 {% endif %}
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+{% if models and models.length > 0 %}
+// Generated model modules
+{% for model in models %}
+import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model.fileName }}.module';
+{% endfor %}
+{% endif %}
 
 @Module({
   imports: [
@@ -22,6 +28,11 @@ import { AppService } from './app.service';
       autoLoadEntities: true,
       synchronize: {{ autoMigration === 'push' }},
     }),
+{% endif %}
+{% if models and models.length > 0 %}
+    // Generated modules
+    {% for model in models %}{{ model.name }}Module,
+    {% endfor %}
 {% endif %}
   ],
   controllers: [AppController],

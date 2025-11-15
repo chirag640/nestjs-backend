@@ -1,21 +1,21 @@
-import { useWizardStore } from '@/lib/store';
-import { WizardLayout } from '@/components/wizard/WizardLayout';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { useWizardStore } from "@/lib/store";
+import { WizardLayout } from "@/components/wizard/WizardLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Card } from '@/components/ui/card';
-import { Plus, Trash2, GripVertical } from 'lucide-react';
-import { useState } from 'react';
-import type { Model, Field } from '@shared/schema';
-import { nanoid } from 'nanoid';
+} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
+import { Plus, Trash2, GripVertical } from "lucide-react";
+import { useState } from "react";
+import type { Model, Field } from "@shared/schema";
+import { nanoid } from "nanoid";
 import {
   DndContext,
   closestCenter,
@@ -23,26 +23,29 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-} from '@dnd-kit/core';
+} from "@dnd-kit/core";
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import ReactFlow, { Background, Controls, Node, Edge } from 'reactflow';
-import 'reactflow/dist/style.css';
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import ReactFlow, { Background, Controls, Node, Edge } from "reactflow";
+import "reactflow/dist/style.css";
 
-function SortableFieldItem({ field, onUpdate, onDelete }: { field: Field; onUpdate: (field: Field) => void; onDelete: () => void }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id: field.id });
+function SortableFieldItem({
+  field,
+  onUpdate,
+  onDelete,
+}: {
+  field: Field;
+  onUpdate: (field: Field) => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: field.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -83,18 +86,19 @@ function SortableFieldItem({ field, onUpdate, onDelete }: { field: Field; onUpda
               <Label className="text-xs">Type</Label>
               <Select
                 value={field.type}
-                onValueChange={(value) => onUpdate({ ...field, type: value as any })}
+                onValueChange={(value) =>
+                  onUpdate({ ...field, type: value as any })
+                }
               >
                 <SelectTrigger className="h-9" data-testid="select-field-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="UUID">UUID</SelectItem>
-                  <SelectItem value="String">String</SelectItem>
-                  <SelectItem value="Boolean">Boolean</SelectItem>
-                  <SelectItem value="Int">Int</SelectItem>
-                  <SelectItem value="Float">Float</SelectItem>
-                  <SelectItem value="DateTime">DateTime</SelectItem>
+                  <SelectItem value="string">String</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="boolean">Boolean</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="objectId">ObjectId</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -105,10 +109,15 @@ function SortableFieldItem({ field, onUpdate, onDelete }: { field: Field; onUpda
               <Checkbox
                 id={`required-${field.id}`}
                 checked={field.required}
-                onCheckedChange={(checked) => onUpdate({ ...field, required: !!checked })}
+                onCheckedChange={(checked) =>
+                  onUpdate({ ...field, required: !!checked })
+                }
                 data-testid="checkbox-required"
               />
-              <Label htmlFor={`required-${field.id}`} className="text-xs cursor-pointer">
+              <Label
+                htmlFor={`required-${field.id}`}
+                className="text-xs cursor-pointer"
+              >
                 Required
               </Label>
             </div>
@@ -117,23 +126,33 @@ function SortableFieldItem({ field, onUpdate, onDelete }: { field: Field; onUpda
               <Checkbox
                 id={`unique-${field.id}`}
                 checked={field.unique}
-                onCheckedChange={(checked) => onUpdate({ ...field, unique: !!checked })}
+                onCheckedChange={(checked) =>
+                  onUpdate({ ...field, unique: !!checked })
+                }
                 data-testid="checkbox-unique"
               />
-              <Label htmlFor={`unique-${field.id}`} className="text-xs cursor-pointer">
+              <Label
+                htmlFor={`unique-${field.id}`}
+                className="text-xs cursor-pointer"
+              >
                 Unique
               </Label>
             </div>
 
             <div className="flex items-center gap-2">
               <Checkbox
-                id={`primary-${field.id}`}
-                checked={field.primaryKey}
-                onCheckedChange={(checked) => onUpdate({ ...field, primaryKey: !!checked })}
-                data-testid="checkbox-primary-key"
+                id={`indexed-${field.id}`}
+                checked={field.indexed}
+                onCheckedChange={(checked) =>
+                  onUpdate({ ...field, indexed: !!checked })
+                }
+                data-testid="checkbox-indexed"
               />
-              <Label htmlFor={`primary-${field.id}`} className="text-xs cursor-pointer">
-                Primary Key
+              <Label
+                htmlFor={`indexed-${field.id}`}
+                className="text-xs cursor-pointer"
+              >
+                Indexed
               </Label>
             </div>
           </div>
@@ -157,7 +176,7 @@ export default function Step3ModelBuilder() {
   const { config, updateModelDefinition } = useWizardStore();
   const models = config.modelDefinition?.models || [];
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const [newModelName, setNewModelName] = useState('');
+  const [newModelName, setNewModelName] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -174,21 +193,13 @@ export default function Step3ModelBuilder() {
     const newModel: Model = {
       id: nanoid(),
       name: newModelName,
-      fields: [
-        {
-          id: nanoid(),
-          name: 'id',
-          type: 'UUID',
-          required: true,
-          unique: true,
-          primaryKey: true,
-        },
-      ],
+      fields: [],
+      timestamps: true,
     };
 
     updateModelDefinition({ models: [...models, newModel] });
     setSelectedModelId(newModel.id);
-    setNewModelName('');
+    setNewModelName("");
   };
 
   const addField = () => {
@@ -196,17 +207,15 @@ export default function Step3ModelBuilder() {
 
     const newField: Field = {
       id: nanoid(),
-      name: '',
-      type: 'String',
+      name: "",
+      type: "string",
       required: false,
       unique: false,
-      primaryKey: false,
+      indexed: false,
     };
 
     const updatedModels = models.map((m) =>
-      m.id === selectedModelId
-        ? { ...m, fields: [...m.fields, newField] }
-        : m
+      m.id === selectedModelId ? { ...m, fields: [...m.fields, newField] } : m
     );
 
     updateModelDefinition({ models: updatedModels });
@@ -217,7 +226,10 @@ export default function Step3ModelBuilder() {
 
     const updatedModels = models.map((m) =>
       m.id === selectedModelId
-        ? { ...m, fields: m.fields.map((f) => (f.id === fieldId ? updatedField : f)) }
+        ? {
+            ...m,
+            fields: m.fields.map((f) => (f.id === fieldId ? updatedField : f)),
+          }
         : m
     );
 
@@ -263,7 +275,7 @@ export default function Step3ModelBuilder() {
   // Generate React Flow nodes and edges
   const flowNodes: Node[] = models.map((model, idx) => ({
     id: model.id,
-    type: 'default',
+    type: "default",
     position: { x: 50 + (idx % 3) * 250, y: 50 + Math.floor(idx / 3) * 200 },
     data: {
       label: (
@@ -283,10 +295,10 @@ export default function Step3ModelBuilder() {
       ),
     },
     style: {
-      background: 'hsl(var(--card))',
-      border: '1px solid hsl(var(--card-border))',
-      borderRadius: '8px',
-      color: 'hsl(var(--card-foreground))',
+      background: "hsl(var(--card))",
+      border: "1px solid hsl(var(--card-border))",
+      borderRadius: "8px",
+      color: "hsl(var(--card-foreground))",
       width: 200,
     },
   }));
@@ -308,11 +320,15 @@ export default function Step3ModelBuilder() {
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
                 placeholder="ModelName"
-                onKeyDown={(e) => e.key === 'Enter' && addModel()}
+                onKeyDown={(e) => e.key === "Enter" && addModel()}
                 data-testid="input-new-model"
               />
             </div>
-            <Button onClick={addModel} disabled={!newModelName.trim()} data-testid="button-add-model">
+            <Button
+              onClick={addModel}
+              disabled={!newModelName.trim()}
+              data-testid="button-add-model"
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add
             </Button>
@@ -321,7 +337,10 @@ export default function Step3ModelBuilder() {
           {models.length > 0 && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">Select Model</Label>
-              <Select value={selectedModelId || undefined} onValueChange={setSelectedModelId}>
+              <Select
+                value={selectedModelId || undefined}
+                onValueChange={setSelectedModelId}
+              >
                 <SelectTrigger data-testid="select-model">
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
@@ -368,7 +387,9 @@ export default function Step3ModelBuilder() {
                       <SortableFieldItem
                         key={field.id}
                         field={field}
-                        onUpdate={(updatedField) => updateField(field.id, updatedField)}
+                        onUpdate={(updatedField) =>
+                          updateField(field.id, updatedField)
+                        }
                         onDelete={() => deleteField(field.id)}
                       />
                     ))}

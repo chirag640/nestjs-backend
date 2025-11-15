@@ -1,0 +1,56 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { {{ model.name }}Repository } from './{{ model.fileName }}.repository';
+import { {{ model.createDtoName }} } from './dto/create-{{ model.fileName }}.dto';
+import { {{ model.updateDtoName }} } from './dto/update-{{ model.fileName }}.dto';
+import { {{ model.outputDtoName }} } from './dto/{{ model.fileName }}-output.dto';
+
+@Injectable()
+export class {{ model.name }}Service {
+  constructor(private readonly {{ model.nameCamel }}Repository: {{ model.name }}Repository) {}
+
+  async create(dto: {{ model.createDtoName }}): Promise<{{ model.outputDtoName }}> {
+    const created = await this.{{ model.nameCamel }}Repository.create(dto);
+    return this.mapToOutput(created);
+  }
+
+  async findAll(): Promise<{{ model.outputDtoName }}[]> {
+    const items = await this.{{ model.nameCamel }}Repository.findAll();
+    return items.map((item) => this.mapToOutput(item));
+  }
+
+  async findOne(id: string): Promise<{{ model.outputDtoName }}> {
+    const item = await this.{{ model.nameCamel }}Repository.findById(id);
+    if (!item) {
+      throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
+    }
+    return this.mapToOutput(item);
+  }
+
+  async update(id: string, dto: {{ model.updateDtoName }}): Promise<{{ model.outputDtoName }}> {
+    const updated = await this.{{ model.nameCamel }}Repository.update(id, dto);
+    if (!updated) {
+      throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
+    }
+    return this.mapToOutput(updated);
+  }
+
+  async remove(id: string): Promise<void> {
+    const deleted = await this.{{ model.nameCamel }}Repository.delete(id);
+    if (!deleted) {
+      throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
+    }
+  }
+
+  private mapToOutput(item: any): {{ model.outputDtoName }} {
+    return {
+      id: item._id?.toString() || item.id,
+{% for field in model.fields %}
+      {{ field.name }}: item.{{ field.name }},
+{% endfor %}
+{% if model.timestamps %}
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+{% endif %}
+    };
+  }
+}

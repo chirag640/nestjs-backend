@@ -1,6 +1,7 @@
 import * as prettier from "prettier";
 import { renderTemplate, type TemplateContext } from "./templateRenderer";
 import type { WizardConfig } from "../../shared/schema";
+import { buildIR, type ProjectIR, type ModelIR } from "./irBuilder";
 
 export interface GeneratedFile {
   path: string;
@@ -39,7 +40,10 @@ export async function generateProject(
     throw new Error("Project setup and database configuration are required");
   }
 
-  const context: TemplateContext = {
+  // Build Intermediate Representation
+  const ir: ProjectIR = buildIR(config);
+
+  const context: TemplateContext & { models?: ModelIR[] } = {
     projectName: projectSetup.projectName,
     description: projectSetup.description,
     author: projectSetup.author,
@@ -50,6 +54,7 @@ export async function generateProject(
     provider: databaseConfig.provider,
     connectionString: databaseConfig.connectionString,
     autoMigration: databaseConfig.autoMigration,
+    models: ir.models, // Add models to context for app.module
   };
 
   const files: GeneratedFile[] = [];
@@ -133,6 +138,84 @@ export async function generateProject(
     } catch (error) {
       console.error(`Error generating ${output}:`, error);
       throw new Error(`Failed to generate file: ${output}`);
+    }
+  }
+
+  // Generate model files if MongoDB is selected
+  if (databaseConfig.databaseType === "MongoDB" && ir.models.length > 0) {
+    for (const model of ir.models) {
+      const modelFiles = await generateModelFiles(model);
+      files.push(...modelFiles);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate all files for a single model
+ */
+async function generateModelFiles(model: ModelIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const modelTemplates = [
+    {
+      template: "mongoose/schema.njk",
+      output: `${model.modulePath}/schemas/${model.fileName}.schema.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/repository.njk",
+      output: `${model.modulePath}/${model.fileName}.repository.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/service.njk",
+      output: `${model.modulePath}/${model.fileName}.service.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/controller.njk",
+      output: `${model.modulePath}/${model.fileName}.controller.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/module.njk",
+      output: `${model.modulePath}/${model.fileName}.module.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/dto-create.njk",
+      output: `${model.modulePath}/dto/create-${model.fileName}.dto.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/dto-update.njk",
+      output: `${model.modulePath}/dto/update-${model.fileName}.dto.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/dto-output.njk",
+      output: `${model.modulePath}/dto/${model.fileName}-output.dto.ts`,
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of modelTemplates) {
+    try {
+      const rendered = renderTemplate(template, { model });
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+
+      files.push({
+        path: output,
+        content,
+      });
+    } catch (error) {
+      console.error(
+        `Error generating ${output} for model ${model.name}:`,
+        error
+      );
+      throw new Error(`Failed to generate ${output} for model ${model.name}`);
     }
   }
 

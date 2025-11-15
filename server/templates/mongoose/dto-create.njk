@@ -1,0 +1,28 @@
+import {
+{% for field in model.fields %}
+  {% if field.required %}
+  {% for validator in field.validators %}
+  {{ validator | replace('()', '') }},
+  {% endfor %}
+  {% endif %}
+{% endfor %}
+  IsOptional,
+} from 'class-validator';
+
+export class {{ model.createDtoName }} {
+{% for field in model.fields %}
+  {% if field.required %}
+  {% for validator in field.validators %}
+  @{{ validator }}
+  {% endfor %}
+  {{ field.name }}: {{ field.tsType }};
+  {% else %}
+  @IsOptional()
+  {% for validator in field.validators %}
+  @{{ validator }}
+  {% endfor %}
+  {{ field.name }}?: {{ field.tsType }};
+  {% endif %}
+
+{% endfor %}
+}

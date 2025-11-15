@@ -1,0 +1,50 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { {{ model.name }}Service } from './{{ model.fileName }}.service';
+import { {{ model.createDtoName }} } from './dto/create-{{ model.fileName }}.dto';
+import { {{ model.updateDtoName }} } from './dto/update-{{ model.fileName }}.dto';
+import { {{ model.outputDtoName }} } from './dto/{{ model.fileName }}-output.dto';
+
+@Controller('{{ model.route }}')
+export class {{ model.name }}Controller {
+  constructor(private readonly {{ model.nameCamel }}Service: {{ model.name }}Service) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(@Body() dto: {{ model.createDtoName }}): Promise<{{ model.outputDtoName }}> {
+    return this.{{ model.nameCamel }}Service.create(dto);
+  }
+
+  @Get()
+  findAll(): Promise<{{ model.outputDtoName }}[]> {
+    return this.{{ model.nameCamel }}Service.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string): Promise<{{ model.outputDtoName }}> {
+    return this.{{ model.nameCamel }}Service.findOne(id);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: {{ model.updateDtoName }},
+  ): Promise<{{ model.outputDtoName }}> {
+    return this.{{ model.nameCamel }}Service.update(id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id') id: string): Promise<void> {
+    return this.{{ model.nameCamel }}Service.remove(id);
+  }
+}

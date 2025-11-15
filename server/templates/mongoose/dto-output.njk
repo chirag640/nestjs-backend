@@ -1,0 +1,13 @@
+export class {{ model.outputDtoName }} {
+  id: string;
+
+{% for field in model.fields %}
+  {{ field.name }}: {{ field.tsType }};
+
+{% endfor %}
+{% if model.timestamps %}
+  createdAt: Date;
+
+  updatedAt: Date;
+{% endif %}
+}
