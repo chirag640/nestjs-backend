@@ -1,0 +1,34 @@
+import { Module, Global } from '@nestjs/common';
+import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { redisStore } from 'cache-manager-ioredis-yet';
+
+@Global()
+@Module({
+  imports: [
+    NestCacheModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+
+        if (!redisUrl) {
+          console.warn('⚠️  REDIS_URL not configured, using in-memory cache');
+          return {
+            ttl: 300, // 5 minutes default TTL (in seconds)
+            max: 100, // Maximum number of items in cache
+          };
+        }
+
+        return {
+          store: await redisStore({
+            url: redisUrl,
+            ttl: 300, // 5 minutes default TTL (in seconds)
+          }),
+        };
+      },
+    }),
+  ],
+  exports: [NestCacheModule],
+})
+export class CacheModule {}

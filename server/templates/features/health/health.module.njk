@@ -1,0 +1,21 @@
+import { Module } from '@nestjs/common';
+import { TerminusModule } from '@nestjs/terminus';
+import { HealthController } from './health.controller';
+{% if database.orm === 'mongoose' %}
+import { MongooseModule } from '@nestjs/mongoose';
+{% else %}
+import { TypeOrmModule } from '@nestjs/typeorm';
+{% endif %}
+
+@Module({
+  imports: [
+    TerminusModule,
+    {% if database.orm === 'mongoose' %}
+    MongooseModule,
+    {% else %}
+    TypeOrmModule,
+    {% endif %}
+  ],
+  controllers: [HealthController],
+})
+export class HealthModule {}

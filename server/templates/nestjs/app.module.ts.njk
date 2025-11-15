@@ -10,8 +10,17 @@ import { AppService } from './app.service';
 {% if auth and auth.enabled %}
 import { AuthModule } from './modules/auth/auth.module';
 {% endif %}
+{% if features.logging %}
+import { LoggerModule } from './modules/logger/logger.module';
+{% endif %}
+{% if features.caching %}
+import { CacheModule } from './modules/cache/cache.module';
+{% endif %}
 {% if features.health %}
-import { HealthController } from './health/health.controller';
+import { HealthModule } from './modules/health/health.module';
+{% endif %}
+{% if features.rateLimit %}
+import { ThrottlerModule } from './modules/throttler/throttler.module';
 {% endif %}
 {% if models and models.length > 0 %}
 // Generated model modules
@@ -35,6 +44,18 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
       synchronize: {{ database.autoMigration === 'push' }},
     }),
 {% endif %}
+{% if features.logging %}
+    LoggerModule,
+{% endif %}
+{% if features.caching %}
+    CacheModule,
+{% endif %}
+{% if features.health %}
+    HealthModule,
+{% endif %}
+{% if features.rateLimit %}
+    ThrottlerModule,
+{% endif %}
 {% if auth and auth.enabled %}
     AuthModule,
 {% endif %}
@@ -44,10 +65,7 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
     {% endfor %}
 {% endif %}
   ],
-  controllers: [
-    AppController,
-    {% if features.health %}HealthController,{% endif %}
-  ],
+  controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}

@@ -1,9 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 {% if features.validation %}import { ValidationPipe } from '@nestjs/common';{% endif %}
-{% if features.logging %}import { Logger } from '@nestjs/common';{% endif %}
+{% if features.logging %}import { Logger } from 'nestjs-pino';{% endif %}
 {% if features.helmet %}import helmet from 'helmet';{% endif %}
 {% if features.compression %}import * as compression from 'compression';{% endif %}
+{% if features.versioning %}import { VersioningType } from '@nestjs/common';{% endif %}
+{% if features.swagger %}import { setupSwagger } from './config/swagger.config';{% endif %}
 
 async function bootstrap() {
 {% if auth and auth.enabled %}
@@ -23,9 +25,21 @@ async function bootstrap() {
 {% endif %}
 
   const app = await NestFactory.create(AppModule{% if features.logging %}, {
-    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+    bufferLogs: true,
   }{% endif %});
   
+  {% if features.logging %}
+  // Use Pino logger for structured logging
+  app.useLogger(app.get(Logger));
+  {% endif %}
+
+  {% if features.versioning %}
+  // Enable URI-based API versioning (e.g., /v1/users, /v2/users)
+  app.enableVersioning({
+    type: VersioningType.URI,
+  });
+  {% endif %}
+
   {% if features.helmet %}
   // Security: HTTP headers protection
   app.use(helmet());
@@ -50,14 +64,31 @@ async function bootstrap() {
   }));
   {% endif %}
 
+  {% if features.swagger %}
+  // Setup Swagger API documentation at /api/docs
+  setupSwagger(app);
+  {% endif %}
+
   const port = process.env.PORT || 3000;
   await app.listen(port);
   
   {% if features.logging %}
-  const logger = new Logger('Bootstrap');
+  const logger = app.get(Logger);
   logger.log(`🚀 Application is running on: http://localhost:${port}`);
+  {% if features.swagger %}
+  logger.log(`📚 Swagger documentation available at: http://localhost:${port}/api/docs`);
+  {% endif %}
+  {% if features.health %}
+  logger.log(`❤️  Health check available at: http://localhost:${port}/health`);
+  {% endif %}
   {% else %}
   console.log(`🚀 Application is running on: http://localhost:${port}`);
+  {% if features.swagger %}
+  console.log(`📚 Swagger documentation available at: http://localhost:${port}/api/docs`);
+  {% endif %}
+  {% if features.health %}
+  console.log(`❤️  Health check available at: http://localhost:${port}/health`);
+  {% endif %}
   {% endif %}
 }
 

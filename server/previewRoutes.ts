@@ -127,6 +127,21 @@ export function registerPreviewRoutes(app: Express) {
       return res.status(400).json({ error: "Missing code parameter" });
     }
 
+    // Validate code size to prevent excessive CPU/memory usage
+    const MAX_CODE_LENGTH = parseInt(
+      process.env.MAX_CODE_LENGTH || "200000",
+      10
+    );
+    if (code.length > MAX_CODE_LENGTH) {
+      console.warn(
+        `[Preview] Rejected format request: code size ${code.length} exceeds limit ${MAX_CODE_LENGTH}`
+      );
+      return res.status(413).json({
+        error: "Payload too large",
+        message: `Code size (${code.length} chars) exceeds maximum allowed (${MAX_CODE_LENGTH} chars)`,
+      });
+    }
+
     try {
       // Dynamic import for Prettier (ESM module)
       const prettier = await import("prettier");

@@ -52,10 +52,12 @@ export type Field = z.infer<typeof fieldSchema>;
 
 export const relationshipSchema = z.object({
   id: z.string(),
-  type: z.enum(["one-to-many", "many-to-many"]),
+  type: z.enum(["one-to-one", "one-to-many", "many-to-many"]),
   sourceModel: z.string(),
   targetModel: z.string(),
   fieldName: z.string(),
+  through: z.string().optional(), // join model name for many-to-many
+  attributes: z.array(fieldSchema).optional(), // attributes for N:M relationships
 });
 
 export type Relationship = z.infer<typeof relationshipSchema>;
@@ -105,16 +107,38 @@ export const authConfigSchema = z.object({
 
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 
-// Step 5: Feature Selection (Sprint 3 - Toggles)
+// Step 4.1: OAuth2 Configuration (Sprint 6)
+export const oauthProviderSchema = z.object({
+  name: z.enum(["google", "github"]),
+  clientId: z.string().min(1, "Client ID is required"),
+  clientSecret: z.string().min(1, "Client Secret is required"),
+  callbackURL: z.string().url("Must be a valid URL"),
+});
+
+export type OAuthProvider = z.infer<typeof oauthProviderSchema>;
+
+export const oauthConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  providers: z.array(oauthProviderSchema).default([]),
+});
+
+export type OAuthConfig = z.infer<typeof oauthConfigSchema>;
+
+// Step 5: Feature Selection (Sprint 3-5 - Toggles)
 export const featureSelectionSchema = z.object({
+  // Basic Features (Sprint 3)
   cors: z.boolean().default(true),
   helmet: z.boolean().default(true),
   compression: z.boolean().default(true),
   validation: z.boolean().default(true), // Global ValidationPipe
-  logging: z.boolean().default(true),
-  health: z.boolean().default(true), // /health endpoint
-  swagger: z.boolean().default(false), // Future sprint
-  rateLimit: z.boolean().default(false), // Future sprint
+
+  // Advanced Features (Sprint 5)
+  logging: z.boolean().default(true), // Pino structured logging
+  caching: z.boolean().default(false), // Redis caching with @nestjs/cache-manager
+  swagger: z.boolean().default(false), // API documentation
+  health: z.boolean().default(true), // Terminus health checks
+  rateLimit: z.boolean().default(false), // Throttler rate limiting
+  versioning: z.boolean().default(false), // URI-based API versioning (v1, v2)
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;
@@ -125,6 +149,7 @@ export const wizardConfigSchema = z.object({
   databaseConfig: databaseConfigSchema,
   modelDefinition: modelDefinitionSchema,
   authConfig: authConfigSchema,
+  oauthConfig: oauthConfigSchema.optional(),
   featureSelection: featureSelectionSchema,
 });
 
@@ -167,8 +192,10 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     compression: true,
     validation: true,
     logging: true,
-    health: true,
+    caching: false,
     swagger: false,
+    health: true,
     rateLimit: false,
+    versioning: false,
   },
 };

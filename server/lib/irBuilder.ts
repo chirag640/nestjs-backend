@@ -82,17 +82,22 @@ export interface AuthIR {
 }
 
 /**
- * Intermediate Representation for Feature Toggles (Sprint 3)
+ * Intermediate Representation for Feature Toggles (Sprint 3-5)
  */
 export interface FeaturesIR {
+  // Basic features
   cors: boolean;
   helmet: boolean;
   compression: boolean;
   validation: boolean;
-  logging: boolean;
-  health: boolean;
-  swagger: boolean;
-  rateLimit: boolean;
+
+  // Advanced features (Sprint 5)
+  logging: boolean; // Pino structured logging
+  caching: boolean; // Redis caching
+  swagger: boolean; // API documentation
+  health: boolean; // Terminus health checks
+  rateLimit: boolean; // Throttler rate limiting
+  versioning: boolean; // URI-based API versioning
 }
 
 /**
@@ -281,7 +286,7 @@ function buildAuthIR(config: WizardConfig): AuthIR {
 }
 
 /**
- * Build Features IR from configuration (Sprint 3)
+ * Build Features IR from configuration (Sprint 3-5)
  */
 function buildFeaturesIR(config: WizardConfig): FeaturesIR {
   const features = config.featureSelection!;
@@ -292,8 +297,10 @@ function buildFeaturesIR(config: WizardConfig): FeaturesIR {
     compression: features.compression ?? true,
     validation: features.validation ?? true,
     logging: features.logging ?? true,
-    health: features.health ?? true,
+    caching: features.caching ?? false,
     swagger: features.swagger ?? false,
+    health: features.health ?? true,
     rateLimit: features.rateLimit ?? false,
+    versioning: features.versioning ?? false,
   };
 }

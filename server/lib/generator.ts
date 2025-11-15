@@ -144,11 +144,9 @@ export async function generateProject(
     files.push(...authFiles);
   }
 
-  // Generate health controller if enabled
-  if (ir.features.health) {
-    const healthFiles = await generateHealthFiles();
-    files.push(...healthFiles);
-  }
+  // Generate Sprint 5 feature files
+  const featureFiles = await generateFeatureFiles(ir);
+  files.push(...featureFiles);
 
   return files;
 }
@@ -320,21 +318,115 @@ async function generateAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
 }
 
 /**
- * Generate health check files (Sprint 3)
+ * Generate Sprint 5 feature files based on feature toggles
  */
-async function generateHealthFiles(): Promise<GeneratedFile[]> {
+async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [];
 
-  try {
-    const rendered = renderTemplate("health/health.controller.njk", {});
-    const content = await formatCode(rendered, "typescript");
-    files.push({
-      path: "src/health/health.controller.ts",
-      content,
-    });
-  } catch (error) {
-    console.error("Error generating health controller:", error);
-    throw new Error("Failed to generate health controller");
+  // Logging feature (Pino)
+  if (ir.features.logging) {
+    const loggingTemplates = [
+      {
+        template: "features/logging/logger.module.njk",
+        output: "src/modules/logger/logger.module.ts",
+      },
+      {
+        template: "features/logging/logging.interceptor.njk",
+        output: "src/modules/logger/logging.interceptor.ts",
+      },
+    ];
+
+    for (const { template, output } of loggingTemplates) {
+      try {
+        const rendered = renderTemplate(template, ir);
+        const content = await formatCode(rendered, "typescript");
+        files.push({ path: output, content });
+      } catch (error) {
+        console.error(`Error generating logging file ${output}:`, error);
+      }
+    }
+  }
+
+  // Caching feature (Redis)
+  if (ir.features.caching) {
+    const cachingTemplates = [
+      {
+        template: "features/caching/cache.module.njk",
+        output: "src/modules/cache/cache.module.ts",
+      },
+      {
+        template: "features/caching/cache.interceptor.njk",
+        output: "src/modules/cache/cache.interceptor.ts",
+      },
+    ];
+
+    for (const { template, output } of cachingTemplates) {
+      try {
+        const rendered = renderTemplate(template, ir);
+        const content = await formatCode(rendered, "typescript");
+        files.push({ path: output, content });
+      } catch (error) {
+        console.error(`Error generating caching file ${output}:`, error);
+      }
+    }
+  }
+
+  // Swagger documentation
+  if (ir.features.swagger) {
+    try {
+      const rendered = renderTemplate(
+        "features/swagger/swagger.config.njk",
+        ir
+      );
+      const content = await formatCode(rendered, "typescript");
+      files.push({
+        path: "src/config/swagger.config.ts",
+        content,
+      });
+    } catch (error) {
+      console.error("Error generating Swagger config:", error);
+    }
+  }
+
+  // Health checks (Terminus)
+  if (ir.features.health) {
+    const healthTemplates = [
+      {
+        template: "features/health/health.module.njk",
+        output: "src/modules/health/health.module.ts",
+      },
+      {
+        template: "features/health/health.controller.njk",
+        output: "src/modules/health/health.controller.ts",
+      },
+    ];
+
+    for (const { template, output } of healthTemplates) {
+      try {
+        const rendered = renderTemplate(template, ir);
+        const content = await formatCode(rendered, "typescript");
+        files.push({ path: output, content });
+      } catch (error) {
+        console.error(`Error generating health file ${output}:`, error);
+      }
+    }
+  }
+
+  // Rate limiting (Throttler)
+  if (ir.features.rateLimit) {
+    try {
+      const rendered = renderTemplate(
+        "features/throttler/throttler.module.njk",
+        ir
+      );
+      const content = await formatCode(rendered, "typescript");
+      files.push({
+        path: "src/modules/throttler/throttler.module.ts",
+        content,
+      });
+    } catch (error) {
+      console.error("Error generating Throttler module:", error);
+    }
   }
 
   return files;

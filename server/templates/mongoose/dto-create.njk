@@ -2,9 +2,9 @@ import {
 {% set validatorSet = [] %}
 {% for field in model.fields %}
   {% for validator in field.validators %}
-    {% set cleanValidator = validator | replace('()', '') %}
+    {% set cleanValidator = validator.split('(')[0] %}
     {% if cleanValidator not in validatorSet %}
-      {% set _ = validatorSet.append(cleanValidator) %}
+      {% set _ = validatorSet.push(cleanValidator) %}
   {{ cleanValidator }},
     {% endif %}
   {% endfor %}

@@ -44,6 +44,25 @@
 {% if features.compression %}
     "compression": "^1.8.1",
 {% endif %}
+{% if features.logging %}
+    "nestjs-pino": "^4.1.0",
+    "pino-http": "^10.3.0",
+    "pino-pretty": "^11.2.2",
+{% endif %}
+{% if features.caching %}
+    "@nestjs/cache-manager": "^2.2.2",
+    "cache-manager": "^5.7.6",
+    "cache-manager-ioredis-yet": "^2.1.1",
+{% endif %}
+{% if features.swagger %}
+    "@nestjs/swagger": "^7.4.2",
+{% endif %}
+{% if features.health %}
+    "@nestjs/terminus": "^10.2.3",
+{% endif %}
+{% if features.rateLimit %}
+    "@nestjs/throttler": "^6.2.1",
+{% endif %}
     "class-validator": "^0.14.0",
     "class-transformer": "^0.5.1",
     "reflect-metadata": "^0.1.13",

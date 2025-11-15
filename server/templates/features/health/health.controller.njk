@@ -1,0 +1,52 @@
+import { Controller, Get } from '@nestjs/common';
+import {
+  HealthCheck,
+  HealthCheckService,
+  {% if database.orm === 'mongoose' %}
+  MongooseHealthIndicator,
+  {% else %}
+  TypeOrmHealthIndicator,
+  {% endif %}
+  MemoryHealthIndicator,
+  DiskHealthIndicator,
+} from '@nestjs/terminus';
+
+@Controller('health')
+export class HealthController {
+  constructor(
+    private health: HealthCheckService,
+    {% if database.orm === 'mongoose' %}
+    private db: MongooseHealthIndicator,
+    {% else %}
+    private db: TypeOrmHealthIndicator,
+    {% endif %}
+    private memory: MemoryHealthIndicator,
+    private disk: DiskHealthIndicator,
+  ) {}
+
+  @Get()
+  @HealthCheck()
+  check() {
+    return this.health.check([
+      // Database health check
+      {% if database.orm === 'mongoose' %}
+      () => this.db.pingCheck('database'),
+      {% else %}
+      () => this.db.pingCheck('database'),
+      {% endif %}
+      
+      // Memory heap check (should not exceed 150MB)
+      () => this.memory.checkHeap('memory_heap', 150 * 1024 * 1024),
+      
+      // Memory RSS check (should not exceed 300MB)
+      () => this.memory.checkRSS('memory_rss', 300 * 1024 * 1024),
+      
+      // Disk storage check (should have at least 10% free disk space)
+      () =>
+        this.disk.checkStorage('disk', {
+          path: '/',
+          thresholdPercent: 0.9,
+        }),
+    ]);
+  }
+}
