@@ -168,12 +168,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
         .patch(`/{{ model.route }}/${created{{ model.name }}Id}`)
 {% endif %}
         .send({
+{% set _firstUpdated = false %}
 {% for field in model.fields %}
-  {% if not field.isPrimary and not field.isTimestamp %}
-    {% if field.type == 'string' %}
+  {% if not field.isPrimary and not field.isTimestamp and not _firstUpdated and field.type == 'string' %}
           {{ field.name }}: 'updated-{{ field.name }}',
-      {% break %}
-    {% endif %}
+          {% set _firstUpdated = true %}
   {% endif %}
 {% endfor %}
         })

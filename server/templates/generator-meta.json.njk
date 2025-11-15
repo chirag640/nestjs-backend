@@ -1,18 +1,18 @@
 {
   "generator": {
     "name": "FoundationWizard",
-    "version": "{{ generatorVersion }}",
-    "timestamp": "{{ timestamp }}"
+    "version": "{{ metadata.generatorVersion }}",
+    "timestamp": "{{ metadata.timestamp }}"
   },
   "project": {
-    "name": "{{ projectName }}",
-    "description": "{{ description }}",
-    "orm": "{{ orm }}"{% if orm == 'typeorm' or orm == 'prisma' %},
-    "database": "{{ dbType }}"{% endif %}
+    "name": "{{ project.name }}",
+    "description": "{{ project.description }}",
+    "orm": "{{ database.orm }}"{% if database.orm == 'typeorm' or database.orm == 'prisma' %},
+    "database": "{{ database.type }}"{% endif %}
   },
   "dependencies": {
-    "nodejs": "{{ nodeVersion }}",
-    "nestjs": "{{ nestjsVersion }}"
+    "nodejs": "{{ project.nodeVersion }}",
+    "nestjs": "{{ metadata.nestjsVersion }}"
   },
   "features": {
     "authentication": {{ 'true' if auth and auth.enabled else 'false' }},

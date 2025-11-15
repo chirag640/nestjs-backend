@@ -117,6 +117,13 @@ export async function generateProject(
   // Render and format each template
   for (const { template, output, parser } of templates) {
     try {
+      // Debug: log project info when rendering README to catch undefined fields
+      if (template === "nestjs/README.md.njk") {
+        console.log(
+          "[DEBUG] Rendering README with project IR:",
+          JSON.stringify(ir.project)
+        );
+      }
       const rendered = renderTemplate(template, context);
       const content = parser ? await formatCode(rendered, parser) : rendered;
 

@@ -88,25 +88,26 @@
 
 {% elif rel.type == 'many-to-many' %}
 {% if rel.attributes and rel.attributes.length > 0 %}
+  {% set joinModelName = rel.through or (rel.fromModel + rel.toModel) %}
   // Many-to-Many with attributes - uses join collection
   async add{{ rel.toModel }}WithAttributes(
     {{ rel.fromModel | lower }}Id: string,
     {{ rel.toModel | lower }}Id: string,
     attributes: any,
   ): Promise<any> {
-    const {{ rel.through || (rel.fromModel + rel.toModel) | lower }} = new this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model({
+    const {{ joinModelName | lower }} = new this.{{ joinModelName | lower }}Model({
       {{ rel.fromModel | lower }}Id,
       {{ rel.toModel | lower }}Id,
       ...attributes,
     });
-    return {{ rel.through || (rel.fromModel + rel.toModel) | lower }}.save();
+    return {{ joinModelName | lower }}.save();
   }
 
   async remove{{ rel.toModel }}Relation(
     {{ rel.fromModel | lower }}Id: string,
     {{ rel.toModel | lower }}Id: string,
   ): Promise<boolean> {
-    const result = await this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model
+    const result = await this.{{ joinModelName | lower }}Model
       .findOneAndDelete({
         {{ rel.fromModel | lower }}Id,
         {{ rel.toModel | lower }}Id,
@@ -118,7 +119,7 @@
   async get{{ rel.toModel }}sWithAttributes(
     {{ rel.fromModel | lower }}Id: string,
   ): Promise<any[]> {
-    return this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model
+    return this.{{ joinModelName | lower }}Model
       .find({ {{ rel.fromModel | lower }}Id })
       .populate('{{ rel.toModel | lower }}Id')
       .exec();
@@ -129,7 +130,7 @@
     {{ rel.toModel | lower }}Id: string,
     attributes: any,
   ): Promise<any> {
-    return this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model
+    return this.{{ joinModelName | lower }}Model
       .findOneAndUpdate(
         { {{ rel.fromModel | lower }}Id, {{ rel.toModel | lower }}Id },
         attributes,

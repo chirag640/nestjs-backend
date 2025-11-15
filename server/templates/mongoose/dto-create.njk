@@ -2,7 +2,7 @@ import {
 {% set validatorSet = [] %}
 {% for field in model.fields %}
   {% for validator in field.validators %}
-    {% set cleanValidator = validator.split('(')[0] %}
+    {% set cleanValidator = validator.replace('()', '').replace('(', '').split(',')[0].trim() %}
     {% if cleanValidator not in validatorSet %}
       {% set _ = validatorSet.push(cleanValidator) %}
   {{ cleanValidator }},

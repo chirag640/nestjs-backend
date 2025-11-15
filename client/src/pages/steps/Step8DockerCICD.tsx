@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useWizardStore } from "@/lib/store";
-import WizardLayout from "@/components/wizard/WizardLayout";
+import { WizardLayout } from "@/components/wizard/WizardLayout";
 import {
   Container,
   FileCode2,

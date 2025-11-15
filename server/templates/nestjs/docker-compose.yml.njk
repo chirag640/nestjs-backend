@@ -5,28 +5,28 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: {{ projectName }}-app
+    container_name: {{ project.name }}-app
     restart: unless-stopped
     ports:
       - '3000:3000'
     environment:
       - NODE_ENV=production
-      - DATABASE_URL={{ connectionString }}
+      - DATABASE_URL={{ database.connectionString }}
     depends_on:
-{% if databaseType === 'MongoDB' %}
+{% if database.type === 'MongoDB' %}
       - mongodb
-{% elif databaseType === 'PostgreSQL' %}
+{% elif database.type === 'PostgreSQL' %}
       - postgres
-{% elif databaseType === 'MySQL' %}
+{% elif database.type === 'MySQL' %}
       - mysql
 {% endif %}
     networks:
       - app-network
 
-{% if databaseType === 'MongoDB' %}
+{% if database.type === 'MongoDB' %}
   mongodb:
     image: mongo:7
-    container_name: {{ projectName }}-mongodb
+    container_name: {{ project.name }}-mongodb
     restart: unless-stopped
     ports:
       - '27017:27017'
@@ -37,31 +37,31 @@ services:
       - mongodb_data:/data/db
     networks:
       - app-network
-{% elif databaseType === 'PostgreSQL' %}
+{% elif database.type === 'PostgreSQL' %}
   postgres:
     image: postgres:16-alpine
-    container_name: {{ projectName }}-postgres
+    container_name: {{ project.name }}-postgres
     restart: unless-stopped
     ports:
       - '5432:5432'
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
-      - POSTGRES_DB={{ projectName | replace('-', '_') }}
+      - POSTGRES_DB={{ project.name | replace('-', '_') }}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
-{% elif databaseType === 'MySQL' %}
+{% elif database.type === 'MySQL' %}
   mysql:
     image: mysql:8
-    container_name: {{ projectName }}-mysql
+    container_name: {{ project.name }}-mysql
     restart: unless-stopped
     ports:
       - '3306:3306'
     environment:
       - MYSQL_ROOT_PASSWORD=password
-      - MYSQL_DATABASE={{ projectName | replace('-', '_') }}
+      - MYSQL_DATABASE={{ project.name | replace('-', '_') }}
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
@@ -73,10 +73,10 @@ networks:
     driver: bridge
 
 volumes:
-{% if databaseType === 'MongoDB' %}
+{% if database.type === 'MongoDB' %}
   mongodb_data:
-{% elif databaseType === 'PostgreSQL' %}
+{% elif database.type === 'PostgreSQL' %}
   postgres_data:
-{% elif databaseType === 'MySQL' %}
+{% elif database.type === 'MySQL' %}
   mysql_data:
 {% endif %}

@@ -1,34 +1,34 @@
-# {{ projectName }}
+# {{ project.name }}
 
-{{ description }}
+{{ project.description }}
 
 ## 📋 Description
 
 This project was generated using [FoundationWizard](https://github.com/yourusername/foundation-wizard), an automated NestJS project generator.
 
-**Author:** {{ author }}  
-**License:** {{ license }}
+**Author:** {{ project.author | default('Unknown') }}  
+**License:** {{ project.license | default('UNLICENSED') }}
 
 ## 🚀 Tech Stack
 
 - **Framework:** NestJS 10
 - **Language:** TypeScript
-- **Database:** {{ databaseType }}
-{% if databaseType === 'MongoDB' %}
+- **Database:** {{ database.type }}
+{% if database.type === 'MongoDB' %}
 - **ORM:** Mongoose
 {% else %}
 - **ORM:** TypeORM
 {% endif %}
-- **Node Version:** {{ nodeVersion }}
-- **Package Manager:** {{ packageManager }}
+- **Node Version:** {{ project.nodeVersion }}
+- **Package Manager:** {{ project.packageManager }}
 
 ## 📦 Installation
 
 ```bash
 # Install dependencies
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 pnpm install
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 yarn install
 {% else %}
 npm install
@@ -44,7 +44,7 @@ cp .env.example .env
 
 2. Update the environment variables in `.env`:
 ```env
-DATABASE_URL={{ connectionString }}
+DATABASE_URL={{ database.connectionString }}
 PORT=3000
 ```
 
@@ -52,18 +52,18 @@ PORT=3000
 
 ```bash
 # Development
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 pnpm run start:dev
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 yarn start:dev
 {% else %}
 npm run start:dev
 {% endif %}
 
 # Production mode
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 pnpm run start:prod
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 yarn start:prod
 {% else %}
 npm run start:prod
@@ -89,37 +89,37 @@ docker-compose down
 
 ```bash
 # Build image
-docker build -t {{ projectName }} .
+docker build -t {{ project.name }} .
 
 # Run container
-docker run -p 3000:3000 --env-file .env {{ projectName }}
+docker run -p 3000:3000 --env-file .env {{ project.name }}
 ```
 
 ## 🧪 Testing
 
 ```bash
 # Unit tests
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 pnpm run test
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 yarn test
 {% else %}
 npm run test
 {% endif %}
 
 # E2E tests
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 pnpm run test:e2e
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 yarn test:e2e
 {% else %}
 npm run test:e2e
 {% endif %}
 
 # Test coverage
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 pnpm run test:cov
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 yarn test:cov
 {% else %}
 npm run test:cov
@@ -207,7 +207,7 @@ GET /
 
 Response:
 ```
-Hello from {{ projectName }}!
+Hello from {{ project.name }}!
 ```
 
 {% if features.logging %}
@@ -461,7 +461,7 @@ Users authenticated via OAuth have the following additional fields:
 ## 📁 Project Structure
 
 ```
-{{ projectName }}/
+{{ project.name }}/
 ├── src/
 │   ├── app.controller.ts
 │   ├── app.module.ts
@@ -486,7 +486,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-This project is licensed under the {{ license }} License.
+This project is licensed under the {{ project.license }} License.
 
 ---
 

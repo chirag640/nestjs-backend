@@ -1,14 +1,15 @@
 # Build stage
-FROM node:{{ nodeVersion }}-alpine AS builder
+# Builder stage
+FROM node:{{ project.nodeVersion }}-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 RUN npm install -g pnpm
 RUN pnpm install --frozen-lockfile
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 COPY yarn.lock ./
 RUN yarn install --frozen-lockfile
 {% else %}
@@ -19,25 +20,25 @@ RUN npm ci
 COPY . .
 
 # Build application
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 RUN pnpm run build
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 RUN yarn build
 {% else %}
 RUN npm run build
 {% endif %}
 
 # Production stage
-FROM node:{{ nodeVersion }}-alpine
+FROM node:{{ project.nodeVersion }}-alpine
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-{% if packageManager === 'pnpm' %}
+{% if project.packageManager === 'pnpm' %}
 RUN npm install -g pnpm
 RUN pnpm install --prod --frozen-lockfile
-{% elif packageManager === 'yarn' %}
+{% elif project.packageManager === 'yarn' %}
 COPY yarn.lock ./
 RUN yarn install --prod --frozen-lockfile
 {% else %}
