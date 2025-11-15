@@ -18,6 +18,7 @@ const STEP_TITLES = [
   "Feature Selection",
   "Review & Generate",
   "Code Preview",
+  "Docker & CI/CD",
 ];
 
 export function WizardLayout({
@@ -27,7 +28,7 @@ export function WizardLayout({
 }: WizardLayoutProps) {
   const { currentStep, previousStep, nextStep, isStepValid } = useWizardStore();
   const canProceed = isStepValid(currentStep);
-  const progress = (currentStep / 7) * 100;
+  const progress = (currentStep / 8) * 100;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -53,7 +54,7 @@ export function WizardLayout({
                   className="text-xs text-muted-foreground"
                   data-testid="text-step-counter"
                 >
-                  Step {currentStep} of 7
+                  Step {currentStep} of 8
                 </p>
               </div>
             </div>
@@ -172,15 +173,17 @@ export function WizardLayout({
 
             <Button
               onClick={nextStep}
-              disabled={!canProceed || currentStep === 7}
+              disabled={!canProceed || currentStep === 8}
               data-testid="button-next"
               className="w-full md:w-auto"
             >
               {currentStep === 6
                 ? "Continue to Preview"
                 : currentStep === 7
-                  ? "Complete"
-                  : "Next"}
+                  ? "Configure Deployment"
+                  : currentStep === 8
+                    ? "Complete"
+                    : "Next"}
             </Button>
           </div>
         </div>

@@ -1,0 +1,229 @@
+stages:
+  - install
+  - lint
+  - test
+  - build
+  - docker
+  - deploy
+
+variables:
+  NODE_VERSION: "20"
+  DOCKER_DRIVER: overlay2
+
+cache:
+  paths:
+    - node_modules/
+
+install:
+  stage: install
+  image: node:${NODE_VERSION}-alpine
+  script:
+    - npm ci
+  artifacts:
+    paths:
+      - node_modules/
+    expire_in: 1 hour
+
+lint:
+  stage: lint
+  image: node:${NODE_VERSION}-alpine
+  dependencies:
+    - install
+  script:
+    - npm run lint
+
+test:unit:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  dependencies:
+    - install
+  services:
+{% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
+    - name: mongo:6
+      alias: mongo
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'postgres' %}
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: test_db
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'mysql' %}
+    - name: mysql:8
+      alias: mysql
+  variables:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_DATABASE: test_db
+{% endif %}
+{% if features.caching %}
+    - name: redis:7-alpine
+      alias: redis
+{% endif %}
+  script:
+{% if orm == 'prisma' %}
+    - npx prisma generate
+    - npx prisma migrate deploy
+{% endif %}
+    - npm test
+  variables:
+{% if orm == 'mongoose' %}
+    MONGO_URI: mongodb://mongo:27017/test_db
+{% elif orm == 'typeorm' %}
+  {% if dbType == 'postgres' %}
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_USERNAME: postgres
+    DB_PASSWORD: postgres
+    DB_DATABASE: test_db
+  {% elif dbType == 'mysql' %}
+    DB_HOST: mysql
+    DB_PORT: "3306"
+    DB_USERNAME: root
+    DB_PASSWORD: root
+    DB_DATABASE: test_db
+  {% endif %}
+{% elif orm == 'prisma' %}
+  {% if dbType == 'postgres' %}
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/test_db?schema=public
+  {% elif dbType == 'mysql' %}
+    DATABASE_URL: mysql://root:root@mysql:3306/test_db
+  {% elif dbType == 'mongodb' %}
+    DATABASE_URL: mongodb://mongo:27017/test_db
+  {% endif %}
+{% endif %}
+{% if features.caching %}
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+{% endif %}
+{% if auth and auth.enabled and auth.jwt %}
+    JWT_SECRET: test-secret-key
+    JWT_EXPIRES_IN: 1h
+  {% if auth.jwt.refreshToken %}
+    JWT_REFRESH_SECRET: test-refresh-secret-key
+    JWT_REFRESH_EXPIRES_IN: 7d
+  {% endif %}
+{% endif %}
+
+test:e2e:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  dependencies:
+    - install
+  services:
+{% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
+    - name: mongo:6
+      alias: mongo
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'postgres' %}
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: test_db
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'mysql' %}
+    - name: mysql:8
+      alias: mysql
+  variables:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_DATABASE: test_db
+{% endif %}
+{% if features.caching %}
+    - name: redis:7-alpine
+      alias: redis
+{% endif %}
+  script:
+{% if orm == 'prisma' %}
+    - npx prisma generate
+    - npx prisma migrate deploy
+{% endif %}
+    - npm run test:e2e
+  variables:
+{% if orm == 'mongoose' %}
+    MONGO_URI: mongodb://mongo:27017/test_db
+{% elif orm == 'typeorm' %}
+  {% if dbType == 'postgres' %}
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_USERNAME: postgres
+    DB_PASSWORD: postgres
+    DB_DATABASE: test_db
+  {% elif dbType == 'mysql' %}
+    DB_HOST: mysql
+    DB_PORT: "3306"
+    DB_USERNAME: root
+    DB_PASSWORD: root
+    DB_DATABASE: test_db
+  {% endif %}
+{% elif orm == 'prisma' %}
+  {% if dbType == 'postgres' %}
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/test_db?schema=public
+  {% elif dbType == 'mysql' %}
+    DATABASE_URL: mysql://root:root@mysql:3306/test_db
+  {% elif dbType == 'mongodb' %}
+    DATABASE_URL: mongodb://mongo:27017/test_db
+  {% endif %}
+{% endif %}
+{% if features.caching %}
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+{% endif %}
+{% if auth and auth.enabled and auth.jwt %}
+    JWT_SECRET: test-secret-key
+    JWT_EXPIRES_IN: 1h
+  {% if auth.jwt.refreshToken %}
+    JWT_REFRESH_SECRET: test-refresh-secret-key
+    JWT_REFRESH_EXPIRES_IN: 7d
+  {% endif %}
+{% endif %}
+
+build:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  dependencies:
+    - install
+  script:
+{% if orm == 'prisma' %}
+    - npx prisma generate
+{% endif %}
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+
+docker:build:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  dependencies:
+    - build
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
+    - docker build -t $CI_REGISTRY_IMAGE:latest .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main
+    - develop
+
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  dependencies: []
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+  script:
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "cd /opt/{{ projectName | lower }} && docker compose pull && docker compose up -d"
+  environment:
+    name: production
+    url: https://{{ projectName | lower }}.example.com
+  only:
+    - main
+  when: manual

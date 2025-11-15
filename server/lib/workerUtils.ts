@@ -20,7 +20,7 @@ export function getWorkerPath(workerName: string): string {
     return tsPath;
   } else {
     // In production, workers are compiled JavaScript files
-    const jsPath = path.join(__dirname, "workers", `${workerName}.js`);
+    const jsPath = path.join(__dirname, "..", "workers", `${workerName}.js`);
 
     // Verify the file exists
     if (!fs.existsSync(jsPath)) {

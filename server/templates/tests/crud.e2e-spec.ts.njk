@@ -1,0 +1,225 @@
+import request from 'supertest';
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { AppModule } from '../src/app.module';
+
+describe('{{ model.name }} CRUD (e2e)', () => {
+  let app: INestApplication;
+{% if auth and auth.enabled %}
+  let accessToken: string;
+{% endif %}
+  let created{{ model.name }}Id: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+
+{% if auth and auth.enabled %}
+    // Register and login to get access token
+    const authRes = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: 'test-{{ model.nameCamel }}@example.com',
+        password: 'Test123!@#',
+      });
+    accessToken = authRes.body.accessToken;
+{% endif %}
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  describe('/{{ model.route }} (POST)', () => {
+    it('should create a new {{ model.nameCamel }}', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .post('/{{ model.route }}')
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .post('/{{ model.route }}')
+{% endif %}
+        .send({
+{% for field in model.fields %}
+  {% if not field.isPrimary and not field.isTimestamp %}
+          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date().toISOString(){% endif %},
+  {% endif %}
+{% endfor %}
+        })
+        .expect(201)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('id');
+{% for field in model.fields %}
+  {% if not field.isPrimary and not field.isTimestamp %}
+          expect(res.body).toHaveProperty('{{ field.name }}');
+  {% endif %}
+{% endfor %}
+          created{{ model.name }}Id = res.body.id;
+        });
+    });
+
+    it('should reject invalid data', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .post('/{{ model.route }}')
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .post('/{{ model.route }}')
+{% endif %}
+        .send({
+          // Missing required fields
+        })
+        .expect(400);
+    });
+
+{% if auth and auth.enabled %}
+    it('should reject unauthenticated request', () => {
+      return request(app.getHttpServer())
+        .post('/{{ model.route }}')
+        .send({
+{% for field in model.fields %}
+  {% if not field.isPrimary and not field.isTimestamp and field.required %}
+          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% endif %},
+  {% endif %}
+{% endfor %}
+        })
+        .expect(401);
+    });
+{% endif %}
+  });
+
+  describe('/{{ model.route }} (GET)', () => {
+    it('should get all {{ model.namePlural }}', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .get('/{{ model.route }}')
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .get('/{{ model.route }}')
+{% endif %}
+        .expect(200)
+        .expect((res) => {
+          expect(Array.isArray(res.body)).toBe(true);
+          expect(res.body.length).toBeGreaterThan(0);
+        });
+    });
+
+    it('should support pagination', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .get('/{{ model.route }}?page=1&limit=10')
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .get('/{{ model.route }}?page=1&limit=10')
+{% endif %}
+        .expect(200)
+        .expect((res) => {
+          expect(Array.isArray(res.body)).toBe(true);
+        });
+    });
+  });
+
+  describe('/{{ model.route }}/:id (GET)', () => {
+    it('should get a single {{ model.nameCamel }} by id', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .get(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .get(`/{{ model.route }}/${created{{ model.name }}Id}`)
+{% endif %}
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('id', created{{ model.name }}Id);
+        });
+    });
+
+    it('should return 404 for non-existent id', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .get('/{{ model.route }}/nonexistent-id')
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .get('/{{ model.route }}/nonexistent-id')
+{% endif %}
+        .expect(404);
+    });
+  });
+
+  describe('/{{ model.route }}/:id (PATCH)', () => {
+    it('should update a {{ model.nameCamel }}', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .patch(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .patch(`/{{ model.route }}/${created{{ model.name }}Id}`)
+{% endif %}
+        .send({
+{% for field in model.fields %}
+  {% if not field.isPrimary and not field.isTimestamp %}
+    {% if field.type == 'string' %}
+          {{ field.name }}: 'updated-{{ field.name }}',
+      {% break %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+        })
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('id', created{{ model.name }}Id);
+        });
+    });
+
+    it('should return 404 for non-existent id', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .patch('/{{ model.route }}/nonexistent-id')
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .patch('/{{ model.route }}/nonexistent-id')
+{% endif %}
+        .send({})
+        .expect(404);
+    });
+  });
+
+  describe('/{{ model.route }}/:id (DELETE)', () => {
+    it('should delete a {{ model.nameCamel }}', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .delete(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .delete(`/{{ model.route }}/${created{{ model.name }}Id}`)
+{% endif %}
+        .expect(200);
+    });
+
+    it('should return 404 when deleting non-existent id', () => {
+{% if auth and auth.enabled %}
+      return request(app.getHttpServer())
+        .delete('/{{ model.route }}/nonexistent-id')
+        .set('Authorization', `Bearer ${accessToken}`)
+{% else %}
+      return request(app.getHttpServer())
+        .delete('/{{ model.route }}/nonexistent-id')
+{% endif %}
+        .expect(404);
+    });
+  });
+});

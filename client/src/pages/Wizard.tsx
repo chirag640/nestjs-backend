@@ -6,6 +6,7 @@ import Step4AuthSetup from "./steps/Step4AuthSetup";
 import Step5FeatureSelection from "./steps/Step5FeatureSelection";
 import Step6Review from "./steps/Step6Review";
 import Step7Preview from "./steps/Step7Preview";
+import Step8DockerCICD from "./steps/Step8DockerCICD";
 import { useEffect } from "react";
 
 export default function Wizard() {
@@ -45,6 +46,8 @@ export default function Wizard() {
       return <Step6Review />;
     case 7:
       return <Step7Preview />;
+    case 8:
+      return <Step8DockerCICD />;
     default:
       return <Step1ProjectSetup />;
   }

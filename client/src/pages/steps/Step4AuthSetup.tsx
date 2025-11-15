@@ -237,7 +237,6 @@ export default function Step4AuthSetup() {
                 {JSON.stringify(
                   {
                     auth: {
-                      method: authConfig.method,
                       jwt: authConfig.jwt,
                       roles: authConfig.roles,
                     },

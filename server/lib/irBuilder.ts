@@ -134,6 +134,31 @@ export interface FeaturesIR {
 }
 
 /**
+ * Docker Configuration IR (Sprint 8)
+ */
+export interface DockerIR {
+  enabled: boolean;
+  includeCompose: boolean;
+  includeProd: boolean;
+  healthCheck: boolean;
+  nonRootUser: boolean;
+  multiStage: boolean;
+}
+
+/**
+ * CI/CD Configuration IR (Sprint 8)
+ */
+export interface CICDIR {
+  enabled: boolean;
+  githubActions: boolean;
+  gitlabCI: boolean;
+  includeTests: boolean;
+  includeE2E: boolean;
+  includeSecurity: boolean;
+  autoDockerBuild: boolean;
+}
+
+/**
  * Complete Intermediate Representation
  */
 export interface ProjectIR {
@@ -157,6 +182,14 @@ export interface ProjectIR {
   oauth?: OAuthIR; // Optional OAuth2 configuration
   relationships: RelationshipIR[]; // Model relationships
   features: FeaturesIR; // Feature toggles
+  docker?: DockerIR; // Docker configuration
+  cicd?: CICDIR; // CI/CD configuration
+  metadata: {
+    // Generation metadata
+    generatorVersion: string;
+    timestamp: string;
+    nestjsVersion: string;
+  };
 }
 
 /**
@@ -195,6 +228,11 @@ export function buildIR(config: WizardConfig): ProjectIR {
     models: models.map((model) => buildModelIR(model)),
     relationships: buildRelationshipsIR(config),
     features: buildFeaturesIR(config),
+    metadata: {
+      generatorVersion: "1.0.0",
+      timestamp: new Date().toISOString(),
+      nestjsVersion: "11.0.0",
+    },
   };
 
   // Add auth if enabled
@@ -205,6 +243,31 @@ export function buildIR(config: WizardConfig): ProjectIR {
   // Add OAuth if enabled
   if (config.oauthConfig?.enabled && config.oauthConfig.providers.length > 0) {
     ir.oauth = buildOAuthIR(config);
+  }
+
+  // Add Docker if enabled (default: true)
+  if (config.dockerConfig?.enabled !== false) {
+    ir.docker = {
+      enabled: config.dockerConfig?.enabled ?? true,
+      includeCompose: config.dockerConfig?.includeCompose ?? true,
+      includeProd: config.dockerConfig?.includeProd ?? true,
+      healthCheck: config.dockerConfig?.healthCheck ?? true,
+      nonRootUser: config.dockerConfig?.nonRootUser ?? true,
+      multiStage: config.dockerConfig?.multiStage ?? true,
+    };
+  }
+
+  // Add CI/CD if enabled (default: true)
+  if (config.cicdConfig?.enabled !== false) {
+    ir.cicd = {
+      enabled: config.cicdConfig?.enabled ?? true,
+      githubActions: config.cicdConfig?.githubActions ?? true,
+      gitlabCI: config.cicdConfig?.gitlabCI ?? false,
+      includeTests: config.cicdConfig?.includeTests ?? true,
+      includeE2E: config.cicdConfig?.includeE2E ?? true,
+      includeSecurity: config.cicdConfig?.includeSecurity ?? true,
+      autoDockerBuild: config.cicdConfig?.autoDockerBuild ?? true,
+    };
   }
 
   return ir;
@@ -281,11 +344,25 @@ function validateModels(models: Model[]): void {
     }
     modelNames.add(model.name);
 
+    // Check model name follows PascalCase convention
+    if (!/^[A-Z][a-zA-Z0-9]*$/.test(model.name)) {
+      errors.push(
+        `Model name "${model.name}" must be PascalCase (start with uppercase, alphanumeric only)`
+      );
+    }
+
     // Check for reserved field names
     model.fields.forEach((field) => {
       if (isReservedFieldName(field.name)) {
         errors.push(
           `Reserved field name "${field.name}" in model "${model.name}"`
+        );
+      }
+
+      // Check field name follows camelCase convention
+      if (!/^[a-z][a-zA-Z0-9]*$/.test(field.name)) {
+        errors.push(
+          `Field name "${field.name}" in model "${model.name}" must be camelCase (start with lowercase, alphanumeric only)`
         );
       }
     });
@@ -390,6 +467,23 @@ function buildOAuthIR(config: WizardConfig): OAuthIR {
  */
 function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
   const relationships = config.modelDefinition?.relationships || [];
+  const modelNames = new Set(
+    config.modelDefinition?.models?.map((m) => m.name) || []
+  );
+
+  // Validate that referenced models exist
+  relationships.forEach((rel) => {
+    if (!modelNames.has(rel.sourceModel)) {
+      throw new Error(
+        `Relationship references non-existent source model: ${rel.sourceModel}`
+      );
+    }
+    if (!modelNames.has(rel.targetModel)) {
+      throw new Error(
+        `Relationship references non-existent target model: ${rel.targetModel}`
+      );
+    }
+  });
 
   return relationships.map((rel) => {
     const relationshipIR: RelationshipIR = {

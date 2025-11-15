@@ -103,7 +103,7 @@ const ADVANCED_FEATURES = [
 
 export default function Step5FeatureSelection() {
   const { config, updateFeatureSelection } = useWizardStore();
-  const features = config.featureSelection!;
+  const features = config.featureSelection ?? ({} as FeatureSelectionType);
 
   const updateFeature = (key: keyof typeof features, checked: boolean) => {
     updateFeatureSelection({ [key]: checked });

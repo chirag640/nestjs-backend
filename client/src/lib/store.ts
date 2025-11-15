@@ -20,11 +20,13 @@ interface WizardStore {
   updateFeatureSelection: (
     data: Partial<WizardConfig["featureSelection"]>
   ) => void;
+  updateDockerConfig: (data: Partial<WizardConfig["dockerConfig"]>) => void;
+  updateCICDConfig: (data: Partial<WizardConfig["cicdConfig"]>) => void;
   resetWizard: () => void;
   isStepValid: (step: number) => boolean;
 }
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 8;
 
 export const useWizardStore = create<WizardStore>()(
   persist(
@@ -118,6 +120,24 @@ export const useWizardStore = create<WizardStore>()(
         }));
       },
 
+      updateDockerConfig: (data) => {
+        set((state) => ({
+          config: {
+            ...state.config,
+            dockerConfig: { ...state.config.dockerConfig, ...data } as any,
+          },
+        }));
+      },
+
+      updateCICDConfig: (data) => {
+        set((state) => ({
+          config: {
+            ...state.config,
+            cicdConfig: { ...state.config.cicdConfig, ...data } as any,
+          },
+        }));
+      },
+
       resetWizard: () => {
         set({ currentStep: 1, config: defaultWizardConfig });
       },
@@ -161,6 +181,12 @@ export const useWizardStore = create<WizardStore>()(
           }
           case 6: {
             return true;
+          }
+          case 7: {
+            return true; // Preview step, always valid
+          }
+          case 8: {
+            return true; // Docker/CI-CD is optional, always valid
           }
           default:
             return false;

@@ -160,6 +160,32 @@ export async function generateProject(
     files.push(...relationshipFiles);
   }
 
+  // Generate Sprint 8 Docker files
+  if (ir.docker && ir.docker.enabled) {
+    const dockerFiles = await generateDockerFiles(ir);
+    files.push(...dockerFiles);
+  }
+
+  // Generate Sprint 8 CI/CD files
+  if (ir.cicd && ir.cicd.enabled) {
+    const cicdFiles = await generateCICDFiles(ir);
+    files.push(...cicdFiles);
+  }
+
+  // Generate Sprint 8 E2E test files
+  if (ir.cicd && ir.cicd.includeE2E) {
+    const testFiles = await generateE2ETestFiles(ir);
+    files.push(...testFiles);
+  }
+
+  // Generate Sprint 8 environment validation
+  const envValidationFile = await generateEnvValidation(ir);
+  files.push(envValidationFile);
+
+  // Generate Sprint 8 metadata file
+  const metadataFile = await generateMetadata(ir);
+  files.push(metadataFile);
+
   return files;
 }
 
@@ -616,4 +642,187 @@ async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
   }
 
   return files;
+}
+
+/**
+ * Generate Docker files (Sprint 8)
+ */
+async function generateDockerFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  // Dockerfile
+  try {
+    const rendered = renderTemplate("docker/Dockerfile.njk", ir);
+    files.push({
+      path: "Dockerfile",
+      content: rendered,
+    });
+  } catch (error) {
+    console.error("Error generating Dockerfile:", error);
+  }
+
+  // .dockerignore
+  try {
+    const rendered = renderTemplate("docker/.dockerignore.njk", ir);
+    files.push({
+      path: ".dockerignore",
+      content: rendered,
+    });
+  } catch (error) {
+    console.error("Error generating .dockerignore:", error);
+  }
+
+  // docker-compose.yml
+  if (ir.docker?.includeCompose) {
+    try {
+      const rendered = renderTemplate("docker/docker-compose.yml.njk", ir);
+      files.push({
+        path: "docker-compose.yml",
+        content: rendered,
+      });
+    } catch (error) {
+      console.error("Error generating docker-compose.yml:", error);
+    }
+  }
+
+  // docker-compose.prod.yml
+  if (ir.docker?.includeProd) {
+    try {
+      const rendered = renderTemplate("docker/docker-compose.prod.yml.njk", ir);
+      files.push({
+        path: "docker-compose.prod.yml",
+        content: rendered,
+      });
+    } catch (error) {
+      console.error("Error generating docker-compose.prod.yml:", error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate CI/CD workflow files (Sprint 8)
+ */
+async function generateCICDFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  // GitHub Actions workflow
+  if (ir.cicd?.githubActions) {
+    try {
+      const rendered = renderTemplate("cicd/github-actions.yml.njk", ir);
+      files.push({
+        path: ".github/workflows/build.yml",
+        content: rendered,
+      });
+    } catch (error) {
+      console.error("Error generating GitHub Actions workflow:", error);
+    }
+  }
+
+  // GitLab CI pipeline
+  if (ir.cicd?.gitlabCI) {
+    try {
+      const rendered = renderTemplate("cicd/gitlab-ci.yml.njk", ir);
+      files.push({
+        path: ".gitlab-ci.yml",
+        content: rendered,
+      });
+    } catch (error) {
+      console.error("Error generating GitLab CI pipeline:", error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate E2E test files (Sprint 8)
+ */
+async function generateE2ETestFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  // Jest E2E configuration
+  try {
+    const rendered = renderTemplate("tests/jest-e2e.json.njk", ir);
+    const content = await formatCode(rendered, "json");
+    files.push({
+      path: "test/jest-e2e.json",
+      content,
+    });
+  } catch (error) {
+    console.error("Error generating jest-e2e.json:", error);
+  }
+
+  // Test setup file
+  try {
+    const rendered = renderTemplate("tests/setup.ts.njk", ir);
+    const content = await formatCode(rendered, "typescript");
+    files.push({
+      path: "test/setup.ts",
+      content,
+    });
+  } catch (error) {
+    console.error("Error generating test setup:", error);
+  }
+
+  // Auth E2E tests (if auth is enabled)
+  if (ir.auth && ir.auth.enabled) {
+    try {
+      const rendered = renderTemplate("tests/auth.e2e-spec.ts.njk", ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({
+        path: "test/e2e/auth.e2e-spec.ts",
+        content,
+      });
+    } catch (error) {
+      console.error("Error generating auth E2E tests:", error);
+    }
+  }
+
+  // CRUD E2E tests for each model
+  for (const model of ir.models) {
+    try {
+      const rendered = renderTemplate("tests/crud.e2e-spec.ts.njk", {
+        model,
+        auth: ir.auth,
+        project: ir,
+      });
+      const content = await formatCode(rendered, "typescript");
+      files.push({
+        path: `test/e2e/${model.fileName}.e2e-spec.ts`,
+        content,
+      });
+    } catch (error) {
+      console.error(`Error generating ${model.name} E2E tests:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate environment validation schema (Sprint 8)
+ */
+async function generateEnvValidation(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("nestjs/env.schema.ts.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/env.schema.ts",
+    content,
+  };
+}
+
+/**
+ * Generate generator metadata file (Sprint 8)
+ */
+async function generateMetadata(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("generator-meta.json.njk", ir);
+  const content = await formatCode(rendered, "json");
+
+  return {
+    path: "generator-meta.json",
+    content,
+  };
 }

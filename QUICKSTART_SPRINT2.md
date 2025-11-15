@@ -15,7 +15,7 @@ docker run -d -p 27017:27017 --name mongodb mongo:latest
 ### Step 1: Start Foundation Wizard (30 seconds)
 
 ```bash
-cd d:\Projects\webdev\Automations\FoundationWizard
+cd /path/to/FoundationWizard
 npm run dev
 ```
 

@@ -148,6 +148,31 @@ export const featureSelectionSchema = z.object({
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;
 
+// Step 8: Docker Configuration (Sprint 8)
+export const dockerConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  includeCompose: z.boolean().default(true),
+  includeProd: z.boolean().default(true),
+  healthCheck: z.boolean().default(true),
+  nonRootUser: z.boolean().default(true),
+  multiStage: z.boolean().default(true),
+});
+
+export type DockerConfig = z.infer<typeof dockerConfigSchema>;
+
+// Step 8: CI/CD Configuration (Sprint 8)
+export const cicdConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  githubActions: z.boolean().default(true),
+  gitlabCI: z.boolean().default(false),
+  includeTests: z.boolean().default(true),
+  includeE2E: z.boolean().default(true),
+  includeSecurity: z.boolean().default(true),
+  autoDockerBuild: z.boolean().default(true),
+});
+
+export type CICDConfig = z.infer<typeof cicdConfigSchema>;
+
 // Complete Wizard Configuration
 export const wizardConfigSchema = z.object({
   projectSetup: projectSetupSchema,
@@ -156,6 +181,8 @@ export const wizardConfigSchema = z.object({
   authConfig: authConfigSchema,
   oauthConfig: oauthConfigSchema.optional(),
   featureSelection: featureSelectionSchema,
+  dockerConfig: dockerConfigSchema.optional(),
+  cicdConfig: cicdConfigSchema.optional(),
 });
 
 export type WizardConfig = z.infer<typeof wizardConfigSchema>;
@@ -206,5 +233,22 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     health: true,
     rateLimit: false,
     versioning: false,
+  },
+  dockerConfig: {
+    enabled: true,
+    includeCompose: true,
+    includeProd: true,
+    healthCheck: true,
+    nonRootUser: true,
+    multiStage: true,
+  },
+  cicdConfig: {
+    enabled: true,
+    githubActions: true,
+    gitlabCI: false,
+    includeTests: true,
+    includeE2E: true,
+    includeSecurity: true,
+    autoDockerBuild: true,
   },
 };

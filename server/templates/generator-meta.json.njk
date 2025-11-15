@@ -1,0 +1,47 @@
+{
+  "generator": {
+    "name": "FoundationWizard",
+    "version": "{{ generatorVersion }}",
+    "timestamp": "{{ timestamp }}"
+  },
+  "project": {
+    "name": "{{ projectName }}",
+    "description": "{{ description }}",
+    "orm": "{{ orm }}"{% if orm == 'typeorm' or orm == 'prisma' %},
+    "database": "{{ dbType }}"{% endif %}
+  },
+  "dependencies": {
+    "nodejs": "{{ nodeVersion }}",
+    "nestjs": "{{ nestjsVersion }}"
+  },
+  "features": {
+    "authentication": {{ 'true' if auth and auth.enabled else 'false' }},
+{% if auth and auth.enabled %}
+    "jwt": {{ 'true' if auth.jwt else 'false' }},
+    "rbac": {{ 'true' if auth.rbac and auth.rbac.enabled else 'false' }},
+{% endif %}
+    "oauth": {{ 'true' if oauth and oauth.enabled else 'false' }},
+{% if oauth and oauth.enabled %}
+    "oauthProviders": [{% for provider in oauth.providers %}"{{ provider.name }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+{% endif %}
+    "swagger": {{ 'true' if features.swagger else 'false' }},
+    "logging": {{ 'true' if features.logging else 'false' }},
+    "caching": {{ 'true' if features.caching else 'false' }},
+    "rateLimit": {{ 'true' if features.rateLimit else 'false' }},
+    "health": {{ 'true' if features.health else 'false' }},
+    "compression": {{ 'true' if features.compression else 'false' }},
+    "helmet": {{ 'true' if features.helmet else 'false' }},
+    "docker": {{ 'true' if docker and docker.enabled else 'false' }},
+    "cicd": {{ 'true' if cicd and cicd.enabled else 'false' }}
+  },
+  "models": [
+{% for model in models %}
+    {
+      "name": "{{ model.name }}",
+      "fields": {{ model.fields | length }},
+      "timestamps": {{ 'true' if model.timestamps else 'false' }}
+    }{% if not loop.last %},{% endif %}
+{% endfor %}
+  ],
+  "relationships": {{ relationships | length }}
+}

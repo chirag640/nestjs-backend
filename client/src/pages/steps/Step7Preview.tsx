@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { useWizardStore } from "@/lib/store";
 import { FileTree, type FileNode } from "@/components/wizard/FileTree";
-import { CodeEditor, type EditorDiagnostic } from "@/components/wizard/CodeEditor";
+import {
+  CodeEditor,
+  type EditorDiagnostic,
+} from "@/components/wizard/CodeEditor";
 import { DiffEditor } from "@/components/wizard/DiffEditor";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -155,7 +158,7 @@ export default function Step7Preview() {
       }
 
       const data = await response.json();
-      
+
       // Load original content for diff
       const diffResponse = await fetch(
         `/api/preview/diff?sessionId=${sid}&path=${encodeURIComponent(filePath)}`
@@ -294,13 +297,15 @@ export default function Step7Preview() {
       }
 
       const data = await response.json();
-      const diagnostics: EditorDiagnostic[] = data.diagnostics.map((d: any) => ({
-        line: d.line,
-        column: d.column,
-        message: d.message,
-        severity: d.severity === 2 ? "error" : "warning",
-        source: "eslint",
-      }));
+      const diagnostics: EditorDiagnostic[] = data.diagnostics.map(
+        (d: any) => ({
+          line: d.line,
+          column: d.column,
+          message: d.message,
+          severity: d.severity === 2 ? "error" : "warning",
+          source: "eslint",
+        })
+      );
 
       setState((prev) => ({
         ...prev,
@@ -335,7 +340,7 @@ export default function Step7Preview() {
       }
 
       const data = await response.json();
-      
+
       // Filter diagnostics for current file
       const fileDiagnostics: EditorDiagnostic[] = data.diagnostics
         .filter((d: any) => d.file === state.selectedFile)
@@ -343,7 +348,12 @@ export default function Step7Preview() {
           line: d.line || 1,
           column: d.column || 1,
           message: d.message,
-          severity: d.category === "error" ? "error" : d.category === "warning" ? "warning" : "info",
+          severity:
+            d.category === "error"
+              ? "error"
+              : d.category === "warning"
+                ? "warning"
+                : "info",
           source: "typescript",
         }));
 
@@ -446,6 +456,10 @@ export default function Step7Preview() {
       }));
     } catch (error: any) {
       console.error("Undo failed:", error);
+      setState((prev) => ({
+        ...prev,
+        error: error.message || "Failed to undo",
+      }));
     }
   };
 
@@ -476,13 +490,19 @@ export default function Step7Preview() {
       }));
     } catch (error: any) {
       console.error("Redo failed:", error);
+      setState((prev) => ({
+        ...prev,
+        error: error.message || "Failed to redo",
+      }));
     }
   };
 
   const handleReset = async () => {
     if (!state.sessionId || !state.selectedFile) return;
-    
-    const confirm = window.confirm("Reset file to original content? This cannot be undone.");
+
+    const confirm = window.confirm(
+      "Reset file to original content? This cannot be undone."
+    );
     if (!confirm) return;
 
     try {
@@ -508,6 +528,10 @@ export default function Step7Preview() {
       }));
     } catch (error: any) {
       console.error("Reset failed:", error);
+      setState((prev) => ({
+        ...prev,
+        error: error.message || "Failed to reset file",
+      }));
     }
   };
 
@@ -575,7 +599,10 @@ export default function Step7Preview() {
                 </div>
               </div>
               {state.isEditMode && (
-                <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-600/30">
+                <Badge
+                  variant="outline"
+                  className="bg-blue-500/10 text-blue-600 border-blue-600/30"
+                >
                   Edit Mode
                 </Badge>
               )}
@@ -595,12 +622,22 @@ export default function Step7Preview() {
               {state.isEditMode && (
                 <>
                   {state.canUndo && (
-                    <Button size="sm" variant="ghost" onClick={handleUndo} title="Undo (Ctrl+Z)">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleUndo}
+                      title="Undo (Ctrl+Z)"
+                    >
                       <Undo2 className="w-4 h-4" />
                     </Button>
                   )}
                   {state.canRedo && (
-                    <Button size="sm" variant="ghost" onClick={handleRedo} title="Redo (Ctrl+Y)">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleRedo}
+                      title="Redo (Ctrl+Y)"
+                    >
                       <Redo2 className="w-4 h-4" />
                     </Button>
                   )}
@@ -674,20 +711,12 @@ export default function Step7Preview() {
 
                   {state.isDirty && (
                     <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={toggleDiff}
-                      >
+                      <Button size="sm" variant="outline" onClick={toggleDiff}>
                         <GitCompare className="w-4 h-4 mr-2" />
                         {state.showDiff ? "Hide Diff" : "Show Diff"}
                       </Button>
 
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleReset}
-                      >
+                      <Button size="sm" variant="outline" onClick={handleReset}>
                         <RotateCcw className="w-4 h-4 mr-2" />
                         Reset
                       </Button>
@@ -713,7 +742,8 @@ export default function Step7Preview() {
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
               <AlertDescription>
-                Your project is ready! Enable Edit Mode to modify files, or download the ZIP to get started.
+                Your project is ready! Enable Edit Mode to modify files, or
+                download the ZIP to get started.
               </AlertDescription>
             </Alert>
           )}

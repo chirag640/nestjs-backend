@@ -32,6 +32,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const projectName = config.projectSetup.projectName;
       const mode = (req.query.mode as string) || "preview"; // default to preview mode
 
+      // Validate mode parameter
+      const ALLOWED_MODES = ["preview", "download"];
+      if (!ALLOWED_MODES.includes(mode)) {
+        return res.status(400).json({
+          error: "Invalid mode parameter",
+          details: `Mode must be one of: ${ALLOWED_MODES.join(", ")}`,
+        });
+      }
+
       console.log(`🚀 Generating project: ${projectName} (mode: ${mode})`);
 
       // Generate project files

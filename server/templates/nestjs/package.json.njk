@@ -41,7 +41,7 @@
 {% if oauth and oauth.enabled %}
     {% for provider in oauth.providers %}
     {% if provider.name == 'google' %}
-    "passport-google-oauth20": "^2.0.0",
+    "passport-google-oauth20": "^1.0.0",
     {% endif %}
     {% if provider.name == 'github' %}
     "passport-github2": "^0.1.12",
@@ -71,12 +71,13 @@
     "@nestjs/terminus": "^10.2.3",
 {% endif %}
 {% if features.rateLimit %}
-    "@nestjs/throttler": "^6.2.1",
+    "@nestjs/throttler": "^4.1.0",
 {% endif %}
     "class-validator": "^0.14.0",
     "class-transformer": "^0.5.1",
     "reflect-metadata": "^0.1.13",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

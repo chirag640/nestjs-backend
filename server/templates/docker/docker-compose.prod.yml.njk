@@ -1,0 +1,73 @@
+version: '3.9'
+
+services:
+  app:
+    image: {{ projectName | lower }}:latest
+    container_name: {{ projectName | lower }}-app-prod
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+{% if orm == 'mongoose' %}
+      - MONGO_URI=${MONGO_URI}
+{% elif orm == 'typeorm' %}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_DATABASE=${DB_DATABASE}
+{% elif orm == 'prisma' %}
+      - DATABASE_URL=${DATABASE_URL}
+{% endif %}
+{% if auth and auth.enabled and auth.jwt %}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1h}
+  {% if auth.jwt.refreshToken %}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+  {% endif %}
+{% endif %}
+{% if oauth and oauth.enabled %}
+  {% for provider in oauth.providers %}
+    {% if provider.name == 'google' %}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL}
+    {% endif %}
+    {% if provider.name == 'github' %}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% if features.caching %}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+  {% if features.caching == 'redis' %}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+  {% endif %}
+{% endif %}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://yourdomain.com}
+    networks:
+      - app-network
+    restart: always
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      start_period: 40s
+      retries: 3
+
+networks:
+  app-network:
+    driver: bridge

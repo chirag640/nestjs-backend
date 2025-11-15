@@ -1,0 +1,291 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run linter
+        run: npm run lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    {% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
+    services:
+      mongodb:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "echo 'db.runCommand(\"ping\").ok' | mongosh localhost:27017/test --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    {% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'postgres' %}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    {% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'mysql' %}
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: test_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+    {% endif %}
+    {% if features.caching %}
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    {% endif %}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      {% if orm == 'prisma' %}
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      
+      - name: Run Prisma Migrations
+        run: npx prisma migrate deploy
+        env:
+      {% if dbType == 'postgres' %}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?schema=public
+      {% elif dbType == 'mysql' %}
+          DATABASE_URL: mysql://root:root@localhost:3306/test_db
+      {% elif dbType == 'mongodb' %}
+          DATABASE_URL: mongodb://localhost:27017/test_db
+      {% endif %}
+      
+      {% endif %}
+      - name: Run unit tests
+        run: npm test
+        env:
+      {% if orm == 'mongoose' %}
+          MONGO_URI: mongodb://localhost:27017/test_db
+      {% elif orm == 'typeorm' %}
+        {% if dbType == 'postgres' %}
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          DB_DATABASE: test_db
+        {% elif dbType == 'mysql' %}
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_USERNAME: root
+          DB_PASSWORD: root
+          DB_DATABASE: test_db
+        {% endif %}
+      {% elif orm == 'prisma' %}
+        {% if dbType == 'postgres' %}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?schema=public
+        {% elif dbType == 'mysql' %}
+          DATABASE_URL: mysql://root:root@localhost:3306/test_db
+        {% elif dbType == 'mongodb' %}
+          DATABASE_URL: mongodb://localhost:27017/test_db
+        {% endif %}
+      {% endif %}
+      {% if features.caching %}
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+      {% endif %}
+      {% if auth and auth.enabled and auth.jwt %}
+          JWT_SECRET: test-secret-key
+          JWT_EXPIRES_IN: 1h
+        {% if auth.jwt.refreshToken %}
+          JWT_REFRESH_SECRET: test-refresh-secret-key
+          JWT_REFRESH_EXPIRES_IN: 7d
+        {% endif %}
+      {% endif %}
+      
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+      {% if orm == 'mongoose' %}
+          MONGO_URI: mongodb://localhost:27017/test_db
+      {% elif orm == 'typeorm' %}
+        {% if dbType == 'postgres' %}
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          DB_DATABASE: test_db
+        {% elif dbType == 'mysql' %}
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_USERNAME: root
+          DB_PASSWORD: root
+          DB_DATABASE: test_db
+        {% endif %}
+      {% elif orm == 'prisma' %}
+        {% if dbType == 'postgres' %}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?schema=public
+        {% elif dbType == 'mysql' %}
+          DATABASE_URL: mysql://root:root@localhost:3306/test_db
+        {% elif dbType == 'mongodb' %}
+          DATABASE_URL: mongodb://localhost:27017/test_db
+        {% endif %}
+      {% endif %}
+      {% if features.caching %}
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+      {% endif %}
+      {% if auth and auth.enabled and auth.jwt %}
+          JWT_SECRET: test-secret-key
+          JWT_EXPIRES_IN: 1h
+        {% if auth.jwt.refreshToken %}
+          JWT_REFRESH_SECRET: test-refresh-secret-key
+          JWT_REFRESH_EXPIRES_IN: 7d
+        {% endif %}
+      {% endif %}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      {% if orm == 'prisma' %}
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      
+      {% endif %}
+      - name: Build application
+        run: npm run build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: {% raw %}${{ secrets.DOCKER_USERNAME }}{% endraw %}
+          password: {% raw %}${{ secrets.DOCKER_PASSWORD }}{% endraw %}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: {% raw %}${{ secrets.DOCKER_USERNAME }}{% endraw %}/{{ projectName | lower }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={% raw %}{{version}}{% endraw %}
+            type=semver,pattern={% raw %}{{major}}.{{minor}}{% endraw %}
+            type=sha
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: {% raw %}${{ steps.meta.outputs.tags }}{% endraw %}
+          labels: {% raw %}${{ steps.meta.outputs.labels }}{% endraw %}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Run npm audit
+        run: npm audit --production
+        continue-on-error: true
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'

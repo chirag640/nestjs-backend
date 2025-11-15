@@ -200,6 +200,25 @@ export default function Step7Preview() {
     }
   };
 
+  const getLanguageFromFilename = (filename: string): string => {
+    const ext = filename.split(".").pop()?.toLowerCase();
+    const languageMap: Record<string, string> = {
+      ts: "typescript",
+      tsx: "typescript",
+      js: "javascript",
+      jsx: "javascript",
+      json: "json",
+      md: "markdown",
+      yml: "yaml",
+      yaml: "yaml",
+      css: "css",
+      scss: "scss",
+      html: "html",
+      xml: "xml",
+    };
+    return languageMap[ext || ""] || "plaintext";
+  };
+
   const handleFormat = async () => {
     if (!state.selectedFile) return;
 
@@ -211,11 +230,7 @@ export default function Step7Preview() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: state.fileContent,
-          language:
-            state.selectedFile.endsWith(".ts") ||
-            state.selectedFile.endsWith(".tsx")
-              ? "typescript"
-              : "json",
+          language: getLanguageFromFilename(state.selectedFile),
         }),
       });
 

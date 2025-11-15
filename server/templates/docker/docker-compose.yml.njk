@@ -1,0 +1,173 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: {{ projectName | lower }}-app
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+{% if orm == 'mongoose' %}
+      - MONGO_URI=mongodb://mongo:27017/{{ projectName | lower }}
+{% elif orm == 'typeorm' %}
+  {% if dbType == 'postgres' %}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres
+      - DB_DATABASE={{ projectName | lower }}
+  {% elif dbType == 'mysql' %}
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+      - DB_DATABASE={{ projectName | lower }}
+  {% endif %}
+{% elif orm == 'prisma' %}
+  {% if dbType == 'postgres' %}
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/{{ projectName | lower }}?schema=public
+  {% elif dbType == 'mysql' %}
+      - DATABASE_URL=mysql://root:root@mysql:3306/{{ projectName | lower }}
+  {% elif dbType == 'mongodb' %}
+      - DATABASE_URL=mongodb://mongo:27017/{{ projectName | lower }}
+  {% endif %}
+{% endif %}
+{% if auth and auth.enabled and auth.jwt %}
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1h}
+  {% if auth.jwt.refreshToken %}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-your-refresh-secret-change-in-production}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+  {% endif %}
+{% endif %}
+{% if oauth and oauth.enabled %}
+  {% for provider in oauth.providers %}
+    {% if provider.name == 'google' %}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL:-http://localhost:3000/auth/google/callback}
+    {% endif %}
+    {% if provider.name == 'github' %}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL:-http://localhost:3000/auth/github/callback}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% if features.caching %}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+{% endif %}
+    depends_on:
+{% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
+      - mongo
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'postgres' %}
+      - postgres
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'mysql' %}
+      - mysql
+{% endif %}
+{% if features.caching %}
+      - redis
+{% endif %}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - app-network
+    restart: unless-stopped
+
+{% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
+  mongo:
+    image: mongo:6
+    container_name: {{ projectName | lower }}-mongo
+    restart: always
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'postgres' %}
+  postgres:
+    image: postgres:16-alpine
+    container_name: {{ projectName | lower }}-postgres
+    restart: always
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB={{ projectName | lower }}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'mysql' %}
+  mysql:
+    image: mysql:8
+    container_name: {{ projectName | lower }}-mysql
+    restart: always
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE={{ projectName | lower }}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+{% endif %}
+{% if features.caching %}
+  redis:
+    image: redis:7-alpine
+    container_name: {{ projectName | lower }}-redis
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+{% endif %}
+volumes:
+{% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
+  mongo-data:
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'postgres' %}
+  postgres-data:
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'mysql' %}
+  mysql-data:
+{% endif %}
+{% if features.caching %}
+  redis-data:
+{% endif %}
+
+networks:
+  app-network:
+    driver: bridge
