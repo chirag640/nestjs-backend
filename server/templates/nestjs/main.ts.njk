@@ -1,24 +1,48 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+{% if features.validation %}import { ValidationPipe } from '@nestjs/common';{% endif %}
+{% if features.logging %}import { Logger } from '@nestjs/common';{% endif %}
+{% if features.helmet %}import helmet from 'helmet';{% endif %}
+{% if features.compression %}import * as compression from 'compression';{% endif %}
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule{% if features.logging %}, {
+    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+  }{% endif %});
   
-  // Enable validation globally
+  {% if features.helmet %}
+  // Security: HTTP headers protection
+  app.use(helmet());
+  {% endif %}
+
+  {% if features.compression %}
+  // Performance: Gzip compression
+  app.use(compression());
+  {% endif %}
+
+  {% if features.cors %}
+  // Enable CORS for cross-origin requests
+  app.enableCors();
+  {% endif %}
+
+  {% if features.validation %}
+  // Enable validation globally with DTO decorators
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
     transform: true,
   }));
-
-  // Enable CORS
-  app.enableCors();
+  {% endif %}
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
   
-  console.log('🚀 {{ projectName }} is running on http://localhost:' + port);
+  {% if features.logging %}
+  const logger = new Logger('Bootstrap');
+  logger.log(`🚀 Application is running on: http://localhost:${port}`);
+  {% else %}
+  console.log(`🚀 Application is running on: http://localhost:${port}`);
+  {% endif %}
 }
 
 bootstrap();

@@ -23,13 +23,26 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/config": "^3.0.0",
-{% if databaseType === 'MongoDB' %}
+{% if database.type === 'MongoDB' %}
     "@nestjs/mongoose": "^10.0.0",
     "mongoose": "^8.0.0",
 {% else %}
     "@nestjs/typeorm": "^10.0.0",
     "typeorm": "^0.3.17",
-    "{{ databaseType | lower }}": "{% if databaseType === 'PostgreSQL' %}^8.11.0{% elif databaseType === 'MySQL' %}^2.18.1{% endif %}",
+    "{{ database.type | lower }}": "{% if database.type === 'PostgreSQL' %}^8.11.0{% elif database.type === 'MySQL' %}^2.18.1{% endif %}",
+{% endif %}
+{% if auth and auth.enabled %}
+    "@nestjs/jwt": "^10.1.0",
+    "@nestjs/passport": "^10.0.0",
+    "passport": "^0.6.0",
+    "passport-jwt": "^4.0.1",
+    "bcryptjs": "^2.4.3",
+{% endif %}
+{% if features.helmet %}
+    "helmet": "^7.0.0",
+{% endif %}
+{% if features.compression %}
+    "compression": "^1.7.4",
 {% endif %}
     "class-validator": "^0.14.0",
     "class-transformer": "^0.5.1",
@@ -41,6 +54,13 @@
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
     "@types/express": "^4.17.17",
+{% if auth and auth.enabled %}
+    "@types/bcryptjs": "^2.4.2",
+    "@types/passport-jwt": "^3.0.9",
+{% endif %}
+{% if features.compression %}
+    "@types/compression": "^1.7.2",
+{% endif %}
     "@types/jest": "^29.5.2",
     "@types/node": "^20.3.1",
     "@types/supertest": "^2.0.12",

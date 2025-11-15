@@ -1,139 +1,182 @@
-import { useWizardStore } from '@/lib/store';
-import { WizardLayout } from '@/components/wizard/WizardLayout';
-import { Card } from '@/components/ui/card';
-import { Lock, Database, GitBranch, CheckCircle2, TestTube2, Container } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useWizardStore } from "@/lib/store";
+import { WizardLayout } from "@/components/wizard/WizardLayout";
+import { Switch } from "@/components/ui/switch";
+import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Globe,
+  Shield,
+  Zap,
+  CheckCircle2,
+  FileText,
+  Activity,
+  Settings,
+  Info,
+} from "lucide-react";
 
 const FEATURES = [
   {
-    id: 'authentication' as const,
-    icon: Lock,
-    title: 'Authentication',
-    description: 'Secure user authentication with JWT, OAuth, or session-based auth',
+    key: "cors" as const,
+    icon: Globe,
+    title: "CORS",
+    description:
+      "Enable Cross-Origin Resource Sharing for API access from different domains",
+    recommended: true,
   },
   {
-    id: 'orm' as const,
-    icon: Database,
-    title: 'ORM',
-    description: 'Database ORM with Prisma, Drizzle, or TypeORM for type-safe queries',
+    key: "helmet" as const,
+    icon: Shield,
+    title: "Helmet",
+    description:
+      "Secure HTTP headers protection against common vulnerabilities",
+    recommended: true,
   },
   {
-    id: 'ci-cd' as const,
-    icon: GitBranch,
-    title: 'CI/CD',
-    description: 'Automated testing and deployment pipelines with GitHub Actions',
+    key: "compression" as const,
+    icon: Zap,
+    title: "Compression",
+    description: "Gzip compression middleware to reduce response payload size",
+    recommended: true,
   },
   {
-    id: 'linting' as const,
+    key: "validation" as const,
     icon: CheckCircle2,
-    title: 'Linting & Formatting',
-    description: 'ESLint and Prettier configuration for code quality and consistency',
+    title: "Global Validation",
+    description:
+      "Automatic request validation using class-validator decorators",
+    recommended: true,
   },
   {
-    id: 'testing' as const,
-    icon: TestTube2,
-    title: 'Testing Framework',
-    description: 'Unit and integration testing with Jest, Vitest, or Playwright',
+    key: "logging" as const,
+    icon: FileText,
+    title: "Logging",
+    description:
+      "Console logger for debugging and monitoring application behavior",
+    recommended: true,
   },
   {
-    id: 'docker' as const,
-    icon: Container,
-    title: 'Docker Support',
-    description: 'Containerization with Docker and Docker Compose for easy deployment',
+    key: "health" as const,
+    icon: Activity,
+    title: "Health Check",
+    description: "GET /health endpoint for monitoring service availability",
+    recommended: true,
   },
 ];
 
 export default function Step5FeatureSelection() {
   const { config, updateFeatureSelection } = useWizardStore();
-  const selectedFeatures = config.featureSelection?.features || [];
+  const features = config.featureSelection!;
 
-  const toggleFeature = (featureId: typeof FEATURES[number]['id']) => {
-    const isSelected = selectedFeatures.includes(featureId);
-    const updatedFeatures = isSelected
-      ? selectedFeatures.filter((f) => f !== featureId)
-      : [...selectedFeatures, featureId];
-
-    updateFeatureSelection({ features: updatedFeatures });
+  const updateFeature = (key: keyof typeof features, checked: boolean) => {
+    updateFeatureSelection({ [key]: checked });
   };
+
+  const enabledCount = Object.values(features).filter(Boolean).length;
 
   return (
     <WizardLayout
       title="Feature Selection"
-      description="Select the features and tools you want to include in your project"
+      description="Configure system-level features and middleware for your NestJS application"
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {FEATURES.map((feature) => {
-          const isSelected = selectedFeatures.includes(feature.id);
-          const Icon = feature.icon;
+      <div className="space-y-6">
+        <Alert>
+          <Info className="w-4 h-4" />
+          <AlertDescription>
+            These features add production-ready security, performance, and
+            monitoring capabilities. All features are{" "}
+            <strong>recommended</strong> and can be toggled individually.
+          </AlertDescription>
+        </Alert>
 
-          return (
-            <motion.div
-              key={feature.id}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              data-testid={`feature-card-${feature.id}`}
-            >
+        <div className="space-y-3">
+          {FEATURES.map((feature) => {
+            const Icon = feature.icon;
+            const isEnabled = features[feature.key];
+
+            return (
               <Card
-                onClick={() => toggleFeature(feature.id)}
-                className={`p-6 cursor-pointer transition-all duration-150 hover-elevate ${
-                  isSelected
-                    ? 'border-primary border-2 bg-primary/5'
-                    : 'border-white/10'
+                key={feature.key}
+                className={`p-5 transition-all duration-200 ${
+                  isEnabled ? "border-primary/30 bg-primary/5" : "border-border"
                 }`}
               >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div
-                      className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                        isSelected
-                          ? 'bg-primary/20 border border-primary/30'
-                          : 'bg-secondary/50'
+                <div className="flex items-start gap-4">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      isEnabled
+                        ? "bg-primary/20 border border-primary/30"
+                        : "bg-secondary/50"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-5 h-5 ${
+                        isEnabled ? "text-primary" : "text-muted-foreground"
                       }`}
-                    >
-                      <Icon
-                        className={`w-6 h-6 ${
-                          isSelected ? 'text-primary' : 'text-muted-foreground'
-                        }`}
-                      />
-                    </div>
-                    {isSelected && (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="w-6 h-6 rounded-full bg-primary flex items-center justify-center"
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-primary-foreground" />
-                      </motion.div>
-                    )}
+                    />
                   </div>
 
-                  <div>
-                    <h3 className="text-base font-semibold mb-1">{feature.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-base">
+                        {feature.title}
+                      </h3>
+                      {feature.recommended && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
                       {feature.description}
                     </p>
                   </div>
+
+                  <Switch
+                    checked={isEnabled}
+                    onCheckedChange={(checked) =>
+                      updateFeature(feature.key, checked)
+                    }
+                    data-testid={`toggle-${feature.key}`}
+                  />
                 </div>
               </Card>
-            </motion.div>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        {/* Feature Summary */}
+        <Card className="p-4 bg-secondary/30">
+          <div className="flex items-center gap-3">
+            <Settings className="w-5 h-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">
+                {enabledCount} of {FEATURES.length} features enabled
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {enabledCount === FEATURES.length
+                  ? "All recommended features enabled - optimal configuration"
+                  : "You can enable/disable features based on your requirements"}
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Code Impact Preview */}
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">main.ts Configuration Preview</h4>
+          <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+            {`async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+${features.helmet ? "  app.use(helmet());" : ""}
+${features.compression ? "  app.use(compression());" : ""}
+${features.cors ? "  app.enableCors();" : ""}
+${features.validation ? "  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));" : ""}
+${features.logging ? "  app.useLogger(new Logger());" : ""}
+  await app.listen(3000);
+}`}
+          </pre>
+        </div>
       </div>
-
-      {selectedFeatures.length === 0 && (
-        <div className="text-center mt-8 text-muted-foreground">
-          <p className="text-sm">Select features to include in your project (optional)</p>
-        </div>
-      )}
-
-      {selectedFeatures.length > 0 && (
-        <div className="mt-6 p-4 bg-secondary/30 rounded-lg">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{selectedFeatures.length}</span> feature
-            {selectedFeatures.length !== 1 && 's'} selected
-          </p>
-        </div>
-      )}
     </WizardLayout>
   );
 }

@@ -1,12 +1,18 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-{% if databaseType === 'MongoDB' %}
+{% if database.type === 'MongoDB' %}
 import { MongooseModule } from '@nestjs/mongoose';
 {% else %}
 import { TypeOrmModule } from '@nestjs/typeorm';
 {% endif %}
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+{% if auth and auth.enabled %}
+import { AuthModule } from './modules/auth/auth.module';
+{% endif %}
+{% if features.health %}
+import { HealthController } from './health/health.controller';
+{% endif %}
 {% if models and models.length > 0 %}
 // Generated model modules
 {% for model in models %}
@@ -19,15 +25,18 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-{% if databaseType === 'MongoDB' %}
-    MongooseModule.forRoot(process.env.DATABASE_URL || '{{ connectionString }}'),
+{% if database.type === 'MongoDB' %}
+    MongooseModule.forRoot(process.env.DATABASE_URL || '{{ database.connectionString }}'),
 {% else %}
     TypeOrmModule.forRoot({
-      type: '{{ databaseType | lower }}',
-      url: process.env.DATABASE_URL || '{{ connectionString }}',
+      type: '{{ database.type | lower }}',
+      url: process.env.DATABASE_URL || '{{ database.connectionString }}',
       autoLoadEntities: true,
-      synchronize: {{ autoMigration === 'push' }},
+      synchronize: {{ database.autoMigration === 'push' }},
     }),
+{% endif %}
+{% if auth and auth.enabled %}
+    AuthModule,
 {% endif %}
 {% if models and models.length > 0 %}
     // Generated modules
@@ -35,7 +44,10 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
     {% endfor %}
 {% endif %}
   ],
-  controllers: [AppController],
+  controllers: [
+    AppController,
+    {% if features.health %}HealthController,{% endif %}
+  ],
   providers: [AppService],
 })
 export class AppModule {}

@@ -61,6 +61,41 @@ export interface ModelIR {
 }
 
 /**
+ * Intermediate Representation for Authentication (Sprint 3)
+ */
+export interface AuthIR {
+  enabled: boolean;
+  method: "jwt";
+  jwt: {
+    accessTTL: string;
+    refreshTTL: string;
+    rotation: boolean;
+    blacklist: boolean;
+  };
+  roles: string[];
+  // Generated names
+  modulePath: string; // src/modules/auth
+  strategyName: string; // JwtStrategy
+  guardName: string; // JwtAuthGuard
+  rolesGuardName: string; // RolesGuard
+  rolesDecoratorName: string; // Roles
+}
+
+/**
+ * Intermediate Representation for Feature Toggles (Sprint 3)
+ */
+export interface FeaturesIR {
+  cors: boolean;
+  helmet: boolean;
+  compression: boolean;
+  validation: boolean;
+  logging: boolean;
+  health: boolean;
+  swagger: boolean;
+  rateLimit: boolean;
+}
+
+/**
  * Complete Intermediate Representation
  */
 export interface ProjectIR {
@@ -80,6 +115,8 @@ export interface ProjectIR {
     orm: string; // 'mongoose' | 'typeorm'
   };
   models: ModelIR[];
+  auth?: AuthIR; // Optional auth configuration
+  features: FeaturesIR; // Feature toggles
 }
 
 /**
@@ -99,7 +136,7 @@ export function buildIR(config: WizardConfig): ProjectIR {
   const orm =
     config.databaseConfig.databaseType === "MongoDB" ? "mongoose" : "typeorm";
 
-  return {
+  const ir: ProjectIR = {
     project: {
       name: config.projectSetup.projectName,
       description: config.projectSetup.description,
@@ -116,7 +153,15 @@ export function buildIR(config: WizardConfig): ProjectIR {
       orm,
     },
     models: models.map((model) => buildModelIR(model)),
+    features: buildFeaturesIR(config),
   };
+
+  // Add auth if enabled
+  if (config.authConfig?.enabled) {
+    ir.auth = buildAuthIR(config);
+  }
+
+  return ir;
 }
 
 /**
@@ -214,4 +259,41 @@ function validateModels(models: Model[]): void {
   if (errors.length > 0) {
     throw new Error(`Model validation failed:\n${errors.join("\n")}`);
   }
+}
+
+/**
+ * Build Auth IR from configuration (Sprint 3)
+ */
+function buildAuthIR(config: WizardConfig): AuthIR {
+  const authConfig = config.authConfig!;
+
+  return {
+    enabled: authConfig.enabled,
+    method: authConfig.method,
+    jwt: authConfig.jwt!,
+    roles: authConfig.roles,
+    modulePath: "src/modules/auth",
+    strategyName: "JwtStrategy",
+    guardName: "JwtAuthGuard",
+    rolesGuardName: "RolesGuard",
+    rolesDecoratorName: "Roles",
+  };
+}
+
+/**
+ * Build Features IR from configuration (Sprint 3)
+ */
+function buildFeaturesIR(config: WizardConfig): FeaturesIR {
+  const features = config.featureSelection!;
+
+  return {
+    cors: features.cors ?? true,
+    helmet: features.helmet ?? true,
+    compression: features.compression ?? true,
+    validation: features.validation ?? true,
+    logging: features.logging ?? true,
+    health: features.health ?? true,
+    swagger: features.swagger ?? false,
+    rateLimit: features.rateLimit ?? false,
+  };
 }

@@ -1,0 +1,144 @@
+import { Injectable, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcryptjs';
+import { UserRepository } from '../user/user.repository';
+import { RegisterDto } from './dtos/register.dto';
+import { LoginDto } from './dtos/login.dto';
+import { UserOutputDto } from '../user/dtos/user-output.dto';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly userRepository: UserRepository,
+    private readonly configService: ConfigService,
+  ) {}
+
+  async register(dto: RegisterDto) {
+    // Check if user already exists
+    const existingUser = await this.userRepository.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    // Create user
+    const user = await this.userRepository.create({
+      ...dto,
+      password: hashedPassword,
+      roles: dto.roles || ['User'], // Default role
+    });
+
+    // Generate tokens
+    const tokens = await this.generateTokens(user._id.toString(), user.roles);
+
+    // Save refresh token{% if auth.jwt.blacklist %} for blacklist tracking{% endif %}
+    {% if auth.jwt.blacklist %}await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);{% endif %}
+
+    return {
+      ...tokens,
+      user: this.mapToOutputDto(user),
+    };
+  }
+
+  async login(dto: LoginDto) {
+    // Find user by email
+    const user = await this.userRepository.findByEmail(dto.email);
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Generate tokens
+    const tokens = await this.generateTokens(user._id.toString(), user.roles);
+
+    // Save refresh token{% if auth.jwt.blacklist %} for blacklist tracking{% endif %}
+    {% if auth.jwt.blacklist %}await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);{% endif %}
+
+    return {
+      ...tokens,
+      user: this.mapToOutputDto(user),
+    };
+  }
+
+  async refreshToken(refreshToken: string) {
+    try {
+      // Verify refresh token
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: this.configService.get<string>('JWT_SECRET'),
+      });
+
+      // Check if token is blacklisted
+      {% if auth.jwt.blacklist %}
+      const user = await this.userRepository.findById(payload.sub);
+      if (!user || user.refreshToken !== refreshToken) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+      {% endif %}
+
+      // Generate new tokens{% if auth.jwt.rotation %} (rotation enabled){% endif %}
+      const tokens = await this.generateTokens(payload.sub, payload.roles);
+
+      // Update refresh token{% if auth.jwt.rotation %} for rotation{% endif %}
+      {% if auth.jwt.blacklist %}await this.userRepository.updateRefreshToken(payload.sub, tokens.refreshToken);{% endif %}
+
+      return tokens;
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
+  async getProfile(userId: string): Promise<UserOutputDto> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return this.mapToOutputDto(user);
+  }
+
+  async logout(userId: string, refreshToken: string) {
+    {% if auth.jwt.blacklist %}
+    // Invalidate refresh token by clearing it
+    await this.userRepository.updateRefreshToken(userId, null);
+    {% endif %}
+  }
+
+  private async generateTokens(userId: string, roles: string[]) {
+    const payload = { sub: userId, roles };
+
+    const accessToken = this.jwtService.sign(payload, {
+      secret: this.configService.get<string>('JWT_SECRET'),
+      expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRY') || '{{ auth.jwt.accessTTL }}',
+    });
+
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: this.configService.get<string>('JWT_SECRET'),
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRY') || '{{ auth.jwt.refreshTTL }}',
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  private mapToOutputDto(user: any): UserOutputDto {
+    return {
+      id: user._id.toString(),
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      roles: user.roles,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+}

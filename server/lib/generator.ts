@@ -43,19 +43,8 @@ export async function generateProject(
   // Build Intermediate Representation
   const ir: ProjectIR = buildIR(config);
 
-  const context: TemplateContext & { models?: ModelIR[] } = {
-    projectName: projectSetup.projectName,
-    description: projectSetup.description,
-    author: projectSetup.author,
-    license: projectSetup.license,
-    nodeVersion: projectSetup.nodeVersion,
-    packageManager: projectSetup.packageManager,
-    databaseType: databaseConfig.databaseType,
-    provider: databaseConfig.provider,
-    connectionString: databaseConfig.connectionString,
-    autoMigration: databaseConfig.autoMigration,
-    models: ir.models, // Add models to context for app.module
-  };
+  // Use full IR as context for templates
+  const context = ir;
 
   const files: GeneratedFile[] = [];
 
@@ -144,9 +133,21 @@ export async function generateProject(
   // Generate model files if MongoDB is selected
   if (databaseConfig.databaseType === "MongoDB" && ir.models.length > 0) {
     for (const model of ir.models) {
-      const modelFiles = await generateModelFiles(model);
+      const modelFiles = await generateModelFiles(model, ir);
       files.push(...modelFiles);
     }
+  }
+
+  // Generate auth files if auth is enabled
+  if (ir.auth && ir.auth.enabled) {
+    const authFiles = await generateAuthFiles(ir);
+    files.push(...authFiles);
+  }
+
+  // Generate health controller if enabled
+  if (ir.features.health) {
+    const healthFiles = await generateHealthFiles();
+    files.push(...healthFiles);
   }
 
   return files;
@@ -155,7 +156,10 @@ export async function generateProject(
 /**
  * Generate all files for a single model
  */
-async function generateModelFiles(model: ModelIR): Promise<GeneratedFile[]> {
+async function generateModelFiles(
+  model: ModelIR,
+  ir: ProjectIR
+): Promise<GeneratedFile[]> {
   const files: GeneratedFile[] = [];
 
   const modelTemplates = [
@@ -203,7 +207,7 @@ async function generateModelFiles(model: ModelIR): Promise<GeneratedFile[]> {
 
   for (const { template, output, parser } of modelTemplates) {
     try {
-      const rendered = renderTemplate(template, { model });
+      const rendered = renderTemplate(template, { model, project: ir });
       const content = parser ? await formatCode(rendered, parser) : rendered;
 
       files.push({
@@ -217,6 +221,120 @@ async function generateModelFiles(model: ModelIR): Promise<GeneratedFile[]> {
       );
       throw new Error(`Failed to generate ${output} for model ${model.name}`);
     }
+  }
+
+  return files;
+}
+
+/**
+ * Generate all auth-related files (Sprint 3)
+ */
+async function generateAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const authTemplates = [
+    {
+      template: "auth/auth.module.njk",
+      output: "src/modules/auth/auth.module.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/auth.controller.njk",
+      output: "src/modules/auth/auth.controller.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/auth.service.njk",
+      output: "src/modules/auth/auth.service.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/strategies/jwt.strategy.njk",
+      output: "src/modules/auth/strategies/jwt.strategy.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/guards/jwt-auth.guard.njk",
+      output: "src/modules/auth/guards/jwt-auth.guard.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/dtos/register.dto.njk",
+      output: "src/modules/auth/dtos/register.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/dtos/login.dto.njk",
+      output: "src/modules/auth/dtos/login.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/dtos/refresh.dto.njk",
+      output: "src/modules/auth/dtos/refresh.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/dtos/user-output.dto.njk",
+      output: "src/modules/user/dtos/user-output.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/rbac/roles.decorator.njk",
+      output: "src/modules/auth/rbac/roles.decorator.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/rbac/roles.guard.njk",
+      output: "src/modules/auth/rbac/roles.guard.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/rbac/roles.enum.njk",
+      output: "src/modules/auth/rbac/roles.enum.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/user.schema.njk",
+      output: "src/modules/user/user.schema.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/user.repository.njk",
+      output: "src/modules/user/user.repository.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of authTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating auth file ${output}:`, error);
+      throw new Error(`Failed to generate auth file: ${output}`);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate health check files (Sprint 3)
+ */
+async function generateHealthFiles(): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  try {
+    const rendered = renderTemplate("health/health.controller.njk", {});
+    const content = await formatCode(rendered, "typescript");
+    files.push({
+      path: "src/health/health.controller.ts",
+      content,
+    });
+  } catch (error) {
+    console.error("Error generating health controller:", error);
+    throw new Error("Failed to generate health controller");
   }
 
   return files;

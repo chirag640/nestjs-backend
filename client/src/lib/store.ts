@@ -1,7 +1,7 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { WizardConfig } from '@shared/schema';
-import { defaultWizardConfig } from '@shared/schema';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { WizardConfig } from "@shared/schema";
+import { defaultWizardConfig } from "@shared/schema";
 
 interface WizardStore {
   currentStep: number;
@@ -10,11 +10,15 @@ interface WizardStore {
   nextStep: () => void;
   previousStep: () => void;
   goToStep: (step: number) => void;
-  updateProjectSetup: (data: Partial<WizardConfig['projectSetup']>) => void;
-  updateDatabaseConfig: (data: Partial<WizardConfig['databaseConfig']>) => void;
-  updateModelDefinition: (data: Partial<WizardConfig['modelDefinition']>) => void;
-  updateAuthConfig: (data: Partial<WizardConfig['authConfig']>) => void;
-  updateFeatureSelection: (data: Partial<WizardConfig['featureSelection']>) => void;
+  updateProjectSetup: (data: Partial<WizardConfig["projectSetup"]>) => void;
+  updateDatabaseConfig: (data: Partial<WizardConfig["databaseConfig"]>) => void;
+  updateModelDefinition: (
+    data: Partial<WizardConfig["modelDefinition"]>
+  ) => void;
+  updateAuthConfig: (data: Partial<WizardConfig["authConfig"]>) => void;
+  updateFeatureSelection: (
+    data: Partial<WizardConfig["featureSelection"]>
+  ) => void;
   resetWizard: () => void;
   isStepValid: (step: number) => boolean;
 }
@@ -75,7 +79,10 @@ export const useWizardStore = create<WizardStore>()(
         set((state) => ({
           config: {
             ...state.config,
-            modelDefinition: { ...state.config.modelDefinition, ...data } as any,
+            modelDefinition: {
+              ...state.config.modelDefinition,
+              ...data,
+            } as any,
           },
         }));
       },
@@ -93,7 +100,10 @@ export const useWizardStore = create<WizardStore>()(
         set((state) => ({
           config: {
             ...state.config,
-            featureSelection: { ...state.config.featureSelection, ...data } as any,
+            featureSelection: {
+              ...state.config.featureSelection,
+              ...data,
+            } as any,
           },
         }));
       },
@@ -117,7 +127,7 @@ export const useWizardStore = create<WizardStore>()(
           }
           case 2: {
             const db = config.databaseConfig;
-            return !!(db?.connectionString);
+            return !!db?.connectionString;
           }
           case 3: {
             const models = config.modelDefinition?.models || [];
@@ -125,8 +135,13 @@ export const useWizardStore = create<WizardStore>()(
           }
           case 4: {
             const auth = config.authConfig;
+            if (!auth) return false;
+            // If auth is disabled, step is valid
+            if (!auth.enabled) return true;
+            // If auth is enabled, validate JWT config and roles
             return !!(
-              auth?.jwtSecret &&
+              auth.jwt?.accessTTL &&
+              auth.jwt?.refreshTTL &&
               auth.roles &&
               auth.roles.length > 0
             );
@@ -143,8 +158,11 @@ export const useWizardStore = create<WizardStore>()(
       },
     }),
     {
-      name: 'wizard-storage',
-      partialize: (state) => ({ config: state.config, currentStep: state.currentStep }),
+      name: "wizard-storage",
+      partialize: (state) => ({
+        config: state.config,
+        currentStep: state.currentStep,
+      }),
     }
   )
 );

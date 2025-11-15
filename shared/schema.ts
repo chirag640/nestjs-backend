@@ -79,22 +79,42 @@ export const modelDefinitionSchema = z.object({
 
 export type ModelDefinition = z.infer<typeof modelDefinitionSchema>;
 
-// Step 4: Authentication & Authorization
+// Step 4: Authentication & Authorization (Sprint 3)
 export const authConfigSchema = z.object({
-  provider: z.enum(["JWT", "OAuth", "NextAuth"]),
-  jwtSecret: z.string().min(1, "JWT secret is required"),
-  jwtExpiration: z.string().min(1, "JWT expiration is required"),
-  roles: z.array(z.string()).min(1, "At least one role is required"),
-  permissions: z.record(z.string(), z.array(z.string())),
+  enabled: z.boolean().default(false),
+  method: z.enum(["jwt"]).default("jwt"), // Only JWT in Sprint 3
+  jwt: z
+    .object({
+      accessTTL: z
+        .string()
+        .regex(/^\d+(m|h|d)$/, "Must be in format: 15m, 1h, 7d")
+        .default("15m"),
+      refreshTTL: z
+        .string()
+        .regex(/^\d+(m|h|d)$/, "Must be in format: 15m, 1h, 7d")
+        .default("7d"),
+      rotation: z.boolean().default(true), // Rotate refresh tokens
+      blacklist: z.boolean().default(true), // Blacklist refresh tokens on logout
+    })
+    .optional(),
+  roles: z
+    .array(z.string())
+    .min(1, "At least one role is required")
+    .default(["Admin", "User"]),
 });
 
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 
-// Step 5: Feature Selection
+// Step 5: Feature Selection (Sprint 3 - Toggles)
 export const featureSelectionSchema = z.object({
-  features: z.array(
-    z.enum(["authentication", "orm", "ci-cd", "linting", "testing", "docker"])
-  ),
+  cors: z.boolean().default(true),
+  helmet: z.boolean().default(true),
+  compression: z.boolean().default(true),
+  validation: z.boolean().default(true), // Global ValidationPipe
+  logging: z.boolean().default(true),
+  health: z.boolean().default(true), // /health endpoint
+  swagger: z.boolean().default(false), // Future sprint
+  rateLimit: z.boolean().default(false), // Future sprint
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;
@@ -131,13 +151,24 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     relationships: [],
   },
   authConfig: {
-    provider: "JWT",
-    jwtSecret: "",
-    jwtExpiration: "7d",
-    roles: [],
-    permissions: {},
+    enabled: false,
+    method: "jwt" as const,
+    jwt: {
+      accessTTL: "15m",
+      refreshTTL: "7d",
+      rotation: true,
+      blacklist: true,
+    },
+    roles: ["Admin", "User"],
   },
   featureSelection: {
-    features: [],
+    cors: true,
+    helmet: true,
+    compression: true,
+    validation: true,
+    logging: true,
+    health: true,
+    swagger: false,
+    rateLimit: false,
   },
 };
