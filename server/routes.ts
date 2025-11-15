@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { wizardConfigSchema } from "../shared/schema";
 import { generateProject } from "./lib/generator";
 import { streamZip } from "./lib/zipGenerator";
-import { createSession } from "./sessionStorage";
+import { createSession } from "./lib/sessionManager";
 import { registerPreviewRoutes } from "./previewRoutes";
 
 export async function registerRoutes(app: Express): Promise<Server> {

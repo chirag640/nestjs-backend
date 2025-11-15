@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useWizardStore } from "@/lib/store";
 import { FileTree, type FileNode } from "@/components/wizard/FileTree";
-import { CodeEditor } from "@/components/wizard/CodeEditor";
+import { CodeEditor, type EditorDiagnostic } from "@/components/wizard/CodeEditor";
+import { DiffEditor } from "@/components/wizard/DiffEditor";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +14,14 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Package,
-  ArrowLeft,
   Code2,
+  ArrowLeft,
+  RotateCcw,
+  Undo2,
+  Redo2,
+  Bug,
+  Zap,
+  GitCompare,
 } from "lucide-react";
 
 interface PreviewState {
@@ -23,16 +29,25 @@ interface PreviewState {
   tree: FileNode[];
   selectedFile: string | null;
   fileContent: string;
+  originalContent: string;
   isEditMode: boolean;
   isDirty: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
   isLoading: boolean;
   error: string | null;
   projectName: string;
   totalFiles: number;
+  diagnostics: EditorDiagnostic[];
+  showDiff: boolean;
+  isFormatting: boolean;
+  isLinting: boolean;
+  isTypechecking: boolean;
+  isSaving: boolean;
 }
 
 export default function Step7Preview() {
-  const { config } = useWizardStore();
+  const { config, previousStep } = useWizardStore();
   const projectName = config.projectSetup?.projectName || "nestjs-backend";
 
   const [state, setState] = useState<PreviewState>({
@@ -40,18 +55,24 @@ export default function Step7Preview() {
     tree: [],
     selectedFile: null,
     fileContent: "",
+    originalContent: "",
     isEditMode: false,
     isDirty: false,
+    canUndo: false,
+    canRedo: false,
     isLoading: true,
     error: null,
     projectName,
     totalFiles: 0,
+    diagnostics: [],
+    showDiff: false,
+    isFormatting: false,
+    isLinting: false,
+    isTypechecking: false,
+    isSaving: false,
   });
 
-  // Generate project and load file tree on mount
-  // ESLint: config is intentionally omitted - we only want to generate once on mount,
-  // not re-generate every time config changes (user has already confirmed config in Step 6)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Generate project on mount
   useEffect(() => {
     generateProject();
   }, []);
@@ -134,12 +155,24 @@ export default function Step7Preview() {
       }
 
       const data = await response.json();
+      
+      // Load original content for diff
+      const diffResponse = await fetch(
+        `/api/preview/diff?sessionId=${sid}&path=${encodeURIComponent(filePath)}`
+      );
+      const diffData = diffResponse.ok ? await diffResponse.json() : null;
+
       setState((prev) => ({
         ...prev,
         selectedFile: filePath,
         fileContent: data.content,
-        isDirty: false,
+        originalContent: diffData?.original || data.content,
+        isDirty: data.dirty || false,
+        canUndo: data.canUndo || false,
+        canRedo: data.canRedo || false,
         isLoading: false,
+        diagnostics: [],
+        showDiff: false,
       }));
     } catch (error: any) {
       setState((prev) => ({
@@ -169,7 +202,7 @@ export default function Step7Preview() {
   const handleSave = async () => {
     if (!state.sessionId || !state.selectedFile) return;
 
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    setState((prev) => ({ ...prev, isSaving: true, error: null }));
 
     try {
       const response = await fetch("/api/preview/file", {
@@ -189,12 +222,13 @@ export default function Step7Preview() {
       setState((prev) => ({
         ...prev,
         isDirty: false,
-        isLoading: false,
+        canUndo: true,
+        isSaving: false,
       }));
     } catch (error: any) {
       setState((prev) => ({
         ...prev,
-        isLoading: false,
+        isSaving: false,
         error: error.message || "Failed to save file",
       }));
     }
@@ -203,7 +237,7 @@ export default function Step7Preview() {
   const handleFormat = async () => {
     if (!state.selectedFile) return;
 
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    setState((prev) => ({ ...prev, isFormatting: true, error: null }));
 
     try {
       const response = await fetch("/api/preview/format", {
@@ -228,24 +262,266 @@ export default function Step7Preview() {
         ...prev,
         fileContent: data.formatted,
         isDirty: true,
-        isLoading: false,
+        isFormatting: false,
       }));
     } catch (error: any) {
       setState((prev) => ({
         ...prev,
-        isLoading: false,
+        isFormatting: false,
         error: error.message || "Failed to format code",
       }));
     }
   };
 
-  const handleDownload = () => {
+  const handleLint = async () => {
+    if (!state.selectedFile) return;
+
+    setState((prev) => ({ ...prev, isLinting: true, error: null }));
+
+    try {
+      const response = await fetch("/api/preview/lint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: state.fileContent,
+          filePath: state.selectedFile,
+          fix: false,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to lint code");
+      }
+
+      const data = await response.json();
+      const diagnostics: EditorDiagnostic[] = data.diagnostics.map((d: any) => ({
+        line: d.line,
+        column: d.column,
+        message: d.message,
+        severity: d.severity === 2 ? "error" : "warning",
+        source: "eslint",
+      }));
+
+      setState((prev) => ({
+        ...prev,
+        diagnostics,
+        isLinting: false,
+      }));
+    } catch (error: any) {
+      setState((prev) => ({
+        ...prev,
+        isLinting: false,
+        error: error.message || "Failed to lint code",
+      }));
+    }
+  };
+
+  const handleTypecheck = async () => {
     if (!state.sessionId) return;
-    window.location.href = `/api/preview/download?sessionId=${state.sessionId}`;
+
+    setState((prev) => ({ ...prev, isTypechecking: true, error: null }));
+
+    try {
+      const response = await fetch("/api/preview/typecheck", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to typecheck project");
+      }
+
+      const data = await response.json();
+      
+      // Filter diagnostics for current file
+      const fileDiagnostics: EditorDiagnostic[] = data.diagnostics
+        .filter((d: any) => d.file === state.selectedFile)
+        .map((d: any) => ({
+          line: d.line || 1,
+          column: d.column || 1,
+          message: d.message,
+          severity: d.category === "error" ? "error" : d.category === "warning" ? "warning" : "info",
+          source: "typescript",
+        }));
+
+      setState((prev) => ({
+        ...prev,
+        diagnostics: fileDiagnostics,
+        isTypechecking: false,
+      }));
+    } catch (error: any) {
+      setState((prev) => ({
+        ...prev,
+        isTypechecking: false,
+        error: error.message || "Failed to typecheck project",
+      }));
+    }
+  };
+
+  const handleAutoFix = async () => {
+    if (!state.selectedFile) return;
+
+    setState((prev) => ({ ...prev, isFormatting: true, error: null }));
+
+    try {
+      // First run ESLint with fix
+      const lintResponse = await fetch("/api/preview/lint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: state.fileContent,
+          filePath: state.selectedFile,
+          fix: true,
+        }),
+      });
+
+      if (!lintResponse.ok) {
+        throw new Error("Failed to auto-fix");
+      }
+
+      const lintData = await lintResponse.json();
+      let fixedCode = lintData.fixedCode || state.fileContent;
+
+      // Then run Prettier
+      const formatResponse = await fetch("/api/preview/format", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: fixedCode,
+          language:
+            state.selectedFile.endsWith(".ts") ||
+            state.selectedFile.endsWith(".tsx")
+              ? "typescript"
+              : "json",
+        }),
+      });
+
+      if (formatResponse.ok) {
+        const formatData = await formatResponse.json();
+        fixedCode = formatData.formatted;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        fileContent: fixedCode,
+        isDirty: true,
+        isFormatting: false,
+      }));
+    } catch (error: any) {
+      setState((prev) => ({
+        ...prev,
+        isFormatting: false,
+        error: error.message || "Failed to auto-fix code",
+      }));
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!state.sessionId || !state.selectedFile) return;
+
+    try {
+      const response = await fetch("/api/preview/undo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          path: state.selectedFile,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to undo");
+      }
+
+      const data = await response.json();
+      setState((prev) => ({
+        ...prev,
+        fileContent: data.content,
+        canUndo: data.canUndo,
+        canRedo: data.canRedo,
+        isDirty: true,
+      }));
+    } catch (error: any) {
+      console.error("Undo failed:", error);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (!state.sessionId || !state.selectedFile) return;
+
+    try {
+      const response = await fetch("/api/preview/redo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          path: state.selectedFile,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to redo");
+      }
+
+      const data = await response.json();
+      setState((prev) => ({
+        ...prev,
+        fileContent: data.content,
+        canUndo: data.canUndo,
+        canRedo: data.canRedo,
+        isDirty: true,
+      }));
+    } catch (error: any) {
+      console.error("Redo failed:", error);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!state.sessionId || !state.selectedFile) return;
+    
+    const confirm = window.confirm("Reset file to original content? This cannot be undone.");
+    if (!confirm) return;
+
+    try {
+      const response = await fetch("/api/preview/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          path: state.selectedFile,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to reset file");
+      }
+
+      const data = await response.json();
+      setState((prev) => ({
+        ...prev,
+        fileContent: data.content,
+        isDirty: false,
+        diagnostics: [],
+      }));
+    } catch (error: any) {
+      console.error("Reset failed:", error);
+    }
   };
 
   const toggleEditMode = () => {
     setState((prev) => ({ ...prev, isEditMode: !prev.isEditMode }));
+  };
+
+  const toggleDiff = () => {
+    setState((prev) => ({ ...prev, showDiff: !prev.showDiff }));
+  };
+
+  const handleDownload = () => {
+    if (!state.sessionId) return;
+    window.location.href = `/api/preview/download?sessionId=${state.sessionId}`;
   };
 
   if (state.isLoading && !state.sessionId) {
@@ -266,7 +542,7 @@ export default function Step7Preview() {
     );
   }
 
-  if (state.error) {
+  if (state.error && !state.sessionId) {
     return (
       <div className="flex items-center justify-center h-[600px]">
         <Alert variant="destructive" className="max-w-lg">
@@ -277,14 +553,13 @@ export default function Step7Preview() {
     );
   }
 
-  const { previousStep } = useWizardStore();
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Custom Header */}
+      {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="px-6 py-4">
+        <div className="px-6 py-3">
           <div className="flex items-center justify-between">
+            {/* Left: Project info */}
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="sm" onClick={previousStep}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -295,15 +570,18 @@ export default function Step7Preview() {
                 <div>
                   <h3 className="font-semibold">{state.projectName}</h3>
                   <p className="text-xs text-muted-foreground">
-                    {state.totalFiles} files generated
+                    {state.totalFiles} files • Step 7 of 7
                   </p>
                 </div>
               </div>
-              <Badge variant="outline" className="ml-2">
-                Step 7 of 7
-              </Badge>
+              {state.isEditMode && (
+                <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-600/30">
+                  Edit Mode
+                </Badge>
+              )}
             </div>
 
+            {/* Right: Actions */}
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
@@ -314,17 +592,109 @@ export default function Step7Preview() {
                 {state.isEditMode ? "View Mode" : "Edit Mode"}
               </Button>
 
-              {state.isEditMode && state.isDirty && (
-                <Button size="sm" onClick={handleSave}>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save
-                </Button>
-              )}
+              {state.isEditMode && (
+                <>
+                  {state.canUndo && (
+                    <Button size="sm" variant="ghost" onClick={handleUndo} title="Undo (Ctrl+Z)">
+                      <Undo2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                  {state.canRedo && (
+                    <Button size="sm" variant="ghost" onClick={handleRedo} title="Redo (Ctrl+Y)">
+                      <Redo2 className="w-4 h-4" />
+                    </Button>
+                  )}
 
-              <Button size="sm" variant="outline" onClick={handleFormat}>
-                <Wand2 className="w-4 h-4 mr-2" />
-                Format
-              </Button>
+                  {state.isDirty && (
+                    <Button
+                      size="sm"
+                      onClick={handleSave}
+                      disabled={state.isSaving}
+                    >
+                      {state.isSaving ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4 mr-2" />
+                      )}
+                      Save
+                    </Button>
+                  )}
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleFormat}
+                    disabled={state.isFormatting}
+                  >
+                    {state.isFormatting ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Wand2 className="w-4 h-4 mr-2" />
+                    )}
+                    Format
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAutoFix}
+                    disabled={state.isFormatting}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    Auto-Fix
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleLint}
+                    disabled={state.isLinting}
+                  >
+                    {state.isLinting ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Bug className="w-4 h-4 mr-2" />
+                    )}
+                    Lint
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleTypecheck}
+                    disabled={state.isTypechecking}
+                  >
+                    {state.isTypechecking ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                    )}
+                    Typecheck
+                  </Button>
+
+                  {state.isDirty && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={toggleDiff}
+                      >
+                        <GitCompare className="w-4 h-4 mr-2" />
+                        {state.showDiff ? "Hide Diff" : "Show Diff"}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleReset}
+                      >
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Reset
+                      </Button>
+                    </>
+                  )}
+                </>
+              )}
 
               <Button size="sm" onClick={handleDownload}>
                 <Download className="w-4 h-4 mr-2" />
@@ -343,9 +713,16 @@ export default function Step7Preview() {
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
               <AlertDescription>
-                Your project is ready! Review the code below or download the ZIP
-                file to get started.
+                Your project is ready! Enable Edit Mode to modify files, or download the ZIP to get started.
               </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Error message */}
+          {state.error && state.sessionId && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{state.error}</AlertDescription>
             </Alert>
           )}
 
@@ -358,16 +735,29 @@ export default function Step7Preview() {
               onFileSelect={handleFileSelect}
             />
 
-            {/* Right: Code Editor */}
+            {/* Right: Editor or Diff */}
             <div className="bg-background">
               {state.selectedFile ? (
-                <CodeEditor
-                  value={state.fileContent}
-                  language="typescript"
-                  fileName={state.selectedFile}
-                  readonly={!state.isEditMode}
-                  onChange={handleContentChange}
-                />
+                state.showDiff ? (
+                  <DiffEditor
+                    original={state.originalContent}
+                    modified={state.fileContent}
+                    fileName={state.selectedFile}
+                    onClose={toggleDiff}
+                  />
+                ) : (
+                  <CodeEditor
+                    value={state.fileContent}
+                    language="typescript"
+                    fileName={state.selectedFile}
+                    readonly={!state.isEditMode}
+                    onChange={handleContentChange}
+                    diagnostics={state.diagnostics}
+                    onSave={handleSave}
+                    showSaveIndicator={state.isEditMode}
+                    isDirty={state.isDirty}
+                  />
+                )
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   Select a file to preview
