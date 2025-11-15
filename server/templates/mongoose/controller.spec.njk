@@ -1,0 +1,136 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { {{ model.name }}Controller } from './{{ model.fileName }}.controller';
+import { {{ model.name }}Service } from './{{ model.fileName }}.service';
+{% if auth and auth.enabled %}
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ExecutionContext } from '@nestjs/common';
+{% endif %}
+
+describe('{{ model.name }}Controller', () => {
+  let controller: {{ model.name }}Controller;
+  let service: jest.Mocked<{{ model.name }}Service>;
+
+  const mock{{ model.name }} = {
+    _id: '507f1f77bcf86cd799439011',
+    {% for field in model.fields %}
+    {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+    {% endfor %}
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    const mockService = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+      remove: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [{{ model.name }}Controller],
+      providers: [
+        {
+          provide: {{ model.name }}Service,
+          useValue: mockService,
+        },
+      ],
+    })
+    {% if auth and auth.enabled %}
+    .overrideGuard(JwtAuthGuard)
+    .useValue({
+      canActivate: (context: ExecutionContext) => {
+        const request = context.switchToHttp().getRequest();
+        request.user = { id: 'user-id', roles: ['User'] };
+        return true;
+      },
+    })
+    {% endif %}
+    .compile();
+
+    controller = module.get<{{ model.name }}Controller>({{ model.name }}Controller);
+    service = module.get({{ model.name }}Service);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  describe('create', () => {
+    it('should create a {{ model.nameCamel }}', async () => {
+      const createDto = {
+        {% for field in model.fields %}{% if not field.defaultValue %}
+        {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+        {% endif %}{% endfor %}
+      };
+
+      service.create.mockResolvedValue(mock{{ model.name }} as any);
+
+      const result = await controller.create(createDto as any);
+
+      expect(result).toEqual(mock{{ model.name }});
+      expect(service.create).toHaveBeenCalledWith(createDto);
+    });
+  });
+
+  describe('findAll', () => {
+    it('should return paginated {{ model.namePlural }}', async () => {
+      const mockResult = {
+        items: [mock{{ model.name }}],
+        meta: {
+          page: 1,
+          limit: 10,
+          total: 1,
+          totalPages: 1,
+        },
+      };
+
+      service.findAll.mockResolvedValue(mockResult as any);
+
+      const result = await controller.findAll(1, 10);
+
+      expect(result).toEqual(mockResult);
+      expect(service.findAll).toHaveBeenCalledWith(1, 10);
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return a {{ model.nameCamel }} by id', async () => {
+      service.findOne.mockResolvedValue(mock{{ model.name }} as any);
+
+      const result = await controller.findOne('507f1f77bcf86cd799439011');
+
+      expect(result).toEqual(mock{{ model.name }});
+      expect(service.findOne).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    });
+  });
+
+  describe('update', () => {
+    it('should update a {{ model.nameCamel }}', async () => {
+      const updateDto = {
+        {% for field in model.fields | slice(0, 2) %}
+        {{ field.name }}: {% if field.type == 'string' %}'updated-{{ field.name }}'{% elif field.type == 'number' %}456{% elif field.type == 'boolean' %}false{% else %}'updated-value'{% endif %},
+        {% endfor %}
+      };
+
+      const updatedMock = { ...mock{{ model.name }}, ...updateDto };
+      service.update.mockResolvedValue(updatedMock as any);
+
+      const result = await controller.update('507f1f77bcf86cd799439011', updateDto as any);
+
+      expect(result).toEqual(updatedMock);
+      expect(service.update).toHaveBeenCalledWith('507f1f77bcf86cd799439011', updateDto);
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove a {{ model.nameCamel }}', async () => {
+      service.remove.mockResolvedValue(undefined);
+
+      await controller.remove('507f1f77bcf86cd799439011');
+
+      expect(service.remove).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    });
+  });
+});

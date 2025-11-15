@@ -1,0 +1,160 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { {{ model.name }}Service } from './{{ model.fileName }}.service';
+import { {{ model.name }}Repository } from './{{ model.fileName }}.repository';
+import { NotFoundException, ConflictException } from '@nestjs/common';
+
+describe('{{ model.name }}Service', () => {
+  let service: {{ model.name }}Service;
+  let repository: jest.Mocked<{{ model.name }}Repository>;
+
+  const mock{{ model.name }} = {
+    _id: '507f1f77bcf86cd799439011',
+    {% for field in model.fields %}
+    {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+    {% endfor %}
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    const mockRepository = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn(),
+      remove: jest.fn(),
+      {% for field in model.fields %}{% if field.unique %}
+      findBy{{ field.name | capitalize }}: jest.fn(),
+      {% endif %}{% endfor %}
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        {{ model.name }}Service,
+        {
+          provide: {{ model.name }}Repository,
+          useValue: mockRepository,
+        },
+      ],
+    }).compile();
+
+    service = module.get<{{ model.name }}Service>({{ model.name }}Service);
+    repository = module.get({{ model.name }}Repository);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('create', () => {
+    it('should create a {{ model.nameCamel }} successfully', async () => {
+      const createDto = {
+        {% for field in model.fields %}{% if not field.defaultValue %}
+        {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+        {% endif %}{% endfor %}
+      };
+
+      repository.create.mockResolvedValue(mock{{ model.name }} as any);
+
+      const result = await service.create(createDto);
+
+      expect(result).toEqual(mock{{ model.name }});
+      expect(repository.create).toHaveBeenCalledWith(createDto);
+    });
+
+    {% for field in model.fields %}{% if field.unique %}
+    it('should throw ConflictException if {{ field.name }} already exists', async () => {
+      const createDto = {
+        {% for f in model.fields %}{% if not f.defaultValue %}
+        {{ f.name }}: {% if f.type == 'string' %}'test-{{ f.name }}'{% elif f.type == 'number' %}123{% elif f.type == 'boolean' %}true{% elif f.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+        {% endif %}{% endfor %}
+      };
+
+      repository.findBy{{ field.name | capitalize }}.mockResolvedValue(mock{{ model.name }} as any);
+
+      await expect(service.create(createDto)).rejects.toThrow(ConflictException);
+      expect(repository.findBy{{ field.name | capitalize }}).toHaveBeenCalledWith(createDto.{{ field.name }});
+    });
+    {% endif %}{% endfor %}
+  });
+
+  describe('findAll', () => {
+    it('should return paginated {{ model.namePlural }}', async () => {
+      const mockResult = {
+        items: [mock{{ model.name }}],
+        meta: {
+          page: 1,
+          limit: 10,
+          total: 1,
+          totalPages: 1,
+        },
+      };
+
+      repository.findAll.mockResolvedValue(mockResult as any);
+
+      const result = await service.findAll(1, 10);
+
+      expect(result).toEqual(mockResult);
+      expect(repository.findAll).toHaveBeenCalledWith(1, 10);
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return a {{ model.nameCamel }} by id', async () => {
+      repository.findById.mockResolvedValue(mock{{ model.name }} as any);
+
+      const result = await service.findOne('507f1f77bcf86cd799439011');
+
+      expect(result).toEqual(mock{{ model.name }});
+      expect(repository.findById).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    });
+
+    it('should throw NotFoundException if {{ model.nameCamel }} not found', async () => {
+      repository.findById.mockResolvedValue(null);
+
+      await expect(service.findOne('507f1f77bcf86cd799439011')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('update', () => {
+    it('should update a {{ model.nameCamel }} successfully', async () => {
+      const updateDto = {
+        {% for field in model.fields | slice(0, 2) %}
+        {{ field.name }}: {% if field.type == 'string' %}'updated-{{ field.name }}'{% elif field.type == 'number' %}456{% elif field.type == 'boolean' %}false{% else %}'updated-value'{% endif %},
+        {% endfor %}
+      };
+
+      const updatedMock = { ...mock{{ model.name }}, ...updateDto };
+      repository.findById.mockResolvedValue(mock{{ model.name }} as any);
+      repository.update.mockResolvedValue(updatedMock as any);
+
+      const result = await service.update('507f1f77bcf86cd799439011', updateDto);
+
+      expect(result).toEqual(updatedMock);
+      expect(repository.update).toHaveBeenCalledWith('507f1f77bcf86cd799439011', updateDto);
+    });
+
+    it('should throw NotFoundException if {{ model.nameCamel }} not found', async () => {
+      repository.findById.mockResolvedValue(null);
+
+      await expect(service.update('507f1f77bcf86cd799439011', {})).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove a {{ model.nameCamel }} successfully', async () => {
+      repository.findById.mockResolvedValue(mock{{ model.name }} as any);
+      repository.remove.mockResolvedValue(undefined);
+
+      await service.remove('507f1f77bcf86cd799439011');
+
+      expect(repository.remove).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    });
+
+    it('should throw NotFoundException if {{ model.nameCamel }} not found', async () => {
+      repository.findById.mockResolvedValue(null);
+
+      await expect(service.remove('507f1f77bcf86cd799439011')).rejects.toThrow(NotFoundException);
+    });
+  });
+});

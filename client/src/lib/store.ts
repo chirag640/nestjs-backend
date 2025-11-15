@@ -42,12 +42,12 @@ export const useWizardStore = create<WizardStore>()(
 
       nextStep: () => {
         const { currentStep } = get();
-        if (currentStep === 3) {
-          // Go to relationship config (step 3.5) after model definition
-          set({ currentStep: 3.5 });
-        } else if (currentStep === 3.5) {
-          // Go to auth config (step 4) after relationship config
-          set({ currentStep: 4 });
+        if (currentStep === 4) {
+          // Go to relationship config (step 4.5) after model definition
+          set({ currentStep: 4.5 });
+        } else if (currentStep === 4.5) {
+          // Go to feature selection (step 5) after relationship config
+          set({ currentStep: 5 });
         } else if (currentStep < TOTAL_STEPS) {
           set({ currentStep: currentStep + 1 });
         }
@@ -55,12 +55,12 @@ export const useWizardStore = create<WizardStore>()(
 
       previousStep: () => {
         const { currentStep } = get();
-        if (currentStep === 3.5) {
-          // Go back to model definition (step 3) from relationship config
-          set({ currentStep: 3 });
-        } else if (currentStep === 4) {
-          // Go back to relationship config (step 3.5) from auth config
-          set({ currentStep: 3.5 });
+        if (currentStep === 4.5) {
+          // Go back to model definition (step 4) from relationship config
+          set({ currentStep: 4 });
+        } else if (currentStep === 5) {
+          // Go back to relationship config (step 4.5) from feature selection
+          set({ currentStep: 4.5 });
         } else if (currentStep > 1) {
           set({ currentStep: currentStep - 1 });
         }
@@ -172,16 +172,9 @@ export const useWizardStore = create<WizardStore>()(
             return !!db?.connectionString;
           }
           case 3: {
-            const models = config.modelDefinition?.models || [];
-            return models.length > 0;
-          }
-          case 3.5: {
-            // Relationship config is optional, always valid
-            return true;
-          }
-          case 4: {
+            // Auth step - always valid (auth is optional)
             const auth = config.authConfig;
-            if (!auth) return false;
+            if (!auth) return true;
             // If auth is disabled, step is valid
             if (!auth.enabled) return true;
             // If auth is enabled, validate JWT config and roles
@@ -191,6 +184,15 @@ export const useWizardStore = create<WizardStore>()(
               auth.roles &&
               auth.roles.length > 0
             );
+          }
+          case 4: {
+            // Model definition step
+            const models = config.modelDefinition?.models || [];
+            return models.length > 0;
+          }
+          case 4.5: {
+            // Relationship config is optional, always valid
+            return true;
           }
           case 5: {
             return true;

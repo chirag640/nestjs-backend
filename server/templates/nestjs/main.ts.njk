@@ -75,15 +75,27 @@ async function bootstrap() {
   }));
   {% endif %}
 
+  // Register global exception filter for standardized error responses (production-ready)
+  const { GlobalExceptionFilter } = await import('./common/global-exception.filter');
+  app.useGlobalFilters(new GlobalExceptionFilter());
+
+  // Register success response interceptor for consistent API responses
+  const { SuccessResponseInterceptor } = await import('./common/success-response.interceptor');
+  app.useGlobalInterceptors(new SuccessResponseInterceptor());
+
   {% if features.logging %}
-  // Register logging interceptor for automatic request/response logging
-  const { LoggingInterceptor } = await import('./modules/logger/logging.interceptor');
-  app.useGlobalInterceptors(app.get(LoggingInterceptor));
+  // Register logging interceptor for automatic request/response logging with PII sanitization
+  const { LoggingInterceptor } = await import('./common/logging.interceptor');
+  app.useGlobalInterceptors(new LoggingInterceptor());
   {% endif %}
 
-  // Register global exception filter for standardized error responses
-  const { HttpExceptionFilter } = await import('./filters/http-exception.filter');
-  app.useGlobalFilters(new HttpExceptionFilter());
+  // Register request ID middleware for distributed tracing
+  const { RequestIdMiddleware } = await import('./common/request-id.middleware');
+  app.use(new RequestIdMiddleware().use.bind(new RequestIdMiddleware()));
+
+  // Register timeout middleware to prevent long-running requests
+  const { TimeoutMiddleware } = await import('./common/timeout.middleware');
+  app.use(new TimeoutMiddleware(30000).use.bind(new TimeoutMiddleware(30000))); // 30 second timeout
 
   {% if features.swagger %}
   // Setup Swagger API documentation at /api/docs

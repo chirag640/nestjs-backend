@@ -11,6 +11,9 @@ import {
   {% if auth and auth.enabled %}UseGuards,{% endif %}
   Query,
 } from '@nestjs/common';
+{% if features.rateLimit %}
+import { Throttle } from '@nestjs/throttler';
+{% endif %}
 {% if features.swagger %}
 import {
   ApiTags,
@@ -25,6 +28,9 @@ import { {{ model.name }}Service } from './{{ model.fileName }}.service';
 import { {{ model.createDtoName }} } from './dto/create-{{ model.fileName }}.dto';
 import { {{ model.updateDtoName }} } from './dto/update-{{ model.fileName }}.dto';
 import { {{ model.outputDtoName }} } from './dto/{{ model.fileName }}-output.dto';
+{% if features.swagger %}
+import { ErrorResponseDto } from '../../common/error-response.dto';
+{% endif %}
 {% if auth and auth.enabled %}
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 {% endif %}
@@ -45,13 +51,52 @@ export class {{ model.name }}Controller {
   {% if features.swagger %}
   @ApiOperation({ summary: 'Create a new {{ model.nameCamel }}' })
   @ApiResponse({ status: 201, description: '{{ model.name }} created successfully', type: {{ model.outputDtoName }} })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Invalid input data - validation failed',
+    type: ErrorResponseDto,
+    schema: {
+      example: {
+        statusCode: 400,
+        message: ['Field validation error messages'],
+        error: 'Bad Request',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        path: '/{{ model.route | replace("/", "") }}',
+      },
+    },
+  })
   {% if auth and auth.enabled %}
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - invalid or missing authentication token',
+    type: ErrorResponseDto,
+  })
   {% endif %}
+  @ApiResponse({ 
+    status: 409, 
+    description: 'Conflict - duplicate unique field (e.g., email already exists)',
+    type: ErrorResponseDto,
+    schema: {
+      example: {
+        statusCode: 409,
+        message: 'Resource already exists',
+        error: 'Conflict',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        path: '/{{ model.route | replace("/", "") }}',
+      },
+    },
+  })
+  @ApiResponse({ 
+    status: 500, 
+    description: 'Internal server error',
+    type: ErrorResponseDto,
+  })
   {% endif %}
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  {% if features.rateLimit %}
+  @Throttle({ default: { limit: 100, ttl: 60000 } }) // 100 requests per minute
+  {% endif %}
   create(@Body() dto: {{ model.createDtoName }}): Promise<{{ model.outputDtoName }}> {
     return this.{{ model.nameCamel }}Service.create(dto);
   }
@@ -80,10 +125,27 @@ export class {{ model.name }}Controller {
     },
   })
   {% if auth and auth.enabled %}
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - invalid or missing authentication token',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: 'Forbidden - insufficient permissions',
+    type: ErrorResponseDto,
+  })
   {% endif %}
+  @ApiResponse({ 
+    status: 500, 
+    description: 'Internal server error',
+    type: ErrorResponseDto,
+  })
   {% endif %}
   @Get()
+  {% if features.rateLimit %}
+  @Throttle({ default: { limit: 200, ttl: 60000 } }) // 200 requests per minute for read operations
+  {% endif %}
   findAll(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
@@ -93,28 +155,98 @@ export class {{ model.name }}Controller {
 
   {% if features.swagger %}
   @ApiOperation({ summary: 'Get a {{ model.nameCamel }} by ID' })
-  @ApiParam({ name: 'id', description: '{{ model.name }} ID' })
+  @ApiParam({ name: 'id', description: '{{ model.name }} ID', example: '507f1f77bcf86cd799439011' })
   @ApiResponse({ status: 200, description: '{{ model.name }} found', type: {{ model.outputDtoName }} })
-  @ApiResponse({ status: 404, description: '{{ model.name }} not found' })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad Request - invalid ID format',
+    type: ErrorResponseDto,
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Invalid ObjectId format',
+        error: 'Bad Request',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        path: '/{{ model.route | replace("/", "") }}/invalid-id',
+      },
+    },
+  })
   {% if auth and auth.enabled %}
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - invalid or missing authentication token',
+    type: ErrorResponseDto,
+  })
   {% endif %}
+  @ApiResponse({ 
+    status: 404, 
+    description: '{{ model.name }} not found',
+    type: ErrorResponseDto,
+    schema: {
+      example: {
+        statusCode: 404,
+        message: '{{ model.name }} with ID 507f1f77bcf86cd799439011 not found',
+        error: 'Not Found',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        path: '/{{ model.route | replace("/", "") }}/507f1f77bcf86cd799439011',
+      },
+    },
+  })
+  @ApiResponse({ 
+    status: 500, 
+    description: 'Internal server error',
+    type: ErrorResponseDto,
+  })
   {% endif %}
   @Get(':id')
+  {% if features.rateLimit %}
+  @Throttle({ default: { limit: 200, ttl: 60000 } }) // 200 requests per minute
+  {% endif %}
   findOne(@Param('id') id: string): Promise<{{ model.outputDtoName }}> {
     return this.{{ model.nameCamel }}Service.findOne(id);
   }
 
   {% if features.swagger %}
   @ApiOperation({ summary: 'Update a {{ model.nameCamel }}' })
-  @ApiParam({ name: 'id', description: '{{ model.name }} ID' })
+  @ApiParam({ name: 'id', description: '{{ model.name }} ID', example: '507f1f77bcf86cd799439011' })
   @ApiResponse({ status: 200, description: '{{ model.name }} updated successfully', type: {{ model.outputDtoName }} })
-  @ApiResponse({ status: 404, description: '{{ model.name }} not found' })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad Request - invalid input data or ID format',
+    type: ErrorResponseDto,
+  })
   {% if auth and auth.enabled %}
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - invalid or missing authentication token',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: 'Forbidden - insufficient permissions to update this resource',
+    type: ErrorResponseDto,
+  })
   {% endif %}
+  @ApiResponse({ 
+    status: 404, 
+    description: '{{ model.name }} not found',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 409, 
+    description: 'Conflict - duplicate unique field value',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 500, 
+    description: 'Internal server error',
+    type: ErrorResponseDto,
+  })
   {% endif %}
   @Patch(':id')
+  {% if features.rateLimit %}
+  @Throttle({ default: { limit: 100, ttl: 60000 } }) // 100 requests per minute for updates
+  {% endif %}
   update(
     @Param('id') id: string,
     @Body() dto: {{ model.updateDtoName }},
@@ -124,15 +256,55 @@ export class {{ model.name }}Controller {
 
   {% if features.swagger %}
   @ApiOperation({ summary: 'Delete a {{ model.nameCamel }}' })
-  @ApiParam({ name: 'id', description: '{{ model.name }} ID' })
+  @ApiParam({ name: 'id', description: '{{ model.name }} ID', example: '507f1f77bcf86cd799439011' })
   @ApiResponse({ status: 204, description: '{{ model.name }} deleted successfully' })
-  @ApiResponse({ status: 404, description: '{{ model.name }} not found' })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad Request - invalid ID format',
+    type: ErrorResponseDto,
+  })
   {% if auth and auth.enabled %}
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - invalid or missing authentication token',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: 'Forbidden - insufficient permissions to delete this resource',
+    type: ErrorResponseDto,
+  })
   {% endif %}
+  @ApiResponse({ 
+    status: 404, 
+    description: '{{ model.name }} not found',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 409, 
+    description: 'Conflict - resource has dependencies and cannot be deleted',
+    type: ErrorResponseDto,
+    schema: {
+      example: {
+        statusCode: 409,
+        message: 'Cannot delete {{ model.nameCamel }} - has related records',
+        error: 'Conflict',
+        timestamp: '2024-01-01T00:00:00.000Z',
+        path: '/{{ model.route | replace("/", "") }}/507f1f77bcf86cd799439011',
+      },
+    },
+  })
+  @ApiResponse({ 
+    status: 500, 
+    description: 'Internal server error',
+    type: ErrorResponseDto,
+  })
   {% endif %}
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  {% if features.rateLimit %}
+  @Throttle({ default: { limit: 50, ttl: 60000 } }) // 50 requests per minute for deletes
+  {% endif %}
   remove(@Param('id') id: string): Promise<void> {
     return this.{{ model.nameCamel }}Service.remove(id);
   }

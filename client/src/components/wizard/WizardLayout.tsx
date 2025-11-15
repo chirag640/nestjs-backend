@@ -13,8 +13,8 @@ interface WizardLayoutProps {
 const STEP_TITLES = [
   "Project Setup",
   "Database Configuration",
-  "Model Definition",
   "Authentication & Authorization",
+  "Model Definition",
   "Feature Selection",
   "Review & Generate",
   "Code Preview",
@@ -54,7 +54,7 @@ export function WizardLayout({
                   className="text-xs text-muted-foreground"
                   data-testid="text-step-counter"
                 >
-                  Step {currentStep === 3.5 ? "3 (Relationships)" : currentStep}{" "}
+                  Step {currentStep === 4.5 ? "4 (Relationships)" : currentStep}{" "}
                   of 8
                 </p>
               </div>

@@ -9,6 +9,7 @@ import {
   getValidatorDecorator,
   isReservedFieldName,
 } from "./namingUtils";
+import { geminiService } from "./geminiService";
 
 /**
  * Intermediate Representation for Model Fields
@@ -30,6 +31,11 @@ export interface ModelFieldIR {
   max?: number;
   pattern?: string;
   enum?: string[];
+  // Enhanced validation from Gemini
+  enhancedValidators?: string[]; // Additional validators (IsPositive, IsInt, etc.)
+  // API Documentation
+  apiExample?: string; // Example value for Swagger
+  apiDescription?: string; // Field description for API docs
 }
 
 /**
@@ -303,9 +309,19 @@ function buildModelIR(model: Model): ModelIR {
 }
 
 /**
- * Build IR for a single field
+ * Build IR for a single field with enhanced validation and API examples
  */
 function buildFieldIR(field: Field): ModelFieldIR {
+  // Get smart defaults for validation (synchronous fallback from Gemini service)
+  const smartDefaults = getSmartFieldDefaults(field.name, field.type);
+
+  // Merge user-provided validation with smart defaults
+  const minLength = field.minLength ?? smartDefaults.minLength;
+  const maxLength = field.maxLength ?? smartDefaults.maxLength;
+  const min = field.min ?? smartDefaults.min;
+  const max = field.max ?? smartDefaults.max;
+  const pattern = field.pattern ?? smartDefaults.pattern;
+
   return {
     name: field.name, // Already camelCase from validation
     type: field.type,
@@ -318,20 +334,277 @@ function buildFieldIR(field: Field): ModelFieldIR {
     validators: getValidatorDecorator({
       type: field.type,
       name: field.name, // Pass name for email detection
-      minLength: field.minLength,
-      maxLength: field.maxLength,
-      min: field.min,
-      max: field.max,
-      pattern: field.pattern,
+      minLength,
+      maxLength,
+      min,
+      max,
+      pattern,
       enum: field.enum,
     }),
-    minLength: field.minLength,
-    maxLength: field.maxLength,
-    min: field.min,
-    max: field.max,
-    pattern: field.pattern,
+    minLength,
+    maxLength,
+    min,
+    max,
+    pattern,
     enum: field.enum,
+    // Enhanced validators
+    enhancedValidators: smartDefaults.additionalValidators || [],
+    // API Documentation
+    apiExample: formatApiExample(smartDefaults.exampleValue, field.type),
+    apiDescription: smartDefaults.description || field.name,
   };
+}
+
+/**
+ * Get smart validation defaults for a field (extracted from Gemini fallback logic)
+ */
+function getSmartFieldDefaults(
+  fieldName: string,
+  fieldType: string
+): {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  additionalValidators?: string[];
+  exampleValue: string;
+  description: string;
+} {
+  const lowerName = fieldName.toLowerCase();
+
+  // String field defaults
+  if (fieldType === "string") {
+    // Email detection
+    if (lowerName.includes("email")) {
+      return {
+        additionalValidators: ["IsEmail"],
+        exampleValue: "user@example.com",
+        description: "Email address",
+      };
+    }
+    // URL detection
+    if (
+      lowerName.includes("url") ||
+      lowerName.includes("website") ||
+      lowerName.includes("link")
+    ) {
+      return {
+        additionalValidators: ["IsUrl"],
+        maxLength: 2000,
+        exampleValue: "https://example.com",
+        description: "URL address",
+      };
+    }
+    // Phone detection
+    if (lowerName.includes("phone") || lowerName.includes("mobile")) {
+      return {
+        pattern: "^\\+?[1-9]\\d{1,14}$",
+        minLength: 10,
+        maxLength: 20,
+        exampleValue: "+1234567890",
+        description: "Phone number",
+      };
+    }
+    // Name fields
+    if (
+      lowerName.includes("name") ||
+      lowerName.includes("firstname") ||
+      lowerName.includes("lastname")
+    ) {
+      return {
+        minLength: 2,
+        maxLength: 50,
+        exampleValue: lowerName.includes("first")
+          ? "'John'"
+          : lowerName.includes("last")
+            ? "'Doe'"
+            : "'Sample Name'",
+        description: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
+      };
+    }
+    // Title fields
+    if (lowerName.includes("title")) {
+      return {
+        minLength: 3,
+        maxLength: 100,
+        exampleValue: "'Sample Title'",
+        description: "Title or heading",
+      };
+    }
+    // Description/content fields
+    if (
+      lowerName.includes("description") ||
+      lowerName.includes("content") ||
+      lowerName.includes("body")
+    ) {
+      return {
+        minLength: 10,
+        maxLength: 5000,
+        exampleValue: "'This is a sample description text'",
+        description: "Description or content",
+      };
+    }
+    // Slug fields
+    if (lowerName.includes("slug")) {
+      return {
+        pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        minLength: 3,
+        maxLength: 100,
+        exampleValue: "'sample-slug'",
+        description: "URL-friendly slug",
+      };
+    }
+    // Address fields
+    if (lowerName.includes("address")) {
+      return {
+        minLength: 5,
+        maxLength: 500,
+        exampleValue: "'123 Main St, City, State 12345'",
+        description: "Physical address",
+      };
+    }
+    // Color fields
+    if (lowerName.includes("color")) {
+      return {
+        pattern: "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$",
+        minLength: 4,
+        maxLength: 7,
+        exampleValue: "'#FF5733'",
+        description: "Hex color code",
+      };
+    }
+    // Default string
+    return {
+      minLength: 1,
+      maxLength: 255,
+      exampleValue: "'Sample text'",
+      description: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
+    };
+  }
+
+  // Number field defaults
+  if (fieldType === "number") {
+    // Age detection
+    if (lowerName.includes("age")) {
+      return {
+        min: 0,
+        max: 150,
+        additionalValidators: ["IsInt"],
+        exampleValue: "25",
+        description: "Age in years",
+      };
+    }
+    // Price/cost detection
+    if (
+      lowerName.includes("price") ||
+      lowerName.includes("cost") ||
+      lowerName.includes("amount")
+    ) {
+      return {
+        min: 0,
+        max: 999999.99,
+        additionalValidators: ["IsPositive"],
+        exampleValue: "99.99",
+        description: "Price amount",
+      };
+    }
+    // Quantity/count detection
+    if (
+      lowerName.includes("quantity") ||
+      lowerName.includes("count") ||
+      lowerName.includes("stock")
+    ) {
+      return {
+        min: 0,
+        max: 999999,
+        additionalValidators: ["IsInt"],
+        exampleValue: "100",
+        description: "Quantity or count",
+      };
+    }
+    // Rating detection
+    if (lowerName.includes("rating") || lowerName.includes("score")) {
+      return {
+        min: 0,
+        max: 5,
+        exampleValue: "4.5",
+        description: "Rating score",
+      };
+    }
+    // Percentage detection
+    if (lowerName.includes("percent") || lowerName.includes("rate")) {
+      return {
+        min: 0,
+        max: 100,
+        exampleValue: "75",
+        description: "Percentage value",
+      };
+    }
+    // Default number
+    return {
+      min: 0,
+      max: 1000000,
+      exampleValue: "42",
+      description:
+        fieldName.charAt(0).toUpperCase() + fieldName.slice(1) + " value",
+    };
+  }
+
+  // Boolean field
+  if (fieldType === "boolean") {
+    return {
+      additionalValidators: ["IsBoolean"],
+      exampleValue: "true",
+      description:
+        lowerName.startsWith("is") || lowerName.startsWith("has")
+          ? fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
+          : "Is " + fieldName,
+    };
+  }
+
+  // Date field
+  if (fieldType === "Date") {
+    return {
+      additionalValidators: ["IsDateString"],
+      exampleValue: "'2024-01-01T00:00:00.000Z'",
+      description: "Date and time",
+    };
+  }
+
+  // Array field
+  if (fieldType === "array") {
+    return {
+      additionalValidators: ["ArrayMinSize(0)", "ArrayMaxSize(100)"], // These need params
+      exampleValue: "['item1', 'item2']",
+      description:
+        fieldName.charAt(0).toUpperCase() + fieldName.slice(1) + " array",
+    };
+  }
+
+  // Default
+  return {
+    exampleValue: "null",
+    description: fieldName,
+  };
+}
+
+/**
+ * Format API example for Swagger
+ */
+function formatApiExample(value: string, fieldType: string): string {
+  // If value is already quoted or is a number/boolean, return as-is
+  if (
+    value.startsWith("'") ||
+    value.startsWith('"') ||
+    value.startsWith("[") ||
+    fieldType === "number" ||
+    fieldType === "boolean"
+  ) {
+    return value;
+  }
+  // Otherwise wrap in quotes for strings
+  return `'${value}'`;
 }
 
 /**

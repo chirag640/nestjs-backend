@@ -36,7 +36,9 @@ export class GeminiService {
       this.enabled = true;
       console.log("✅ Gemini AI enabled for intelligent generation");
     } else {
-      console.log("ℹ️  Gemini AI disabled (no API key). Using fallback smart defaults.");
+      console.log(
+        "ℹ️  Gemini AI disabled (no API key). Using fallback smart defaults."
+      );
     }
   }
 
@@ -91,9 +93,12 @@ Rules:
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text = response.text().trim();
-      
+
       // Remove markdown code blocks if present
-      const jsonText = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const jsonText = text
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
       const parsed = JSON.parse(jsonText);
 
       return {
@@ -111,7 +116,9 @@ Rules:
         },
       };
     } catch (error) {
-      console.warn(`⚠️  Gemini API error for field '${fieldName}': ${error}. Using fallback.`);
+      console.warn(
+        `⚠️  Gemini API error for field '${fieldName}': ${error}. Using fallback.`
+      );
       return this.getFallbackValidation(fieldName, fieldType);
     }
   }
@@ -127,7 +134,10 @@ Rules:
     if (!this.enabled || fields.length === 0) {
       const results = new Map<string, ValidationResult>();
       fields.forEach((field) => {
-        results.set(field.name, this.getFallbackValidation(field.name, field.type));
+        results.set(
+          field.name,
+          this.getFallbackValidation(field.name, field.type)
+        );
       });
       return results;
     }
@@ -154,8 +164,11 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text = response.text().trim();
-      
-      const jsonText = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+      const jsonText = text
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
       const parsed = JSON.parse(jsonText);
 
       const results = new Map<string, ValidationResult>();
@@ -163,10 +176,16 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
         if (parsed[field.name]) {
           results.set(field.name, {
             rules: parsed[field.name].rules || {},
-            example: parsed[field.name].example || { value: "", description: "" },
+            example: parsed[field.name].example || {
+              value: "",
+              description: "",
+            },
           });
         } else {
-          results.set(field.name, this.getFallbackValidation(field.name, field.type));
+          results.set(
+            field.name,
+            this.getFallbackValidation(field.name, field.type)
+          );
         }
       }
       return results;
@@ -174,7 +193,10 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
       console.warn(`⚠️  Gemini batch API error: ${error}. Using fallback.`);
       const results = new Map<string, ValidationResult>();
       fields.forEach((field) => {
-        results.set(field.name, this.getFallbackValidation(field.name, field.type));
+        results.set(
+          field.name,
+          this.getFallbackValidation(field.name, field.type)
+        );
       });
       return results;
     }
@@ -183,7 +205,10 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
   /**
    * Smart fallback validation rules (no AI required)
    */
-  private getFallbackValidation(fieldName: string, fieldType: string): ValidationResult {
+  private getFallbackValidation(
+    fieldName: string,
+    fieldType: string
+  ): ValidationResult {
     const lowerName = fieldName.toLowerCase();
     const rules: FieldValidationRules = {};
     let exampleValue = "";
@@ -203,7 +228,11 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
         delete rules.maxLength;
       }
       // URL detection
-      else if (lowerName.includes("url") || lowerName.includes("website") || lowerName.includes("link")) {
+      else if (
+        lowerName.includes("url") ||
+        lowerName.includes("website") ||
+        lowerName.includes("link")
+      ) {
         rules.additionalValidators = ["IsUrl()"];
         exampleValue = "https://example.com";
         description = "URL address";
@@ -218,10 +247,18 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
         rules.maxLength = 20;
       }
       // Name fields
-      else if (lowerName.includes("name") || lowerName.includes("firstname") || lowerName.includes("lastname")) {
+      else if (
+        lowerName.includes("name") ||
+        lowerName.includes("firstname") ||
+        lowerName.includes("lastname")
+      ) {
         rules.minLength = 2;
         rules.maxLength = 50;
-        exampleValue = lowerName.includes("first") ? "John" : lowerName.includes("last") ? "Doe" : "Sample Name";
+        exampleValue = lowerName.includes("first")
+          ? "John"
+          : lowerName.includes("last")
+            ? "Doe"
+            : "Sample Name";
         description = `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)}`;
       }
       // Title fields
@@ -232,7 +269,11 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
         description = "Title or heading";
       }
       // Description/content fields
-      else if (lowerName.includes("description") || lowerName.includes("content") || lowerName.includes("body")) {
+      else if (
+        lowerName.includes("description") ||
+        lowerName.includes("content") ||
+        lowerName.includes("body")
+      ) {
         rules.minLength = 10;
         rules.maxLength = 5000;
         exampleValue = "This is a sample description text.";
@@ -242,7 +283,8 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
       else if (lowerName.includes("password")) {
         rules.minLength = 8;
         rules.maxLength = 72;
-        rules.pattern = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$";
+        rules.pattern =
+          "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$";
         exampleValue = "P@ssw0rd123!";
         description = "Secure password";
       }
@@ -289,7 +331,11 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
         description = "Age in years";
       }
       // Price/cost detection
-      else if (lowerName.includes("price") || lowerName.includes("cost") || lowerName.includes("amount")) {
+      else if (
+        lowerName.includes("price") ||
+        lowerName.includes("cost") ||
+        lowerName.includes("amount")
+      ) {
         rules.min = 0;
         rules.max = 999999.99;
         rules.additionalValidators = ["IsPositive()"];
@@ -297,7 +343,11 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
         description = "Price amount";
       }
       // Quantity/count detection
-      else if (lowerName.includes("quantity") || lowerName.includes("count") || lowerName.includes("stock")) {
+      else if (
+        lowerName.includes("quantity") ||
+        lowerName.includes("count") ||
+        lowerName.includes("stock")
+      ) {
         rules.min = 0;
         rules.max = 999999;
         rules.additionalValidators = ["IsInt()", "Min(0)"];
@@ -328,9 +378,10 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
     else if (fieldType === "boolean") {
       rules.additionalValidators = ["IsBoolean()"];
       exampleValue = "true";
-      description = lowerName.includes("is") || lowerName.includes("has")
-        ? fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
-        : `Is ${fieldName}`;
+      description =
+        lowerName.includes("is") || lowerName.includes("has")
+          ? fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
+          : `Is ${fieldName}`;
     }
     // Date field
     else if (fieldType === "Date") {

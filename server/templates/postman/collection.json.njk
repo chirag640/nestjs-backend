@@ -1,0 +1,109 @@
+{
+  "info": {
+    "name": "{{ project.name }} API",
+    "description": "{{ project.description }}",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    }{% if auth and auth.enabled %},
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    }{% endif %}
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{% raw %}{{baseUrl}}{% endraw %}/health"
+      }
+    }{% if auth and auth.enabled %},
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \\"email\\": \\"user@example.com\\",\\n  \\"password\\": \\"SecurePass123!\\"\\n}"
+            },
+            "url": "{% raw %}{{baseUrl}}{% endraw %}/auth/register"
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \\"email\\": \\"user@example.com\\",\\n  \\"password\\": \\"SecurePass123!\\"\\n}"
+            },
+            "url": "{% raw %}{{baseUrl}}{% endraw %}/auth/login"
+          }
+        }
+      ]
+    }{% endif %}{% for model in models %},
+    {
+      "name": "{{ model.namePlural }}",
+      "item": [
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}"
+          }
+        },
+        {
+          "name": "Get All",
+          "request": {
+            "method": "GET",
+            "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}"
+          }
+        },
+        {
+          "name": "Get By ID",
+          "request": {
+            "method": "GET",
+            "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}/:id"
+          }
+        },
+        {
+          "name": "Update",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}/:id"
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}/:id"
+          }
+        }
+      ]
+    }{% endfor %}
+  ]
+}

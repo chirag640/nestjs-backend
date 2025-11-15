@@ -2,7 +2,7 @@ import {
 {% set validatorSet = [] %}
 {% for field in model.fields %}
   {% for validator in field.validators %}
-    {% set cleanValidator = validator.replace('()', '').replace('(', '').split(',')[0].trim() %}
+    {% set cleanValidator = validator.split('(')[0].trim() %}
     {% if cleanValidator not in validatorSet %}
       {% set _ = validatorSet.push(cleanValidator) %}
   {{ cleanValidator }},
@@ -10,11 +10,36 @@ import {
   {% endfor %}
 {% endfor %}
   IsOptional,
+  MinLength,
+  MaxLength,
+  Min,
+  Max,
+  Matches,
+  IsInt,
+  IsPositive,
+  IsBoolean,
+  IsDateString,
+  IsUrl,
+  ArrayMinSize,
+  ArrayMaxSize,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class {{ model.updateDtoName }} {
 {% for field in model.fields %}
+  {% if field.apiExample %}
+  @ApiProperty({
+    description: '{{ field.apiDescription | default(field.name) }}',
+    example: {{ field.apiExample | safe }},
+    required: false,
+    {% if field.minLength %}minLength: {{ field.minLength }},{% endif %}
+    {% if field.maxLength %}maxLength: {{ field.maxLength }},{% endif %}
+    {% if field.min %}minimum: {{ field.min }},{% endif %}
+    {% if field.max %}maximum: {{ field.max }},{% endif %}
+    {% if field.type === 'array' %}type: 'array',{% endif %}
+  })
+  {% endif %}
   @IsOptional()
   {% if field.type === 'string' %}
   @Transform(({ value }) => value?.trim()) // Sanitize: trim whitespace
@@ -22,6 +47,14 @@ export class {{ model.updateDtoName }} {
   {% for validator in field.validators %}
   @{{ validator }}
   {% endfor %}
+  {% if field.enhancedValidators %}
+  {% for enhancedValidator in field.enhancedValidators %}
+  @{{ enhancedValidator }}()
+  {% endfor %}
+  {% endif %}
+  {% if field.type === 'Date' %}
+  @Type(() => Date)
+  {% endif %}
   {{ field.name }}?: {{ field.tsType }};
 
 {% endfor %}

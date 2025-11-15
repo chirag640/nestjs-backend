@@ -201,6 +201,69 @@ export async function generateProject(
   const paginationFile = await generatePaginationDto(ir);
   files.push(paginationFile);
 
+  // Generate error response DTO
+  const errorResponseFile = await generateErrorResponseDto(ir);
+  files.push(errorResponseFile);
+
+  // Generate error codes enum
+  const errorCodesFile = await generateErrorCodes(ir);
+  files.push(errorCodesFile);
+
+  // Generate global exception filter (production-ready version)
+  const globalExceptionFilterFile = await generateGlobalExceptionFilter(ir);
+  files.push(globalExceptionFilterFile);
+
+  // Generate success response interceptor
+  const successInterceptorFile = await generateSuccessInterceptor(ir);
+  files.push(successInterceptorFile);
+
+  // Generate logging interceptor
+  const loggingInterceptorFile = await generateLoggingInterceptor(ir);
+  files.push(loggingInterceptorFile);
+
+  // Generate request ID middleware
+  const requestIdMiddlewareFile = await generateRequestIdMiddleware(ir);
+  files.push(requestIdMiddlewareFile);
+
+  // Generate timeout middleware
+  const timeoutMiddlewareFile = await generateTimeoutMiddleware(ir);
+  files.push(timeoutMiddlewareFile);
+
+  // Generate pagination query DTO
+  const paginationQueryDtoFile = await generatePaginationQueryDto(ir);
+  files.push(paginationQueryDtoFile);
+
+  // Generate base repository with transaction support (MongoDB only)
+  if (ir.database.type === "MongoDB") {
+    const baseRepositoryFile = await generateBaseRepository(ir);
+    files.push(baseRepositoryFile);
+
+    // Generate soft delete plugin
+    const softDeletePluginFile = await generateSoftDeletePlugin(ir);
+    files.push(softDeletePluginFile);
+  }
+
+  // Generate refresh token schema if auth is enabled with rotation
+  if (ir.auth?.enabled && ir.auth?.jwt?.rotation) {
+    const refreshTokenSchemaFile = await generateRefreshTokenSchema(ir);
+    files.push(refreshTokenSchemaFile);
+
+    const refreshTokenServiceFile = await generateRefreshTokenService(ir);
+    files.push(refreshTokenServiceFile);
+  }
+
+  // Generate sanitization pipe
+  const sanitizationPipeFile = await generateSanitizationPipe(ir);
+  files.push(sanitizationPipeFile);
+
+  // Generate CSRF middleware
+  const csrfMiddlewareFile = await generateCsrfMiddleware(ir);
+  files.push(csrfMiddlewareFile);
+
+  // Generate Postman collection
+  const postmanCollectionFile = await generatePostmanCollection(ir);
+  files.push(postmanCollectionFile);
+
   // Generate Sprint 8 metadata file
   const metadataFile = await generateMetadata(ir);
   files.push(metadataFile);
@@ -256,6 +319,16 @@ async function generateModelFiles(
     {
       template: "mongoose/dto-output.njk",
       output: `${model.modulePath}/dto/${model.fileName}-output.dto.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/service.spec.njk",
+      output: `${model.modulePath}/${model.fileName}.service.spec.ts`,
+      parser: "typescript",
+    },
+    {
+      template: "mongoose/controller.spec.njk",
+      output: `${model.modulePath}/${model.fileName}.controller.spec.ts`,
       parser: "typescript",
     },
   ];
@@ -909,5 +982,208 @@ async function generatePaginationDto(ir: ProjectIR): Promise<GeneratedFile> {
   return {
     path: "src/pagination.dto.ts",
     content,
+  };
+}
+
+/**
+ * Generate error response DTO
+ */
+async function generateErrorResponseDto(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/error-response.dto.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/error-response.dto.ts",
+    content,
+  };
+}
+
+/**
+ * Generate base repository with transaction support
+ */
+async function generateBaseRepository(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("mongoose/base.repository.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/base.repository.ts",
+    content,
+  };
+}
+
+/**
+ * Generate error codes enum
+ */
+async function generateErrorCodes(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/error-codes.enum.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/error-codes.enum.ts",
+    content,
+  };
+}
+
+/**
+ * Generate global exception filter
+ */
+async function generateGlobalExceptionFilter(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/global-exception.filter.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/global-exception.filter.ts",
+    content,
+  };
+}
+
+/**
+ * Generate success response interceptor
+ */
+async function generateSuccessInterceptor(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate(
+    "common/success-response.interceptor.njk",
+    ir
+  );
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/success-response.interceptor.ts",
+    content,
+  };
+}
+
+/**
+ * Generate logging interceptor
+ */
+async function generateLoggingInterceptor(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/logging.interceptor.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/logging.interceptor.ts",
+    content,
+  };
+}
+
+/**
+ * Generate request ID middleware
+ */
+async function generateRequestIdMiddleware(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/request-id.middleware.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/request-id.middleware.ts",
+    content,
+  };
+}
+
+/**
+ * Generate timeout middleware
+ */
+async function generateTimeoutMiddleware(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/timeout.middleware.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/timeout.middleware.ts",
+    content,
+  };
+}
+
+/**
+ * Generate pagination query DTO
+ */
+async function generatePaginationQueryDto(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/pagination-query.dto.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/pagination-query.dto.ts",
+    content,
+  };
+}
+
+/**
+ * Generate soft delete plugin for Mongoose
+ */
+async function generateSoftDeletePlugin(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/soft-delete.plugin.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/soft-delete.plugin.ts",
+    content,
+  };
+}
+
+/**
+ * Generate refresh token schema for auth
+ */
+async function generateRefreshTokenSchema(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("auth/refresh-token.schema.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/auth/refresh-token.schema.ts",
+    content,
+  };
+}
+
+async function generateRefreshTokenService(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("auth/refresh-token.service.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/auth/refresh-token.service.ts",
+    content,
+  };
+}
+
+async function generateSanitizationPipe(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/sanitization.pipe.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/sanitization.pipe.ts",
+    content,
+  };
+}
+
+async function generateCsrfMiddleware(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/csrf.middleware.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/csrf.middleware.ts",
+    content,
+  };
+}
+
+async function generatePostmanCollection(
+  ir: ProjectIR
+): Promise<GeneratedFile> {
+  const rendered = renderTemplate("postman/collection.json.njk", ir);
+
+  return {
+    path: "postman-collection.json",
+    content: rendered,
   };
 }
