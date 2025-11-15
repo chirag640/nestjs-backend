@@ -1,0 +1,23 @@
+{# Mongoose One-to-One Relationship Template #}
+{# This template adds one-to-one relationship fields #}
+
+{# Example: User (one) -> Profile (one) #}
+{# In Profile schema: userId field referencing User #}
+{# In User schema: virtual field for single profile #}
+
+{# Add to "To Model" (e.g., Profile) schema #}
+@Prop({ type: Schema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true, unique: true })
+{{ relationship.fromModel | lower }}Id: Schema.Types.ObjectId;
+
+{# Add virtual populate to "From Model" (e.g., User) schema #}
+// Virtual relationship: One-to-One
+{{ relationship.fromModel }}Schema.virtual('{{ relationship.fieldName }}', {
+  ref: '{{ relationship.toModel }}',
+  localField: '_id',
+  foreignField: '{{ relationship.fromModel | lower }}Id',
+  justOne: true,
+});
+
+// Ensure virtuals are included when converting to JSON
+{{ relationship.fromModel }}Schema.set('toJSON', { virtuals: true });
+{{ relationship.fromModel }}Schema.set('toObject', { virtuals: true });

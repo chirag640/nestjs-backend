@@ -24,6 +24,14 @@ export class User {
   @Prop({ type: String, default: null })
   refreshToken: string | null;
   {% endif %}
+
+  {% if oauth and oauth.enabled %}
+  @Prop({ type: String, default: null })
+  oauthProvider: string | null; // 'google' | 'github' | null
+
+  @Prop({ type: String, default: null })
+  oauthId: string | null; // OAuth provider's user ID
+  {% endif %}
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

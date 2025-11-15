@@ -1,0 +1,31 @@
+{# DTO for disconnecting records in a relationship #}
+import { IsMongoId, IsArray, ArrayNotEmpty } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class Disconnect{{ relationship.fromModel }}{{ relationship.toModel }}Dto {
+  @ApiProperty({
+    description: 'ID of the {{ relationship.fromModel }} record',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @IsMongoId()
+  {{ relationship.fromModel | lower }}Id: string;
+
+{% if relationship.type === 'many-to-many' or relationship.type === 'one-to-many' %}
+  @ApiProperty({
+    description: 'Array of {{ relationship.toModel }} IDs to disconnect',
+    example: ['507f1f77bcf86cd799439012', '507f1f77bcf86cd799439013'],
+    type: [String],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsMongoId({ each: true })
+  {{ relationship.toModel | lower }}Ids: string[];
+{% else %}
+  @ApiProperty({
+    description: 'ID of the {{ relationship.toModel }} record to disconnect',
+    example: '507f1f77bcf86cd799439012',
+  })
+  @IsMongoId()
+  {{ relationship.toModel | lower }}Id: string;
+{% endif %}
+}

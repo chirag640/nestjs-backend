@@ -1,0 +1,43 @@
+import { PassportStrategy } from '@nestjs/passport';
+import { Strategy, Profile } from 'passport-github2';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+@Injectable()
+export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
+  constructor(private configService: ConfigService) {
+    super({
+      clientID: configService.get<string>('GITHUB_CLIENT_ID'),
+      clientSecret: configService.get<string>('GITHUB_CLIENT_SECRET'),
+      callbackURL: configService.get<string>('GITHUB_CALLBACK_URL'),
+      scope: ['user:email'],
+    });
+
+    // Validate that OAuth credentials are set
+    if (!configService.get('GITHUB_CLIENT_ID')) {
+      throw new Error('GITHUB_CLIENT_ID is not set in environment variables');
+    }
+    if (!configService.get('GITHUB_CLIENT_SECRET')) {
+      throw new Error('GITHUB_CLIENT_SECRET is not set in environment variables');
+    }
+  }
+
+  async validate(
+    accessToken: string,
+    refreshToken: string,
+    profile: Profile,
+    done: Function,
+  ): Promise<any> {
+    const { id, username, emails, displayName, photos } = profile;
+    const user = {
+      oauthId: id,
+      email: emails?.[0]?.value || `${username}@github.com`,
+      username,
+      name: displayName || username,
+      photo: photos?.[0]?.value,
+      provider: 'github',
+      accessToken,
+    };
+    done(null, user);
+  }
+}

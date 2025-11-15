@@ -16,6 +16,7 @@ interface WizardStore {
     data: Partial<WizardConfig["modelDefinition"]>
   ) => void;
   updateAuthConfig: (data: Partial<WizardConfig["authConfig"]>) => void;
+  updateOAuthConfig: (data: Partial<WizardConfig["oauthConfig"]>) => void;
   updateFeatureSelection: (
     data: Partial<WizardConfig["featureSelection"]>
   ) => void;
@@ -92,6 +93,15 @@ export const useWizardStore = create<WizardStore>()(
           config: {
             ...state.config,
             authConfig: { ...state.config.authConfig, ...data } as any,
+          },
+        }));
+      },
+
+      updateOAuthConfig: (data) => {
+        set((state) => ({
+          config: {
+            ...state.config,
+            oauthConfig: { ...state.config.oauthConfig, ...data } as any,
           },
         }));
       },

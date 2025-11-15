@@ -1,0 +1,23 @@
+{# Mongoose One-to-Many Relationship Template #}
+{# This template adds relationship fields to existing schemas #}
+
+{# Example: User (one) -> Posts (many) #}
+{# In User schema: virtual field for posts array #}
+{# In Post schema: userId field referencing User #}
+
+{# Add to "To Model" (e.g., Post) schema - the many side #}
+@Prop({ type: Schema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true })
+{{ relationship.fromModel | lower }}Id: Schema.Types.ObjectId;
+
+{# Add virtual populate to "From Model" (e.g., User) schema - the one side #}
+// Virtual relationship: One-to-Many
+{{ relationship.fromModel }}Schema.virtual('{{ relationship.fieldName }}', {
+  ref: '{{ relationship.toModel }}',
+  localField: '_id',
+  foreignField: '{{ relationship.fromModel | lower }}Id',
+  justOne: false,
+});
+
+// Ensure virtuals are included when converting to JSON
+{{ relationship.fromModel }}Schema.set('toJSON', { virtuals: true });
+{{ relationship.fromModel }}Schema.set('toObject', { virtuals: true });

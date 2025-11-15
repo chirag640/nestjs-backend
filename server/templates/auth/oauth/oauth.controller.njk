@@ -1,0 +1,50 @@
+import { Controller, Get, Req, UseGuards, Res } from '@nestjs/common';
+import { AuthService } from '../auth.service';
+import { Response } from 'express';
+{% if oauth.providers | selectattr('name', 'equalto', 'google') | list | length > 0 %}
+import { GoogleOAuthGuard } from './google.guard';
+{% endif %}
+{% if oauth.providers | selectattr('name', 'equalto', 'github') | list | length > 0 %}
+import { GithubOAuthGuard } from './github.guard';
+{% endif %}
+
+@Controller('auth/oauth')
+export class OAuthController {
+  constructor(private readonly authService: AuthService) {}
+
+{% if oauth.providers | selectattr('name', 'equalto', 'google') | list | length > 0 %}
+  @Get('google')
+  @UseGuards(GoogleOAuthGuard)
+  async googleAuth() {
+    // Initiates the Google OAuth2 login flow
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleOAuthGuard)
+  async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
+    const tokens = await this.authService.oauthLogin(req.user);
+    
+    // Redirect to frontend with tokens (or set cookies)
+    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/callback?token=${tokens.accessToken}`;
+    return res.redirect(redirectUrl);
+  }
+{% endif %}
+
+{% if oauth.providers | selectattr('name', 'equalto', 'github') | list | length > 0 %}
+  @Get('github')
+  @UseGuards(GithubOAuthGuard)
+  async githubAuth() {
+    // Initiates the GitHub OAuth2 login flow
+  }
+
+  @Get('github/callback')
+  @UseGuards(GithubOAuthGuard)
+  async githubAuthRedirect(@Req() req: any, @Res() res: Response) {
+    const tokens = await this.authService.oauthLogin(req.user);
+    
+    // Redirect to frontend with tokens (or set cookies)
+    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/callback?token=${tokens.accessToken}`;
+    return res.redirect(redirectUrl);
+  }
+{% endif %}
+}

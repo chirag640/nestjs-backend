@@ -82,6 +82,39 @@ export interface AuthIR {
 }
 
 /**
+ * Intermediate Representation for OAuth2 (Sprint 6)
+ */
+export interface OAuthProviderIR {
+  name: "google" | "github";
+  clientId: string;
+  clientSecret: string;
+  callbackURL: string;
+  strategyName: string; // GoogleStrategy | GithubStrategy
+  guardName: string; // GoogleOAuthGuard | GithubOAuthGuard
+}
+
+export interface OAuthIR {
+  enabled: boolean;
+  providers: OAuthProviderIR[];
+  modulePath: string; // src/modules/auth/oauth
+}
+
+/**
+ * Intermediate Representation for Relationships (Sprint 6)
+ */
+export interface RelationshipIR {
+  id: string;
+  type: "one-to-one" | "one-to-many" | "many-to-many";
+  fromModel: string;
+  toModel: string;
+  fieldName: string;
+  through?: string; // join model name for many-to-many
+  attributes?: ModelFieldIR[]; // for N:M with attributes
+  // Generated names
+  throughModel?: ModelIR; // Generated join model for M:N
+}
+
+/**
  * Intermediate Representation for Feature Toggles (Sprint 3-5)
  */
 export interface FeaturesIR {
@@ -121,6 +154,8 @@ export interface ProjectIR {
   };
   models: ModelIR[];
   auth?: AuthIR; // Optional auth configuration
+  oauth?: OAuthIR; // Optional OAuth2 configuration
+  relationships: RelationshipIR[]; // Model relationships
   features: FeaturesIR; // Feature toggles
 }
 
@@ -158,12 +193,18 @@ export function buildIR(config: WizardConfig): ProjectIR {
       orm,
     },
     models: models.map((model) => buildModelIR(model)),
+    relationships: buildRelationshipsIR(config),
     features: buildFeaturesIR(config),
   };
 
   // Add auth if enabled
   if (config.authConfig?.enabled) {
     ir.auth = buildAuthIR(config);
+  }
+
+  // Add OAuth if enabled
+  if (config.oauthConfig?.enabled && config.oauthConfig.providers.length > 0) {
+    ir.oauth = buildOAuthIR(config);
   }
 
   return ir;
@@ -303,4 +344,78 @@ function buildFeaturesIR(config: WizardConfig): FeaturesIR {
     rateLimit: features.rateLimit ?? false,
     versioning: features.versioning ?? false,
   };
+}
+
+/**
+ * Build OAuth IR from configuration (Sprint 6)
+ */
+function buildOAuthIR(config: WizardConfig): OAuthIR {
+  const oauthConfig = config.oauthConfig!;
+
+  const providers: OAuthProviderIR[] = oauthConfig.providers.map((provider) => {
+    const capitalizedName =
+      provider.name.charAt(0).toUpperCase() + provider.name.slice(1);
+    return {
+      name: provider.name,
+      clientId: provider.clientId,
+      clientSecret: provider.clientSecret,
+      callbackURL: provider.callbackURL,
+      strategyName: `${capitalizedName}Strategy`,
+      guardName: `${capitalizedName}OAuthGuard`,
+    };
+  });
+
+  return {
+    enabled: oauthConfig.enabled,
+    providers,
+    modulePath: "src/modules/auth/oauth",
+  };
+}
+
+/**
+ * Build Relationships IR from configuration (Sprint 6)
+ */
+function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
+  const relationships = config.modelDefinition?.relationships || [];
+
+  return relationships.map((rel) => {
+    const relationshipIR: RelationshipIR = {
+      id: rel.id,
+      type: rel.type,
+      fromModel: rel.sourceModel,
+      toModel: rel.targetModel,
+      fieldName: rel.fieldName,
+      through: rel.through,
+    };
+
+    // Build attributes if provided for M:N relationships
+    if (rel.attributes && rel.attributes.length > 0) {
+      relationshipIR.attributes = rel.attributes.map((field) =>
+        buildFieldIR(field)
+      );
+    }
+
+    // Generate join model for many-to-many with attributes
+    if (rel.type === "many-to-many" && rel.through && rel.attributes) {
+      const joinModelName = rel.through;
+      const joinModel: ModelIR = {
+        name: joinModelName,
+        nameCamel: toCamelCase(joinModelName),
+        nameKebab: toKebabCase(joinModelName),
+        namePlural: pluralize(toCamelCase(joinModelName)),
+        namePluralKebab: toKebabCase(pluralize(toCamelCase(joinModelName))),
+        modulePath: `src/modules/${toKebabCase(joinModelName)}`,
+        fileName: toKebabCase(joinModelName),
+        route: toKebabCase(pluralize(toCamelCase(joinModelName))),
+        fields: relationshipIR.attributes || [],
+        timestamps: true,
+        createDtoName: `Create${joinModelName}Dto`,
+        updateDtoName: `Update${joinModelName}Dto`,
+        outputDtoName: `${joinModelName}OutputDto`,
+      };
+      relationshipIR.throughModel = joinModel;
+    }
+
+    return relationshipIR;
+  });
 }

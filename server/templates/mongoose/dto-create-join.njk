@@ -1,0 +1,68 @@
+{# DTO for creating M:N relationship with custom attributes #}
+import { IsMongoId, IsArray, ValidateNested{% if relationship.attributes and relationship.attributes.length > 0 %}, IsString, IsNumber, IsBoolean, IsDate, IsOptional{% endif %} } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
+
+{% if relationship.attributes and relationship.attributes.length > 0 %}
+// Join attributes class
+class {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto {
+{% for attr in relationship.attributes %}
+  @ApiProperty({
+    description: '{{ attr.name }} field',
+{% if attr.type === 'string' %}
+    example: 'example value',
+{% elif attr.type === 'number' %}
+    example: 42,
+{% elif attr.type === 'boolean' %}
+    example: true,
+{% elif attr.type === 'date' %}
+    example: '2023-01-01T00:00:00.000Z',
+{% endif %}
+{% if not attr.required %}
+    required: false,
+{% endif %}
+  })
+{% if attr.type === 'string' %}
+  @IsString()
+{% elif attr.type === 'number' %}
+  @IsNumber()
+{% elif attr.type === 'boolean' %}
+  @IsBoolean()
+{% elif attr.type === 'date' %}
+  @IsDate()
+  @Type(() => Date)
+{% endif %}
+{% if not attr.required %}
+  @IsOptional()
+{% endif %}
+  {{ attr.name }}{% if not attr.required %}?{% endif %}: {{ attr.type }};
+
+{% endfor %}
+}
+{% endif %}
+
+export class Create{{ relationship.through || (relationship.fromModel + relationship.toModel) }}Dto {
+  @ApiProperty({
+    description: 'ID of the {{ relationship.fromModel }} record',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @IsMongoId()
+  {{ relationship.fromModel | lower }}Id: string;
+
+  @ApiProperty({
+    description: 'ID of the {{ relationship.toModel }} record',
+    example: '507f1f77bcf86cd799439012',
+  })
+  @IsMongoId()
+  {{ relationship.toModel | lower }}Id: string;
+
+{% if relationship.attributes and relationship.attributes.length > 0 %}
+  @ApiProperty({
+    description: 'Additional attributes for the relationship',
+    type: {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto,
+  })
+  @ValidateNested()
+  @Type(() => {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto)
+  attributes: {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto;
+{% endif %}
+}

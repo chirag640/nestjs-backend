@@ -335,6 +335,129 @@ Access endpoints:
 - `GET /v2/users` - Version 2
 {% endif %}
 
+{% if oauth and oauth.enabled %}
+## 🔐 OAuth2 Authentication
+
+This project supports OAuth2 social login with the following providers:
+{% for provider in oauth.providers %}
+- ✅ **{{ provider.name | capitalize }}**
+{% endfor %}
+
+### Setup Instructions
+
+{% for provider in oauth.providers %}
+{% if provider.name == 'google' %}
+#### Google OAuth Setup
+
+1. **Create OAuth Credentials:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   - Create a new project or select existing one
+   - Navigate to "Credentials" → "Create Credentials" → "OAuth Client ID"
+   - Choose "Web application" as application type
+   - Add authorized redirect URI: `{{ provider.callbackURL }}`
+
+2. **Configure Environment Variables:**
+   ```env
+   GOOGLE_CLIENT_ID={{ provider.clientId }}
+   GOOGLE_CLIENT_SECRET={{ provider.clientSecret }}
+   GOOGLE_CALLBACK_URL={{ provider.callbackURL }}
+   FRONTEND_URL=http://localhost:3000
+   ```
+
+3. **OAuth Flow:**
+   - Initiate login: `GET /auth/oauth/google`
+   - User authorizes on Google
+   - Callback: `GET /auth/oauth/google/callback`
+   - Returns JWT access token and redirect to frontend
+
+{% elif provider.name == 'github' %}
+#### GitHub OAuth Setup
+
+1. **Create OAuth App:**
+   - Go to [GitHub Developer Settings](https://github.com/settings/developers)
+   - Click "New OAuth App"
+   - Fill in application details:
+     - Application name: Your app name
+     - Homepage URL: `http://localhost:3000`
+     - Authorization callback URL: `{{ provider.callbackURL }}`
+   - Click "Register application"
+   - Copy Client ID and generate Client Secret
+
+2. **Configure Environment Variables:**
+   ```env
+   GITHUB_CLIENT_ID={{ provider.clientId }}
+   GITHUB_CLIENT_SECRET={{ provider.clientSecret }}
+   GITHUB_CALLBACK_URL={{ provider.callbackURL }}
+   FRONTEND_URL=http://localhost:3000
+   ```
+
+3. **OAuth Flow:**
+   - Initiate login: `GET /auth/oauth/github`
+   - User authorizes on GitHub
+   - Callback: `GET /auth/oauth/github/callback`
+   - Returns JWT access token and redirect to frontend
+
+{% endif %}
+{% endfor %}
+
+### OAuth API Endpoints
+
+{% for provider in oauth.providers %}
+**{{ provider.name | capitalize }} OAuth:**
+```
+GET /auth/oauth/{{ provider.name }}
+```
+Initiates the OAuth flow. Redirects user to {{ provider.name | capitalize }} consent screen.
+
+```
+GET /auth/oauth/{{ provider.name }}/callback
+```
+Callback endpoint that handles the OAuth response. On success:
+- Creates or finds user by OAuth ID
+- Generates JWT access + refresh tokens
+- Redirects to `FRONTEND_URL/?token=<access_token>`
+
+{% endfor %}
+
+### Frontend Integration Example
+
+```typescript
+// Initiate OAuth login
+const handleGoogleLogin = () => {
+  window.location.href = 'http://localhost:3000/auth/oauth/google';
+};
+
+// Handle callback (in your router)
+const OAuthCallback = () => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  
+  if (token) {
+    // Store token
+    localStorage.setItem('access_token', token);
+    
+    // Redirect to dashboard
+    navigate('/dashboard');
+  }
+};
+```
+
+### OAuth User Model
+
+Users authenticated via OAuth have the following additional fields:
+- `oauthProvider`: Provider name (`'google'` or `'github'`)
+- `oauthId`: Unique user ID from the OAuth provider
+- `password`: Empty string (OAuth users don't need passwords)
+
+### Security Notes
+
+- OAuth users are automatically assigned the `'User'` role
+- JWT tokens are issued after successful OAuth authentication
+- Refresh token rotation is supported if JWT blacklist is enabled
+- OAuth credentials are validated at application startup
+
+{% endif %}
+
 ## 📁 Project Structure
 
 ```

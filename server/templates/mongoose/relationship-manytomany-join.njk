@@ -1,0 +1,32 @@
+{# Mongoose Many-to-Many with Attributes - Join Collection Template #}
+{# This template generates a complete join model/collection with custom attributes #}
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
+
+export type {{ relationship.through || (relationship.fromModel + relationship.toModel) }}Document = {{ relationship.through || (relationship.fromModel + relationship.toModel) }} & Document;
+
+@Schema({ timestamps: true })
+export class {{ relationship.through || (relationship.fromModel + relationship.toModel) }} {
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true })
+  {{ relationship.fromModel | lower }}Id: MongooseSchema.Types.ObjectId;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.toModel }}', required: true })
+  {{ relationship.toModel | lower }}Id: MongooseSchema.Types.ObjectId;
+
+{% if relationship.attributes and relationship.attributes.length > 0 %}
+  // Custom join attributes
+{% for attr in relationship.attributes %}
+  @Prop({{ '{' }}{% if attr.required %} required: true,{% endif %}{% if attr.unique %} unique: true,{% endif %}{% if attr.indexed %} index: true,{% endif %}{% if attr.default !== undefined %} default: {{ attr.default }},{% endif %} type: {{ attr.type | capitalize }} {{ '}' }})
+  {{ attr.name }}: {{ attr.type }};
+
+{% endfor %}
+{% endif %}
+}
+
+export const {{ relationship.through || (relationship.fromModel + relationship.toModel) }}Schema = SchemaFactory.createForClass({{ relationship.through || (relationship.fromModel + relationship.toModel) }});
+
+// Create compound index for uniqueness
+{{ relationship.through || (relationship.fromModel + relationship.toModel) }}Schema.index(
+  { {{ relationship.fromModel | lower }}Id: 1, {{ relationship.toModel | lower }}Id: 1 },
+  { unique: true }
+);

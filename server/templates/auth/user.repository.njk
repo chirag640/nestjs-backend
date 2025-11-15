@@ -47,4 +47,10 @@ export class UserRepository {
     await this.userModel.findByIdAndUpdate(userId, { refreshToken }).exec();
   }
   {% endif %}
+
+  {% if oauth and oauth.enabled %}
+  async findByOAuthId(oauthId: string, provider: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ oauthId, oauthProvider: provider }).select('-password').exec();
+  }
+  {% endif %}
 }

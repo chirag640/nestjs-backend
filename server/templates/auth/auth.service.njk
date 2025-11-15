@@ -111,6 +111,55 @@ export class AuthService {
     {% endif %}
   }
 
+  {% if oauth and oauth.enabled %}
+  /**
+   * OAuth2 Login - Find or create user from OAuth provider
+   */
+  async oauthLogin(oauthUser: any) {
+    // Try to find user by OAuth ID and provider
+    const existing = await this.userRepository.findByOAuthId(oauthUser.oauthId, oauthUser.provider);
+    
+    if (existing) {
+      // User exists - generate tokens
+      const tokens = await this.generateTokens(existing._id.toString(), existing.roles);
+      
+      {% if auth.jwt.blacklist %}
+      // Save refresh token for blacklist tracking
+      await this.userRepository.updateRefreshToken(existing._id.toString(), tokens.refreshToken);
+      {% endif %}
+
+      return {
+        ...tokens,
+        user: this.mapToOutputDto(existing),
+      };
+    }
+
+    // User doesn't exist - create new user
+    const newUser = await this.userRepository.create({
+      email: oauthUser.email,
+      firstName: oauthUser.firstName || oauthUser.name,
+      lastName: oauthUser.lastName || '',
+      password: '', // No password for OAuth users
+      oauthProvider: oauthUser.provider,
+      oauthId: oauthUser.oauthId,
+      roles: ['User'], // Default role
+    });
+
+    // Generate tokens
+    const tokens = await this.generateTokens(newUser._id.toString(), newUser.roles);
+
+    {% if auth.jwt.blacklist %}
+    // Save refresh token for blacklist tracking
+    await this.userRepository.updateRefreshToken(newUser._id.toString(), tokens.refreshToken);
+    {% endif %}
+
+    return {
+      ...tokens,
+      user: this.mapToOutputDto(newUser),
+    };
+  }
+  {% endif %}
+
   private async generateTokens(userId: string, roles: string[]) {
     const payload = { sub: userId, roles };
 

@@ -186,6 +186,10 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     },
     roles: ["Admin", "User"],
   },
+  oauthConfig: {
+    enabled: false,
+    providers: [],
+  },
   featureSelection: {
     cors: true,
     helmet: true,

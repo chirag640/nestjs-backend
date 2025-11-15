@@ -142,6 +142,12 @@ export async function generateProject(
   if (ir.auth && ir.auth.enabled) {
     const authFiles = await generateAuthFiles(ir);
     files.push(...authFiles);
+
+    // Generate OAuth files if OAuth is enabled
+    if (ir.oauth && ir.oauth.enabled) {
+      const oauthFiles = await generateOAuthFiles(ir);
+      files.push(...oauthFiles);
+    }
   }
 
   // Generate Sprint 5 feature files
@@ -312,6 +318,65 @@ async function generateAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
       console.error(`Error generating auth file ${output}:`, error);
       throw new Error(`Failed to generate auth file: ${output}`);
     }
+  }
+
+  return files;
+}
+
+/**
+ * Generate OAuth files (strategies, guards, controller) based on enabled providers
+ */
+async function generateOAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.oauth || !ir.oauth.enabled || !ir.oauth.providers.length) {
+    return files;
+  }
+
+  // Generate strategy and guard for each enabled provider
+  for (const provider of ir.oauth.providers) {
+    const providerName = provider.name.toLowerCase();
+
+    // Generate strategy file
+    try {
+      const strategyTemplate = `auth/oauth/${providerName}.strategy.njk`;
+      const rendered = renderTemplate(strategyTemplate, ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({
+        path: `src/modules/auth/oauth/${providerName}.strategy.ts`,
+        content,
+      });
+    } catch (error) {
+      console.error(`Error generating ${providerName} strategy:`, error);
+      throw new Error(`Failed to generate ${providerName} strategy`);
+    }
+
+    // Generate guard file
+    try {
+      const guardTemplate = `auth/oauth/${providerName}.guard.njk`;
+      const rendered = renderTemplate(guardTemplate, ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({
+        path: `src/modules/auth/oauth/${providerName}.guard.ts`,
+        content,
+      });
+    } catch (error) {
+      console.error(`Error generating ${providerName} guard:`, error);
+      throw new Error(`Failed to generate ${providerName} guard`);
+    }
+  }
+
+  // Generate OAuth controller (shared by all providers)
+  try {
+    const rendered = renderTemplate("auth/oauth/oauth.controller.njk", ir);
+    const content = await formatCode(rendered, "typescript");
+    files.push({
+      path: "src/modules/auth/oauth/oauth.controller.ts",
+      content,
+    });
+  } catch (error) {
+    console.error("Error generating OAuth controller:", error);
+    throw new Error("Failed to generate OAuth controller");
   }
 
   return files;
