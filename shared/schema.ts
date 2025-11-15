@@ -82,28 +82,33 @@ export const modelDefinitionSchema = z.object({
 export type ModelDefinition = z.infer<typeof modelDefinitionSchema>;
 
 // Step 4: Authentication & Authorization (Sprint 3)
-export const authConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  method: z.enum(["jwt"]).default("jwt"), // Only JWT in Sprint 3
-  jwt: z
-    .object({
-      accessTTL: z
-        .string()
-        .regex(/^\d+(m|h|d)$/, "Must be in format: 15m, 1h, 7d")
-        .default("15m"),
-      refreshTTL: z
-        .string()
-        .regex(/^\d+(m|h|d)$/, "Must be in format: 15m, 1h, 7d")
-        .default("7d"),
-      rotation: z.boolean().default(true), // Rotate refresh tokens
-      blacklist: z.boolean().default(true), // Blacklist refresh tokens on logout
-    })
-    .optional(),
-  roles: z
-    .array(z.string())
-    .min(1, "At least one role is required")
-    .default(["Admin", "User"]),
-});
+export const authConfigSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    method: z.enum(["jwt"]).default("jwt"), // Only JWT in Sprint 3
+    jwt: z
+      .object({
+        accessTTL: z
+          .string()
+          .regex(/^\d+(m|h|d)$/, "Must be in format: 15m, 1h, 7d")
+          .default("15m"),
+        refreshTTL: z
+          .string()
+          .regex(/^\d+(m|h|d)$/, "Must be in format: 15m, 1h, 7d")
+          .default("7d"),
+        rotation: z.boolean().default(true), // Rotate refresh tokens
+        blacklist: z.boolean().default(true), // Blacklist refresh tokens on logout
+      })
+      .optional(),
+    roles: z
+      .array(z.string())
+      .min(1, "At least one role is required")
+      .default(["Admin", "User"]),
+  })
+  .refine((data) => !data.enabled || data.jwt !== undefined, {
+    message: "jwt is required when auth.enabled is true",
+    path: ["jwt"],
+  });
 
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 

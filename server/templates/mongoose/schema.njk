@@ -11,8 +11,8 @@ export class {{ model.name }} {
     required: {{ field.required | lower }},
     {% if field.unique %}unique: true,{% endif %}
     {% if field.indexed %}index: true,{% endif %}
-    {% if field.defaultValue !== undefined and field.defaultValue !== null %}default: {% if field.type === 'string' %}'{{ field.defaultValue }}'{% else %}{{ field.defaultValue }}{% endif %},{% endif %}
-    {% if field.enum %}enum: ['{{ field.enum | join("', '") }}'],{% endif %}
+    {% if field.defaultValue !== undefined and field.defaultValue !== null %}default: {% if field.type === 'string' %}'{{ field.defaultValue | replace("\\", "\\\\") | replace("'", "\\'") }}'{% else %}{{ field.defaultValue }}{% endif %},{% endif %}
+    {% if field.enum %}enum: [{% for enumValue in field.enum %}'{{ enumValue | replace("\\", "\\\\") | replace("'", "\\'") }}'{% if not loop.last %}, {% endif %}{% endfor %}],{% endif %}
   })
   {{ field.name }}: {{ field.tsType }};
 

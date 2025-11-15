@@ -154,6 +154,12 @@ export async function generateProject(
   const featureFiles = await generateFeatureFiles(ir);
   files.push(...featureFiles);
 
+  // Generate Sprint 6 relationship files
+  if (ir.relationships && ir.relationships.length > 0) {
+    const relationshipFiles = await generateRelationshipFiles(ir);
+    files.push(...relationshipFiles);
+  }
+
   return files;
 }
 
@@ -377,6 +383,121 @@ async function generateOAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
   } catch (error) {
     console.error("Error generating OAuth controller:", error);
     throw new Error("Failed to generate OAuth controller");
+  }
+
+  return files;
+}
+
+/**
+ * Generate relationship files (join models, DTOs) based on relationship configuration
+ */
+async function generateRelationshipFiles(
+  ir: ProjectIR
+): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.relationships || ir.relationships.length === 0) {
+    return files;
+  }
+
+  for (const relationship of ir.relationships) {
+    // Generate join model for many-to-many with attributes
+    if (relationship.throughModel) {
+      const joinModelContext = {
+        relationship,
+        model: relationship.throughModel,
+        project: ir,
+      };
+
+      try {
+        const rendered = renderTemplate(
+          "mongoose/relationship-manytomany-join.njk",
+          joinModelContext
+        );
+        const content = await formatCode(rendered, "typescript");
+        const fileName = relationship.throughModel.fileName;
+        files.push({
+          path: `src/modules/relationships/${fileName}.schema.ts`,
+          content,
+        });
+      } catch (error) {
+        console.error(
+          `Error generating join model for ${relationship.id}:`,
+          error
+        );
+      }
+    }
+
+    // Generate relationship DTOs
+    const dtoContext = { relationship, project: ir };
+
+    // Connect DTO
+    try {
+      const rendered = renderTemplate(
+        "mongoose/dto-connect-relationship.njk",
+        dtoContext
+      );
+      const content = await formatCode(rendered, "typescript");
+      const fromModel = relationship.fromModel.toLowerCase();
+      const toModel = relationship.toModel.toLowerCase();
+      files.push({
+        path: `src/modules/relationships/dto/connect-${fromModel}-${toModel}.dto.ts`,
+        content,
+      });
+    } catch (error) {
+      console.error(
+        `Error generating connect DTO for ${relationship.id}:`,
+        error
+      );
+    }
+
+    // Disconnect DTO
+    try {
+      const rendered = renderTemplate(
+        "mongoose/dto-disconnect-relationship.njk",
+        dtoContext
+      );
+      const content = await formatCode(rendered, "typescript");
+      const fromModel = relationship.fromModel.toLowerCase();
+      const toModel = relationship.toModel.toLowerCase();
+      files.push({
+        path: `src/modules/relationships/dto/disconnect-${fromModel}-${toModel}.dto.ts`,
+        content,
+      });
+    } catch (error) {
+      console.error(
+        `Error generating disconnect DTO for ${relationship.id}:`,
+        error
+      );
+    }
+
+    // Create join DTO (for M:N with attributes)
+    if (
+      relationship.type === "many-to-many" &&
+      relationship.attributes &&
+      relationship.attributes.length > 0
+    ) {
+      try {
+        const rendered = renderTemplate(
+          "mongoose/dto-create-join.njk",
+          dtoContext
+        );
+        const content = await formatCode(rendered, "typescript");
+        const joinName = (
+          relationship.through ||
+          `${relationship.fromModel}${relationship.toModel}`
+        ).toLowerCase();
+        files.push({
+          path: `src/modules/relationships/dto/create-${joinName}.dto.ts`,
+          content,
+        });
+      } catch (error) {
+        console.error(
+          `Error generating create-join DTO for ${relationship.id}:`,
+          error
+        );
+      }
+    }
   }
 
   return files;

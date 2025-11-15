@@ -204,7 +204,17 @@ export function getValidatorDecorator(field: {
       decorators.push("IsString()");
       if (field.minLength) decorators.push(`MinLength(${field.minLength})`);
       if (field.maxLength) decorators.push(`MaxLength(${field.maxLength})`);
-      if (field.pattern) decorators.push(`Matches(/${field.pattern}/)`);
+      if (field.pattern) {
+        try {
+          // Validate the regex pattern
+          new RegExp(field.pattern);
+          decorators.push(`Matches(/${field.pattern}/)`);
+        } catch (error) {
+          console.warn(
+            `Invalid regex pattern "${field.pattern}", skipping Matches decorator`
+          );
+        }
+      }
       if (field.enum) decorators.push(`IsIn(['${field.enum.join("', '")}'])`);
       break;
     case "number":

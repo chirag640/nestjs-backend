@@ -30,12 +30,12 @@ export default function Step4AuthSetup() {
   };
 
   const updateJwtConfig = (field: string, value: string | boolean) => {
-    updateAuthConfig({
-      jwt: {
-        ...authConfig.jwt!,
-        [field]: value,
-      },
-    });
+    const existingJwt = authConfig.jwt || {};
+    const newJwt = {
+      ...existingJwt,
+      [field]: value,
+    };
+    updateAuthConfig({ jwt: newJwt });
   };
 
   return (

@@ -22,11 +22,33 @@ export class OAuthController {
   @Get('google/callback')
   @UseGuards(GoogleOAuthGuard)
   async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
-    const tokens = await this.authService.oauthLogin(req.user);
-    
-    // Redirect to frontend with tokens (or set cookies)
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/callback?token=${tokens.accessToken}`;
-    return res.redirect(redirectUrl);
+    try {
+      const tokens = await this.authService.oauthLogin(req.user);
+      
+      // Validate frontend URL against whitelist
+      const allowedOrigins = (process.env.ALLOWED_FRONTEND_ORIGINS || 'http://localhost:3000')
+        .split(',')
+        .map(origin => origin.trim());
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      
+      // Check if frontendUrl matches any allowed origin
+      const isAllowed = allowedOrigins.some(origin => 
+        frontendUrl === origin || frontendUrl.startsWith(origin + '/')
+      );
+      
+      if (!isAllowed) {
+        console.error(`Invalid FRONTEND_URL: ${frontendUrl}. Using safe default.`);
+        const redirectUrl = `${allowedOrigins[0]}/auth/callback?token=${tokens.accessToken}`;
+        return res.redirect(redirectUrl);
+      }
+      
+      const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.accessToken}`;
+      return res.redirect(redirectUrl);
+    } catch (error) {
+      console.error('OAuth login error:', error.message);
+      const safeUrl = process.env.ALLOWED_FRONTEND_ORIGINS?.split(',')[0]?.trim() || 'http://localhost:3000';
+      return res.redirect(`${safeUrl}/auth/error`);
+    }
   }
 {% endif %}
 
@@ -40,11 +62,33 @@ export class OAuthController {
   @Get('github/callback')
   @UseGuards(GithubOAuthGuard)
   async githubAuthRedirect(@Req() req: any, @Res() res: Response) {
-    const tokens = await this.authService.oauthLogin(req.user);
-    
-    // Redirect to frontend with tokens (or set cookies)
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/callback?token=${tokens.accessToken}`;
-    return res.redirect(redirectUrl);
+    try {
+      const tokens = await this.authService.oauthLogin(req.user);
+      
+      // Validate frontend URL against whitelist
+      const allowedOrigins = (process.env.ALLOWED_FRONTEND_ORIGINS || 'http://localhost:3000')
+        .split(',')
+        .map(origin => origin.trim());
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      
+      // Check if frontendUrl matches any allowed origin
+      const isAllowed = allowedOrigins.some(origin => 
+        frontendUrl === origin || frontendUrl.startsWith(origin + '/')
+      );
+      
+      if (!isAllowed) {
+        console.error(`Invalid FRONTEND_URL: ${frontendUrl}. Using safe default.`);
+        const redirectUrl = `${allowedOrigins[0]}/auth/callback?token=${tokens.accessToken}`;
+        return res.redirect(redirectUrl);
+      }
+      
+      const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.accessToken}`;
+      return res.redirect(redirectUrl);
+    } catch (error) {
+      console.error('OAuth login error:', error.message);
+      const safeUrl = process.env.ALLOWED_FRONTEND_ORIGINS?.split(',')[0]?.trim() || 'http://localhost:3000';
+      return res.redirect(`${safeUrl}/auth/error`);
+    }
   }
 {% endif %}
 }

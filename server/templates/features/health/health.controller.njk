@@ -29,11 +29,7 @@ export class HealthController {
   check() {
     return this.health.check([
       // Database health check
-      {% if database.orm === 'mongoose' %}
       () => this.db.pingCheck('database'),
-      {% else %}
-      () => this.db.pingCheck('database'),
-      {% endif %}
       
       // Memory heap check (should not exceed 150MB)
       () => this.memory.checkHeap('memory_heap', 150 * 1024 * 1024),
@@ -44,7 +40,7 @@ export class HealthController {
       // Disk storage check (should have at least 10% free disk space)
       () =>
         this.disk.checkStorage('disk', {
-          path: '/',
+          path: process.env.DISK_CHECK_PATH || (process.platform === 'win32' ? 'C:\\' : '/'),
           thresholdPercent: 0.9,
         }),
     ]);

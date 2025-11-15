@@ -38,4 +38,6 @@ export class {{ model.name }}Repository {
   async count(): Promise<number> {
     return this.{{ model.nameCamel }}Model.countDocuments().exec();
   }
+
+{% include "mongoose/repository-relationship-methods.njk" %}
 }

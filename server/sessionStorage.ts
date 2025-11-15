@@ -16,10 +16,20 @@ export interface Session {
 // In-memory session storage with TTL
 const sessions = new Map<string, Session>();
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-// Cleanup expired sessions every 5 minutes
-setInterval(
-  () => {
+let cleanupTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Start the cleanup interval for expired sessions
+ * Idempotent - safe to call multiple times
+ */
+export function startCleanup(): void {
+  if (cleanupTimer) {
+    return; // Already running
+  }
+
+  cleanupTimer = setInterval(() => {
     const now = new Date();
     sessions.forEach((session, sessionId) => {
       if (session.expiresAt < now) {
@@ -29,9 +39,22 @@ setInterval(
         );
       }
     });
-  },
-  5 * 60 * 1000
-);
+  }, CLEANUP_INTERVAL_MS);
+
+  console.log("[SessionStorage] Cleanup interval started");
+}
+
+/**
+ * Stop the cleanup interval
+ * Safe to call multiple times
+ */
+export function stopCleanup(): void {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+    console.log("[SessionStorage] Cleanup interval stopped");
+  }
+}
 
 export function createSession(
   files: GeneratedFile[],

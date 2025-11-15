@@ -71,9 +71,13 @@ export class AuthService {
 
   async refreshToken(refreshToken: string) {
     try {
-      // Verify refresh token
+      // Verify refresh token with separate secret
+      const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+      if (!refreshSecret) {
+        throw new Error('JWT_REFRESH_SECRET is not defined in environment variables');
+      }
       const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>('JWT_SECRET'),
+        secret: refreshSecret,
       });
 
       // Check if token is blacklisted
@@ -135,11 +139,16 @@ export class AuthService {
     }
 
     // User doesn't exist - create new user
+    // Generate a cryptographically secure random password for OAuth users (never exposed)
+    const crypto = require('crypto');
+    const randomPassword = crypto.randomBytes(32).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    
     const newUser = await this.userRepository.create({
       email: oauthUser.email,
       firstName: oauthUser.firstName || oauthUser.name,
       lastName: oauthUser.lastName || '',
-      password: '', // No password for OAuth users
+      password: hashedPassword,
       oauthProvider: oauthUser.provider,
       oauthId: oauthUser.oauthId,
       roles: ['User'], // Default role
@@ -168,8 +177,12 @@ export class AuthService {
       expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRY') || '{{ auth.jwt.accessTTL }}',
     });
 
+    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    if (!refreshSecret) {
+      throw new Error('JWT_REFRESH_SECRET is not defined in environment variables');
+    }
     const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_SECRET'),
+      secret: refreshSecret,
       expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRY') || '{{ auth.jwt.refreshTTL }}',
     });
 

@@ -227,7 +227,7 @@ function buildModelIR(model: Model): ModelIR {
     namePluralKebab,
     modulePath: `src/modules/${nameKebab}`,
     fileName: nameKebab,
-    route: namePluralKebab,
+    route: `/${namePluralKebab}`,
     fields: model.fields.map((field) => buildFieldIR(field)),
     timestamps: model.timestamps ?? true,
     createDtoName: `Create${model.name}Dto`,
@@ -313,10 +313,23 @@ function validateModels(models: Model[]): void {
 function buildAuthIR(config: WizardConfig): AuthIR {
   const authConfig = config.authConfig!;
 
+  if (authConfig.enabled && !authConfig.jwt) {
+    throw new Error(
+      "JWT configuration is required when authentication is enabled"
+    );
+  }
+
+  const jwtConfig = authConfig.jwt || {
+    accessTTL: "15m",
+    refreshTTL: "7d",
+    rotation: true,
+    blacklist: true,
+  };
+
   return {
     enabled: authConfig.enabled,
     method: authConfig.method,
-    jwt: authConfig.jwt!,
+    jwt: jwtConfig,
     roles: authConfig.roles,
     modulePath: "src/modules/auth",
     strategyName: "JwtStrategy",

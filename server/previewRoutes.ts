@@ -50,6 +50,11 @@ function buildFileTree(filePaths: string[]): FileNode[] {
 }
 
 export function registerPreviewRoutes(app: Express) {
+  // SECURITY NOTE: In production, these preview routes should be protected with authentication
+  // middleware to prevent unauthorized access to preview sessions. For now, sessions are
+  // ephemeral (30min TTL) and only accessible via generated sessionId.
+  // TODO: Add authentication middleware when moving to production
+
   // GET /api/preview/tree - Returns file tree hierarchy
   app.get("/api/preview/tree", (req: Request, res: Response) => {
     const sessionId = req.query.sessionId as string;

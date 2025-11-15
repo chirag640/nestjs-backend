@@ -1,0 +1,184 @@
+{# Template snippet for adding relationship methods to repositories #}
+{# This can be injected into repository templates #}
+
+  /**
+   * Relationship Management Methods
+   */
+
+{% if relationships %}
+{% for rel in relationships %}
+{% if rel.fromModel == model.name %}
+  // {{ rel.type | upper }} relationship: {{ rel.fromModel }} -> {{ rel.toModel }}
+  
+{% if rel.type == 'one-to-one' %}
+  async set{{ rel.toModel }}(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Id: string,
+  ): Promise<{{ model.name }}Document | null> {
+    return this.{{ model.nameCamel }}Model
+      .findByIdAndUpdate(
+        {{ rel.fromModel | lower }}Id,
+        { {{ rel.fieldName }}: {{ rel.toModel | lower }}Id },
+        { new: true }
+      )
+      .populate('{{ rel.fieldName }}')
+      .exec();
+  }
+
+  async remove{{ rel.toModel }}(
+    {{ rel.fromModel | lower }}Id: string,
+  ): Promise<{{ model.name }}Document | null> {
+    return this.{{ model.nameCamel }}Model
+      .findByIdAndUpdate(
+        {{ rel.fromModel | lower }}Id,
+        { $unset: { {{ rel.fieldName }}: 1 } },
+        { new: true }
+      )
+      .exec();
+  }
+
+  async get{{ rel.toModel }}(
+    {{ rel.fromModel | lower }}Id: string,
+  ): Promise<any> {
+    const result = await this.{{ model.nameCamel }}Model
+      .findById({{ rel.fromModel | lower }}Id)
+      .populate('{{ rel.fieldName }}')
+      .exec();
+    return result?.{{ rel.fieldName }} || null;
+  }
+
+{% elif rel.type == 'one-to-many' %}
+  async add{{ rel.toModel }}(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Ids: string[],
+  ): Promise<{{ model.name }}Document | null> {
+    return this.{{ model.nameCamel }}Model
+      .findByIdAndUpdate(
+        {{ rel.fromModel | lower }}Id,
+        { $addToSet: { {{ rel.fieldName }}: { $each: {{ rel.toModel | lower }}Ids } } },
+        { new: true }
+      )
+      .populate('{{ rel.fieldName }}')
+      .exec();
+  }
+
+  async remove{{ rel.toModel }}(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Ids: string[],
+  ): Promise<{{ model.name }}Document | null> {
+    return this.{{ model.nameCamel }}Model
+      .findByIdAndUpdate(
+        {{ rel.fromModel | lower }}Id,
+        { $pull: { {{ rel.fieldName }}: { $in: {{ rel.toModel | lower }}Ids } } },
+        { new: true }
+      )
+      .populate('{{ rel.fieldName }}')
+      .exec();
+  }
+
+  async get{{ rel.toModel }}s(
+    {{ rel.fromModel | lower }}Id: string,
+  ): Promise<any[]> {
+    const result = await this.{{ model.nameCamel }}Model
+      .findById({{ rel.fromModel | lower }}Id)
+      .populate('{{ rel.fieldName }}')
+      .exec();
+    return result?.{{ rel.fieldName }} || [];
+  }
+
+{% elif rel.type == 'many-to-many' %}
+{% if rel.attributes and rel.attributes.length > 0 %}
+  // Many-to-Many with attributes - uses join collection
+  async add{{ rel.toModel }}WithAttributes(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Id: string,
+    attributes: any,
+  ): Promise<any> {
+    const {{ rel.through || (rel.fromModel + rel.toModel) | lower }} = new this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model({
+      {{ rel.fromModel | lower }}Id,
+      {{ rel.toModel | lower }}Id,
+      ...attributes,
+    });
+    return {{ rel.through || (rel.fromModel + rel.toModel) | lower }}.save();
+  }
+
+  async remove{{ rel.toModel }}Relation(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Id: string,
+  ): Promise<boolean> {
+    const result = await this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model
+      .findOneAndDelete({
+        {{ rel.fromModel | lower }}Id,
+        {{ rel.toModel | lower }}Id,
+      })
+      .exec();
+    return !!result;
+  }
+
+  async get{{ rel.toModel }}sWithAttributes(
+    {{ rel.fromModel | lower }}Id: string,
+  ): Promise<any[]> {
+    return this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model
+      .find({ {{ rel.fromModel | lower }}Id })
+      .populate('{{ rel.toModel | lower }}Id')
+      .exec();
+  }
+
+  async updateRelationAttributes(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Id: string,
+    attributes: any,
+  ): Promise<any> {
+    return this.{{ rel.through || (rel.fromModel + rel.toModel) | lower }}Model
+      .findOneAndUpdate(
+        { {{ rel.fromModel | lower }}Id, {{ rel.toModel | lower }}Id },
+        attributes,
+        { new: true }
+      )
+      .exec();
+  }
+{% else %}
+  // Many-to-Many simple (array refs)
+  async add{{ rel.toModel }}(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Ids: string[],
+  ): Promise<{{ model.name }}Document | null> {
+    return this.{{ model.nameCamel }}Model
+      .findByIdAndUpdate(
+        {{ rel.fromModel | lower }}Id,
+        { $addToSet: { {{ rel.fieldName }}: { $each: {{ rel.toModel | lower }}Ids } } },
+        { new: true }
+      )
+      .populate('{{ rel.fieldName }}')
+      .exec();
+  }
+
+  async remove{{ rel.toModel }}(
+    {{ rel.fromModel | lower }}Id: string,
+    {{ rel.toModel | lower }}Ids: string[],
+  ): Promise<{{ model.name }}Document | null> {
+    return this.{{ model.nameCamel }}Model
+      .findByIdAndUpdate(
+        {{ rel.fromModel | lower }}Id,
+        { $pull: { {{ rel.fieldName }}: { $in: {{ rel.toModel | lower }}Ids } } },
+        { new: true }
+      )
+      .populate('{{ rel.fieldName }}')
+      .exec();
+  }
+
+  async get{{ rel.toModel }}s(
+    {{ rel.fromModel | lower }}Id: string,
+  ): Promise<any[]> {
+    const result = await this.{{ model.nameCamel }}Model
+      .findById({{ rel.fromModel | lower }}Id)
+      .populate('{{ rel.fieldName }}')
+      .exec();
+    return result?.{{ rel.fieldName }} || [];
+  }
+{% endif %}
+{% endif %}
+
+{% endif %}
+{% endfor %}
+{% endif %}
