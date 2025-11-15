@@ -11,7 +11,7 @@ services:
     environment:
       - NODE_ENV=development
 {% if orm == 'mongoose' %}
-      - MONGO_URI=mongodb://mongo:27017/{{ projectName | lower }}
+      - DATABASE_URL=mongodb://mongo:27017/{{ projectName | lower }}
 {% elif orm == 'typeorm' %}
   {% if dbType == 'postgres' %}
       - DB_HOST=postgres
@@ -73,8 +73,15 @@ services:
       - redis
 {% endif %}
     volumes:
-      - .:/app
+      # Mount only source code directories, exclude build artifacts
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./nest-cli.json:/app/nest-cli.json
+      # Preserve node_modules and dist inside container
       - /app/node_modules
+      - /app/dist
     networks:
       - app-network
     restart: unless-stopped

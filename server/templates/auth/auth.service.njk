@@ -35,8 +35,10 @@ export class AuthService {
     // Generate tokens
     const tokens = await this.generateTokens(user._id.toString(), user.roles);
 
-    // Save refresh token{% if auth.jwt.blacklist %} for blacklist tracking{% endif %}
-    {% if auth.jwt.blacklist %}await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);{% endif %}
+    {% if auth.jwt.blacklist %}
+    // Save refresh token for blacklist tracking
+    await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+    {% endif %}
 
     return {
       ...tokens,
@@ -60,8 +62,10 @@ export class AuthService {
     // Generate tokens
     const tokens = await this.generateTokens(user._id.toString(), user.roles);
 
-    // Save refresh token{% if auth.jwt.blacklist %} for blacklist tracking{% endif %}
-    {% if auth.jwt.blacklist %}await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);{% endif %}
+    {% if auth.jwt.blacklist %}
+    // Save refresh token for blacklist tracking
+    await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+    {% endif %}
 
     return {
       ...tokens,
@@ -91,8 +95,10 @@ export class AuthService {
       // Generate new tokens{% if auth.jwt.rotation %} (rotation enabled){% endif %}
       const tokens = await this.generateTokens(payload.sub, payload.roles);
 
+      {% if auth.jwt.blacklist %}
       // Update refresh token{% if auth.jwt.rotation %} for rotation{% endif %}
-      {% if auth.jwt.blacklist %}await this.userRepository.updateRefreshToken(payload.sub, tokens.refreshToken);{% endif %}
+      await this.userRepository.updateRefreshToken(payload.sub, tokens.refreshToken);
+      {% endif %}
 
       return tokens;
     } catch (error) {

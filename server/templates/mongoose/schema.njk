@@ -20,3 +20,21 @@ export class {{ model.name }} {
 }
 
 export const {{ model.name }}Schema = SchemaFactory.createForClass({{ model.name }});
+
+// Compound indexes for common query patterns
+{% if model.timestamps %}
+// Index for sorting by creation date (most common query pattern)
+{{ model.name }}Schema.index({ createdAt: -1 });
+{% endif %}
+
+{% set uniqueFields = [] %}
+{% for field in model.fields %}
+  {% if field.unique %}
+    {% set _ = uniqueFields.push(field.name) %}
+  {% endif %}
+{% endfor %}
+
+{% if uniqueFields.length > 0 and model.timestamps %}
+// Compound index for unique field lookups with timestamps
+{{ model.name }}Schema.index({ {{ uniqueFields[0] }}: 1, createdAt: -1 });
+{% endif %}

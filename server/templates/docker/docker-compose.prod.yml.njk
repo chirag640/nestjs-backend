@@ -9,7 +9,7 @@ services:
     environment:
       - NODE_ENV=production
 {% if orm == 'mongoose' %}
-      - MONGO_URI=${MONGO_URI}
+      - DATABASE_URL=${DATABASE_URL}
 {% elif orm == 'typeorm' %}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}

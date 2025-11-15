@@ -279,14 +279,17 @@ export function buildIR(config: WizardConfig): ProjectIR {
 function buildModelIR(model: Model): ModelIR {
   const nameCamel = toCamelCase(model.name);
   const nameKebab = toKebabCase(model.name);
-  const namePlural = pluralize(nameCamel);
-  const namePluralKebab = toKebabCase(namePlural);
+  // Apply pluralization to the PascalCase name first, then convert to kebab-case
+  // This avoids issues like "Users" -> "userses"
+  const namePlural = pluralize(model.name); // Pluralize PascalCase: "User" -> "Users"
+  const namePluralCamel = toCamelCase(namePlural); // To camelCase: "Users" -> "users"
+  const namePluralKebab = toKebabCase(namePlural); // To kebab: "Users" -> "users"
 
   return {
     name: model.name, // Already PascalCase from validation
     nameCamel,
     nameKebab,
-    namePlural,
+    namePlural: namePluralCamel,
     namePluralKebab,
     modulePath: `src/modules/${nameKebab}`,
     fileName: nameKebab,
@@ -314,6 +317,7 @@ function buildFieldIR(field: Field): ModelFieldIR {
     defaultValue: field.defaultValue,
     validators: getValidatorDecorator({
       type: field.type,
+      name: field.name, // Pass name for email detection
       minLength: field.minLength,
       maxLength: field.maxLength,
       min: field.min,

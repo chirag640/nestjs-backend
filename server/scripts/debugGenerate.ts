@@ -164,11 +164,11 @@ const scenarios = [
     },
   },
   {
-    name: "MongoDB with Relationships",
+    name: "MongoDB with Complex Relationships",
     config: {
       projectSetup: {
         projectName: "test-relationships",
-        description: "MongoDB with relationships",
+        description: "MongoDB with all relationship types",
         author: "TestUser",
         license: "MIT",
         nodeVersion: "20",
@@ -221,6 +221,39 @@ const scenarios = [
             ],
             timestamps: true,
           },
+          {
+            id: "m3",
+            name: "Tag",
+            fields: [
+              {
+                id: "f5",
+                name: "name",
+                type: "string",
+                required: true,
+                unique: true,
+              },
+            ],
+            timestamps: true,
+          },
+          {
+            id: "m4",
+            name: "Profile",
+            fields: [
+              {
+                id: "f6",
+                name: "bio",
+                type: "string",
+                required: false,
+              },
+              {
+                id: "f7",
+                name: "avatarUrl",
+                type: "string",
+                required: false,
+              },
+            ],
+            timestamps: true,
+          },
         ],
         relationships: [
           {
@@ -229,6 +262,43 @@ const scenarios = [
             sourceModel: "User",
             targetModel: "Post",
             fieldName: "posts",
+          },
+          {
+            id: "r2",
+            type: "many-to-many",
+            sourceModel: "Post",
+            targetModel: "Tag",
+            fieldName: "tags",
+            through: "PostTag",
+          },
+          {
+            id: "r3",
+            type: "one-to-one",
+            sourceModel: "User",
+            targetModel: "Profile",
+            fieldName: "profile",
+          },
+          {
+            id: "r4",
+            type: "many-to-many",
+            sourceModel: "User",
+            targetModel: "Tag",
+            fieldName: "followedTags",
+            through: "UserFollowTag",
+            attributes: [
+              {
+                id: "a1",
+                name: "followedAt",
+                type: "date",
+                required: true,
+              },
+              {
+                id: "a2",
+                name: "notificationsEnabled",
+                type: "boolean",
+                required: true,
+              },
+            ],
           },
         ],
       },

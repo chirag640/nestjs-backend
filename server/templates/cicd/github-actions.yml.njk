@@ -113,7 +113,7 @@ jobs:
         run: npm test
         env:
       {% if orm == 'mongoose' %}
-          MONGO_URI: mongodb://localhost:27017/test_db
+          DATABASE_URL: mongodb://localhost:27017/test_db
       {% elif orm == 'typeorm' %}
         {% if dbType == 'postgres' %}
           DB_HOST: localhost
@@ -154,7 +154,7 @@ jobs:
         run: npm run test:e2e
         env:
       {% if orm == 'mongoose' %}
-          MONGO_URI: mongodb://localhost:27017/test_db
+          DATABASE_URL: mongodb://localhost:27017/test_db
       {% elif orm == 'typeorm' %}
         {% if dbType == 'postgres' %}
           DB_HOST: localhost

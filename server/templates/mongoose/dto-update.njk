@@ -11,10 +11,14 @@ import {
 {% endfor %}
   IsOptional,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class {{ model.updateDtoName }} {
 {% for field in model.fields %}
   @IsOptional()
+  {% if field.type === 'string' %}
+  @Transform(({ value }) => value?.trim()) // Sanitize: trim whitespace
+  {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
   {% endfor %}

@@ -42,14 +42,26 @@ export const useWizardStore = create<WizardStore>()(
 
       nextStep: () => {
         const { currentStep } = get();
-        if (currentStep < TOTAL_STEPS) {
+        if (currentStep === 3) {
+          // Go to relationship config (step 3.5) after model definition
+          set({ currentStep: 3.5 });
+        } else if (currentStep === 3.5) {
+          // Go to auth config (step 4) after relationship config
+          set({ currentStep: 4 });
+        } else if (currentStep < TOTAL_STEPS) {
           set({ currentStep: currentStep + 1 });
         }
       },
 
       previousStep: () => {
         const { currentStep } = get();
-        if (currentStep > 1) {
+        if (currentStep === 3.5) {
+          // Go back to model definition (step 3) from relationship config
+          set({ currentStep: 3 });
+        } else if (currentStep === 4) {
+          // Go back to relationship config (step 3.5) from auth config
+          set({ currentStep: 3.5 });
+        } else if (currentStep > 1) {
           set({ currentStep: currentStep - 1 });
         }
       },
@@ -162,6 +174,10 @@ export const useWizardStore = create<WizardStore>()(
           case 3: {
             const models = config.modelDefinition?.models || [];
             return models.length > 0;
+          }
+          case 3.5: {
+            // Relationship config is optional, always valid
+            return true;
           }
           case 4: {
             const auth = config.authConfig;

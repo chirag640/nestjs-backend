@@ -35,7 +35,7 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
       isGlobal: true,
     }),
 {% if database.type === 'MongoDB' %}
-    MongooseModule.forRoot(process.env.DATABASE_URL || '{{ database.connectionString }}'),
+    MongooseModule.forRoot(process.env.DATABASE_URL),
 {% else %}
     TypeOrmModule.forRoot({
       type: '{{ database.type | lower }}',

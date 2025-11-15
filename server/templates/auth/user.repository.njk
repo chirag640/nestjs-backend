@@ -14,8 +14,14 @@ export class UserRepository {
     return user.save();
   }
 
-  async findAll(): Promise<UserDocument[]> {
-    return this.userModel.find().select('-password').exec();
+  async findAll(skip: number = 0, limit: number = 10): Promise<UserDocument[]> {
+    return this.userModel
+      .find()
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 })
+      .select('-password')
+      .exec();
   }
 
   async findById(id: string): Promise<UserDocument | null> {

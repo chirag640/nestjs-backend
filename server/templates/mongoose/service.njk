@@ -3,6 +3,7 @@ import { {{ model.name }}Repository } from './{{ model.fileName }}.repository';
 import { {{ model.createDtoName }} } from './dto/create-{{ model.fileName }}.dto';
 import { {{ model.updateDtoName }} } from './dto/update-{{ model.fileName }}.dto';
 import { {{ model.outputDtoName }} } from './dto/{{ model.fileName }}-output.dto';
+import { PaginatedResponse, createPaginatedResponse } from '../../pagination.dto';
 
 @Injectable()
 export class {{ model.name }}Service {
@@ -13,9 +14,19 @@ export class {{ model.name }}Service {
     return this.mapToOutput(created);
   }
 
-  async findAll(): Promise<{{ model.outputDtoName }}[]> {
-    const items = await this.{{ model.nameCamel }}Repository.findAll();
-    return items.map((item) => this.mapToOutput(item));
+  async findAll(page?: number, limit?: number): Promise<PaginatedResponse<{{ model.outputDtoName }}>> {
+    // Pagination defaults: page 1, limit 10, max 100
+    const currentPage = Math.max(1, Number(page) || 1);
+    const itemsPerPage = Math.min(100, Math.max(1, Number(limit) || 10));
+    const skip = (currentPage - 1) * itemsPerPage;
+    
+    const [items, total] = await Promise.all([
+      this.{{ model.nameCamel }}Repository.findAll(skip, itemsPerPage),
+      this.{{ model.nameCamel }}Repository.count(),
+    ]);
+    
+    const data = items.map((item) => this.mapToOutput(item));
+    return createPaginatedResponse(data, total, currentPage, itemsPerPage);
   }
 
   async findOne(id: string): Promise<{{ model.outputDtoName }}> {

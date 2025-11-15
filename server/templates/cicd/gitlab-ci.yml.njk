@@ -67,7 +67,7 @@ test:unit:
     - npm test
   variables:
 {% if orm == 'mongoose' %}
-    MONGO_URI: mongodb://mongo:27017/test_db
+    DATABASE_URL: mongodb://mongo:27017/test_db
 {% elif orm == 'typeorm' %}
   {% if dbType == 'postgres' %}
     DB_HOST: postgres
@@ -139,7 +139,7 @@ test:e2e:
     - npm run test:e2e
   variables:
 {% if orm == 'mongoose' %}
-    MONGO_URI: mongodb://mongo:27017/test_db
+    DATABASE_URL: mongodb://mongo:27017/test_db
 {% elif orm == 'typeorm' %}
   {% if dbType == 'postgres' %}
     DB_HOST: postgres

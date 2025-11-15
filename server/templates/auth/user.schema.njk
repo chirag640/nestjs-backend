@@ -9,10 +9,14 @@ export class User {
   email: string;
 
   @Prop({ 
+    {% if oauth and oauth.enabled %}
     required: function(this: User) { 
       // Password not required for OAuth users
       return !this.oauthProvider; 
-    } 
+    }
+    {% else %}
+    required: true
+    {% endif %}
   })
   password: string;
 
@@ -40,3 +44,11 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+// Indexes for common queries
+UserSchema.index({ email: 1 }, { unique: true }); // Already enforced by unique constraint
+UserSchema.index({ roles: 1 }); // For role-based queries
+UserSchema.index({ createdAt: -1 }); // For sorting by creation date
+{% if oauth and oauth.enabled %}
+UserSchema.index({ oauthProvider: 1, oauthId: 1 }, { unique: true, sparse: true }); // For OAuth lookups
+{% endif %}

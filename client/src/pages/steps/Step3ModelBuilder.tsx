@@ -12,8 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical, Network } from "lucide-react";
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import type { Model, Field } from "@shared/schema";
 import { nanoid } from "nanoid";
 import {
@@ -173,10 +174,12 @@ function SortableFieldItem({
 }
 
 export default function Step3ModelBuilder() {
-  const { config, updateModelDefinition } = useWizardStore();
+  const { config, updateModelDefinition, goToStep } = useWizardStore();
+  const { toast } = useToast();
   const models = config.modelDefinition?.models || [];
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [newModelName, setNewModelName] = useState("");
+  const relationships = config.modelDefinition?.relationships || [];
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -187,12 +190,36 @@ export default function Step3ModelBuilder() {
 
   const selectedModel = models.find((m) => m.id === selectedModelId);
 
+  // Convert to PascalCase helper
+  const toPascalCase = (str: string): string => {
+    return str
+      .replace(/[^a-zA-Z0-9]/g, " ")
+      .split(" ")
+      .filter((word) => word.length > 0)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join("");
+  };
+
   const addModel = () => {
     if (!newModelName.trim()) return;
 
+    // Auto-convert to PascalCase
+    const pascalCaseName = toPascalCase(newModelName);
+
+    // Validate PascalCase
+    if (!/^[A-Z][a-zA-Z0-9]*$/.test(pascalCaseName)) {
+      toast({
+        title: "Invalid Model Name",
+        description:
+          "Model name must be PascalCase (e.g., User, BlogPost, OrderItem)",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newModel: Model = {
       id: nanoid(),
-      name: newModelName,
+      name: pascalCaseName,
       fields: [],
       timestamps: true,
     };
@@ -303,7 +330,41 @@ export default function Step3ModelBuilder() {
     },
   }));
 
-  const flowEdges: Edge[] = [];
+  // Generate edges from relationships
+  const flowEdges: Edge[] = relationships
+    .map((rel) => {
+      const sourceModel = models.find((m) => m.name === rel.sourceModel);
+      const targetModel = models.find((m) => m.name === rel.targetModel);
+
+      if (!sourceModel || !targetModel) return null;
+
+      const edgeStyles = {
+        "one-to-one": { strokeDasharray: "5,5", label: "1:1" },
+        "one-to-many": { strokeDasharray: "0", label: "1:N" },
+        "many-to-many": { strokeDasharray: "3,3", label: "M:N" },
+      };
+
+      const style = edgeStyles[rel.type];
+
+      return {
+        id: rel.id,
+        source: sourceModel.id,
+        target: targetModel.id,
+        label: `${rel.fieldName || ""} (${style.label})`,
+        type: "smoothstep" as const,
+        animated: true,
+        style: {
+          stroke: "hsl(var(--primary))",
+          strokeWidth: 2,
+          strokeDasharray: style.strokeDasharray,
+        },
+        labelStyle: {
+          fill: "hsl(var(--foreground))",
+          fontSize: 10,
+        },
+      } as Edge;
+    })
+    .filter((edge): edge is Edge => edge !== null);
 
   return (
     <WizardLayout
@@ -319,7 +380,7 @@ export default function Step3ModelBuilder() {
               <Input
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
-                placeholder="ModelName"
+                placeholder="User, BlogPost, OrderItem..."
                 onKeyDown={(e) => e.key === "Enter" && addModel()}
                 data-testid="input-new-model"
               />
@@ -418,7 +479,20 @@ export default function Step3ModelBuilder() {
 
         {/* Right: Entity Diagram */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Entity Diagram</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium">Entity Diagram</Label>
+            {models.length >= 2 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToStep(3.5)}
+                className="gap-2"
+              >
+                <Network className="w-4 h-4" />
+                Define Relationships ({relationships.length})
+              </Button>
+            )}
+          </div>
           <div className="h-[500px] border border-white/10 rounded-lg bg-background/50">
             {models.length > 0 ? (
               <ReactFlow
@@ -436,6 +510,12 @@ export default function Step3ModelBuilder() {
               </div>
             )}
           </div>
+          {models.length >= 2 && relationships.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center">
+              💡 You have {models.length} models. Click "Define Relationships"
+              to connect them.
+            </p>
+          )}
         </div>
       </div>
     </WizardLayout>

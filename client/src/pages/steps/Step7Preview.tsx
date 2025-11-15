@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useWizardStore } from "@/lib/store";
+import { useToast } from "@/hooks/use-toast";
 import { FileTree, type FileNode } from "@/components/wizard/FileTree";
 import {
   CodeEditor,
@@ -51,6 +52,7 @@ interface PreviewState {
 
 export default function Step7Preview() {
   const { config, previousStep } = useWizardStore();
+  const { toast } = useToast();
   const projectName = config.projectSetup?.projectName || "nestjs-backend";
 
   const [state, setState] = useState<PreviewState>({
@@ -80,6 +82,13 @@ export default function Step7Preview() {
     generateProject();
   }, []);
 
+  // Show toast for errors
+  useEffect(() => {
+    if (state.error && !state.sessionId) {
+      // Only show toast for generation errors, not file operation errors
+    }
+  }, [state.error, state.sessionId]);
+
   const generateProject = async () => {
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
@@ -91,7 +100,20 @@ export default function Step7Preview() {
       });
 
       if (!response.ok) {
-        throw new Error(`Generation failed: ${response.statusText}`);
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: response.statusText }));
+
+        // Format validation errors if present
+        let errorMessage = errorData.error || "Generation failed";
+        if (errorData.details && Array.isArray(errorData.details)) {
+          const validationErrors = errorData.details
+            .map((d: any) => d.message)
+            .join(", ");
+          errorMessage = `${errorMessage}: ${validationErrors}`;
+        }
+
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -124,11 +146,20 @@ export default function Step7Preview() {
         }
       }
     } catch (error: any) {
+      const errorMsg = error.message || "Failed to generate project";
+
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        error: error.message || "Failed to generate project",
+        error: errorMsg,
       }));
+
+      // Show toast notification
+      toast({
+        title: "Generation Failed",
+        description: errorMsg,
+        variant: "destructive",
+      });
     }
   };
 
@@ -569,10 +600,49 @@ export default function Step7Preview() {
   if (state.error && !state.sessionId) {
     return (
       <div className="flex items-center justify-center h-[600px]">
-        <Alert variant="destructive" className="max-w-lg">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
+        <div className="max-w-2xl w-full space-y-4 p-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-3">
+                <p className="font-semibold">Generation failed</p>
+                <p className="text-sm">{state.error}</p>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" size="sm" onClick={previousStep}>
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Go Back to Review
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={generateProject}
+                    disabled={state.isLoading}
+                  >
+                    {state.isLoading ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                    )}
+                    Retry Generation
+                  </Button>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              <strong>Common issues:</strong>
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Model names must be PascalCase (e.g., User, BlogPost)</li>
+                <li>
+                  Field names must be camelCase (e.g., firstName, createdAt)
+                </li>
+                <li>All required fields must be filled in previous steps</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+        </div>
       </div>
     );
   }

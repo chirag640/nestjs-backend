@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { AppModule } from '../src/app.module';
+import { AppModule } from '../../src/app.module';
 
 describe('Authentication (e2e)', () => {
   let app: INestApplication;
@@ -29,6 +29,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'test@example.com',
           password: 'Test123!@#',
+          firstName: 'Test',
+          lastName: 'User',
 {% if auth and auth.additionalFields %}
   {% for field in auth.additionalFields %}
     {% if field.required %}
@@ -56,6 +58,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'duplicate@example.com',
           password: 'Test123!@#',
+          firstName: 'Duplicate',
+          lastName: 'Test',
         });
 
       // Try to register with same email
@@ -64,6 +68,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'duplicate@example.com',
           password: 'Test123!@#',
+          firstName: 'Duplicate',
+          lastName: 'Test',
         })
         .expect(400);
     });
@@ -74,6 +80,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'invalid-email',
           password: 'Test123!@#',
+          firstName: 'Invalid',
+          lastName: 'Email',
         })
         .expect(400);
     });
@@ -84,6 +92,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'weak@example.com',
           password: '123',
+          firstName: 'Weak',
+          lastName: 'Password',
         })
         .expect(400);
     });
@@ -97,6 +107,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'login@example.com',
           password: 'Test123!@#',
+          firstName: 'Login',
+          lastName: 'User',
         });
     });
 
@@ -200,6 +212,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'admin@example.com',
           password: 'Test123!@#',
+          firstName: 'Admin',
+          lastName: 'User',
           role: 'admin',
         });
       adminToken = adminRes.body.accessToken;
@@ -210,6 +224,8 @@ describe('Authentication (e2e)', () => {
         .send({
           email: 'user@example.com',
           password: 'Test123!@#',
+          firstName: 'Regular',
+          lastName: 'User',
           role: 'user',
         });
       userToken = userRes.body.accessToken;

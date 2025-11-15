@@ -1,5 +1,5 @@
 import { useWizardStore } from "@/lib/store";
-import { Code2 } from "lucide-react";
+import { Code2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
@@ -54,10 +54,29 @@ export function WizardLayout({
                   className="text-xs text-muted-foreground"
                   data-testid="text-step-counter"
                 >
-                  Step {currentStep} of 8
+                  Step {currentStep === 3.5 ? "3 (Relationships)" : currentStep}{" "}
+                  of 8
                 </p>
               </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (
+                  confirm(
+                    "Are you sure you want to clear all data and start over?"
+                  )
+                ) {
+                  useWizardStore.getState().resetWizard();
+                }
+              }}
+              className="text-xs gap-2"
+              data-testid="button-clear-session"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Clear Session
+            </Button>
           </div>
 
           {/* Progress Bar */}

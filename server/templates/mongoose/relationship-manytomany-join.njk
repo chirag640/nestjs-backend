@@ -2,11 +2,12 @@
 {# This template generates a complete join model/collection with custom attributes #}
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
+{% set joinName = relationship.through or (relationship.fromModel + relationship.toModel) %}
 
-export type {{ relationship.through || (relationship.fromModel + relationship.toModel) }}Document = {{ relationship.through || (relationship.fromModel + relationship.toModel) }} & Document;
+export type {{ joinName }}Document = {{ joinName }} & Document;
 
 @Schema({ timestamps: true })
-export class {{ relationship.through || (relationship.fromModel + relationship.toModel) }} {
+export class {{ joinName }} {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true })
   {{ relationship.fromModel | lower }}Id: MongooseSchema.Types.ObjectId;
 
@@ -23,10 +24,10 @@ export class {{ relationship.through || (relationship.fromModel + relationship.t
 {% endif %}
 }
 
-export const {{ relationship.through || (relationship.fromModel + relationship.toModel) }}Schema = SchemaFactory.createForClass({{ relationship.through || (relationship.fromModel + relationship.toModel) }});
+export const {{ joinName }}Schema = SchemaFactory.createForClass({{ joinName }});
 
 // Create compound index for uniqueness
-{{ relationship.through || (relationship.fromModel + relationship.toModel) }}Schema.index(
+{{ joinName }}Schema.index(
   { {{ relationship.fromModel | lower }}Id: 1, {{ relationship.toModel | lower }}Id: 1 },
   { unique: true }
 );

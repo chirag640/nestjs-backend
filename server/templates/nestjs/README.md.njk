@@ -44,7 +44,17 @@ cp .env.example .env
 
 2. Update the environment variables in `.env`:
 ```env
-DATABASE_URL={{ database.connectionString }}
+{% if database.type === 'MongoDB' %}
+# MongoDB connection string
+DATABASE_URL=mongodb://localhost:27017/{{ project.name | lower }}
+{% elif database.type === 'PostgreSQL' %}
+# PostgreSQL connection string
+DATABASE_URL=postgresql://username:password@localhost:5432/{{ project.name | lower }}?schema=public
+{% elif database.type === 'MySQL' %}
+# MySQL connection string
+DATABASE_URL=mysql://username:password@localhost:3306/{{ project.name | lower }}
+{% endif %}
+
 PORT=3000
 ```
 

@@ -15,24 +15,26 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Trash2, Network, Info } from "lucide-react";
 import { useState } from "react";
 import type { Relationship, Field } from "@/../../shared/schema";
+import { nanoid } from "nanoid";
 
 export default function Step3_1RelationshipConfig() {
-  const { config, updateConfig } = useWizardStore();
-  const relationships = config.relationships || [];
-  const models = config.models || [];
+  const { config, updateModelDefinition } = useWizardStore();
+  const relationships = config.modelDefinition?.relationships || [];
+  const models = config.modelDefinition?.models || [];
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   const addRelationship = () => {
     const newRelationship: Relationship = {
+      id: nanoid(),
       type: "one-to-many",
-      fromModel: models[0]?.name || "",
-      toModel: models[1]?.name || "",
+      sourceModel: models[0]?.name || "",
+      targetModel: models[1]?.name || "",
       fieldName: "",
       through: "",
       attributes: [],
     };
 
-    updateConfig({
+    updateModelDefinition({
       relationships: [...relationships, newRelationship],
     });
     setEditingIndex(relationships.length);
@@ -44,24 +46,24 @@ export default function Step3_1RelationshipConfig() {
   ) => {
     const updated = [...relationships];
     updated[index] = { ...updated[index], ...updates };
-    updateConfig({ relationships: updated });
+    updateModelDefinition({ relationships: updated });
   };
 
   const removeRelationship = (index: number) => {
     const updated = relationships.filter((_, i) => i !== index);
-    updateConfig({ relationships: updated });
+    updateModelDefinition({ relationships: updated });
     if (editingIndex === index) setEditingIndex(null);
   };
 
   const addAttribute = (relationshipIndex: number) => {
     const relationship = relationships[relationshipIndex];
     const newAttribute: Field = {
+      id: nanoid(),
       name: "",
       type: "string",
       required: false,
       unique: false,
       indexed: false,
-      validators: [],
     };
 
     updateRelationship(relationshipIndex, {
@@ -97,8 +99,8 @@ export default function Step3_1RelationshipConfig() {
   const getRelationshipDescription = (rel: Relationship) => {
     const typeDescriptions = {
       "one-to-one": "Each record in both models has exactly one related record",
-      "one-to-many": `Each ${rel.fromModel} can have multiple ${rel.toModel}`,
-      "many-to-many": `Multiple ${rel.fromModel} can relate to multiple ${rel.toModel}`,
+      "one-to-many": `Each ${rel.sourceModel} can have multiple ${rel.targetModel}`,
+      "many-to-many": `Multiple ${rel.sourceModel} can relate to multiple ${rel.targetModel}`,
     };
     return typeDescriptions[rel.type] || "";
   };
@@ -113,9 +115,6 @@ export default function Step3_1RelationshipConfig() {
     <WizardLayout
       title="Model Relationships"
       description="Define relationships between your models"
-      step={3.1}
-      onNext={() => {}}
-      onBack={() => {}}
     >
       <div className="space-y-6">
         <Alert>
@@ -223,11 +222,11 @@ export default function Step3_1RelationshipConfig() {
                     {/* Model Selection */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label>From Model</Label>
+                        <Label>Source Model</Label>
                         <Select
-                          value={relationship.fromModel}
+                          value={relationship.sourceModel}
                           onValueChange={(value) =>
-                            updateRelationship(index, { fromModel: value })
+                            updateRelationship(index, { sourceModel: value })
                           }
                         >
                           <SelectTrigger>
@@ -244,11 +243,11 @@ export default function Step3_1RelationshipConfig() {
                       </div>
 
                       <div>
-                        <Label>To Model</Label>
+                        <Label>Target Model</Label>
                         <Select
-                          value={relationship.toModel}
+                          value={relationship.targetModel}
                           onValueChange={(value) =>
-                            updateRelationship(index, { toModel: value })
+                            updateRelationship(index, { targetModel: value })
                           }
                         >
                           <SelectTrigger>
@@ -256,7 +255,9 @@ export default function Step3_1RelationshipConfig() {
                           </SelectTrigger>
                           <SelectContent>
                             {models
-                              .filter((m) => m.name !== relationship.fromModel)
+                              .filter(
+                                (m) => m.name !== relationship.sourceModel
+                              )
                               .map((model) => (
                                 <SelectItem key={model.name} value={model.name}>
                                   {model.name}
@@ -280,8 +281,8 @@ export default function Step3_1RelationshipConfig() {
                         }
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Name of the field in {relationship.fromModel} that
-                        references {relationship.toModel}
+                        Name of the field in {relationship.sourceModel} that
+                        references {relationship.targetModel}
                       </p>
                     </div>
 

@@ -16,8 +16,14 @@ export class {{ model.name }}Repository {
     return saved.toObject();
   }
 
-  async findAll(): Promise<{{ model.name }}[]> {
-    return this.{{ model.nameCamel }}Model.find().lean().exec();
+  async findAll(skip: number = 0, limit: number = 10): Promise<{{ model.name }}[]> {
+    return this.{{ model.nameCamel }}Model
+      .find()
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 }) // Most recent first
+      .lean()
+      .exec();
   }
 
   async findById(id: string): Promise<{{ model.name }} | null> {

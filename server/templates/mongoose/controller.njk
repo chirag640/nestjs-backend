@@ -8,32 +8,112 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  {% if auth and auth.enabled %}UseGuards,{% endif %}
+  Query,
 } from '@nestjs/common';
+{% if features.swagger %}
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  {% if auth and auth.enabled %}ApiBearerAuth,{% endif %}
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
+{% endif %}
 import { {{ model.name }}Service } from './{{ model.fileName }}.service';
 import { {{ model.createDtoName }} } from './dto/create-{{ model.fileName }}.dto';
 import { {{ model.updateDtoName }} } from './dto/update-{{ model.fileName }}.dto';
 import { {{ model.outputDtoName }} } from './dto/{{ model.fileName }}-output.dto';
+{% if auth and auth.enabled %}
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+{% endif %}
 
-@Controller('{{ model.route }}')
+{% if features.swagger %}
+@ApiTags('{{ model.namePlural }}')
+{% endif %}
+{% if auth and auth.enabled %}
+@UseGuards(JwtAuthGuard)
+{% if features.swagger %}
+@ApiBearerAuth()
+{% endif %}
+{% endif %}
+@Controller('{{ model.route | replace("/", "") }}')
 export class {{ model.name }}Controller {
   constructor(private readonly {{ model.nameCamel }}Service: {{ model.name }}Service) {}
 
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Create a new {{ model.nameCamel }}' })
+  @ApiResponse({ status: 201, description: '{{ model.name }} created successfully', type: {{ model.outputDtoName }} })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  {% if auth and auth.enabled %}
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  {% endif %}
+  {% endif %}
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@Body() dto: {{ model.createDtoName }}): Promise<{{ model.outputDtoName }}> {
     return this.{{ model.nameCamel }}Service.create(dto);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Get all {{ model.namePlural }} with pagination' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Paginated list of {{ model.namePlural }}',
+    schema: {
+      type: 'object',
+      properties: {
+        data: { type: 'array', items: { $ref: '#/components/schemas/{{ model.outputDtoName }}' } },
+        meta: {
+          type: 'object',
+          properties: {
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 10 },
+            total: { type: 'number', example: 156 },
+            totalPages: { type: 'number', example: 16 },
+          },
+        },
+      },
+    },
+  })
+  {% if auth and auth.enabled %}
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  {% endif %}
+  {% endif %}
   @Get()
-  findAll(): Promise<{{ model.outputDtoName }}[]> {
-    return this.{{ model.nameCamel }}Service.findAll();
+  findAll(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.{{ model.nameCamel }}Service.findAll(page, limit);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Get a {{ model.nameCamel }} by ID' })
+  @ApiParam({ name: 'id', description: '{{ model.name }} ID' })
+  @ApiResponse({ status: 200, description: '{{ model.name }} found', type: {{ model.outputDtoName }} })
+  @ApiResponse({ status: 404, description: '{{ model.name }} not found' })
+  {% if auth and auth.enabled %}
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  {% endif %}
+  {% endif %}
   @Get(':id')
   findOne(@Param('id') id: string): Promise<{{ model.outputDtoName }}> {
     return this.{{ model.nameCamel }}Service.findOne(id);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Update a {{ model.nameCamel }}' })
+  @ApiParam({ name: 'id', description: '{{ model.name }} ID' })
+  @ApiResponse({ status: 200, description: '{{ model.name }} updated successfully', type: {{ model.outputDtoName }} })
+  @ApiResponse({ status: 404, description: '{{ model.name }} not found' })
+  {% if auth and auth.enabled %}
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  {% endif %}
+  {% endif %}
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -42,6 +122,15 @@ export class {{ model.name }}Controller {
     return this.{{ model.nameCamel }}Service.update(id, dto);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Delete a {{ model.nameCamel }}' })
+  @ApiParam({ name: 'id', description: '{{ model.name }} ID' })
+  @ApiResponse({ status: 204, description: '{{ model.name }} deleted successfully' })
+  @ApiResponse({ status: 404, description: '{{ model.name }} not found' })
+  {% if auth and auth.enabled %}
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  {% endif %}
+  {% endif %}
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string): Promise<void> {

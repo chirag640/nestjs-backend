@@ -2,10 +2,11 @@
 import { IsMongoId, IsArray, ValidateNested{% if relationship.attributes and relationship.attributes.length > 0 %}, IsString, IsNumber, IsBoolean, IsDate, IsOptional{% endif %} } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+{% set joinName = relationship.through or (relationship.fromModel + relationship.toModel) %}
 
 {% if relationship.attributes and relationship.attributes.length > 0 %}
 // Join attributes class
-class {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto {
+class {{ joinName }}AttributesDto {
 {% for attr in relationship.attributes %}
   @ApiProperty({
     description: '{{ attr.name }} field',
@@ -41,7 +42,7 @@ class {{ relationship.through || (relationship.fromModel + relationship.toModel)
 }
 {% endif %}
 
-export class Create{{ relationship.through || (relationship.fromModel + relationship.toModel) }}Dto {
+export class Create{{ joinName }}Dto {
   @ApiProperty({
     description: 'ID of the {{ relationship.fromModel }} record',
     example: '507f1f77bcf86cd799439011',
@@ -59,10 +60,10 @@ export class Create{{ relationship.through || (relationship.fromModel + relation
 {% if relationship.attributes and relationship.attributes.length > 0 %}
   @ApiProperty({
     description: 'Additional attributes for the relationship',
-    type: {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto,
+    type: {{ joinName }}AttributesDto,
   })
   @ValidateNested()
-  @Type(() => {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto)
-  attributes: {{ relationship.through || (relationship.fromModel + relationship.toModel) }}AttributesDto;
+  @Type(() => {{ joinName }}AttributesDto)
+  attributes: {{ joinName }}AttributesDto;
 {% endif %}
 }

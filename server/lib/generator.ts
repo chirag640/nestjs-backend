@@ -185,9 +185,21 @@ export async function generateProject(
     files.push(...testFiles);
   }
 
+  // Generate global exception filter
+  const exceptionFilterFile = await generateExceptionFilter(ir);
+  files.push(exceptionFilterFile);
+
   // Generate Sprint 8 environment validation
   const envValidationFile = await generateEnvValidation(ir);
   files.push(envValidationFile);
+
+  // Generate actual .env file with secure secrets
+  const envFile = await generateEnvFile(ir);
+  files.push(envFile);
+
+  // Generate pagination utility
+  const paginationFile = await generatePaginationDto(ir);
+  files.push(paginationFile);
 
   // Generate Sprint 8 metadata file
   const metadataFile = await generateMetadata(ir);
@@ -822,6 +834,46 @@ async function generateEnvValidation(ir: ProjectIR): Promise<GeneratedFile> {
 }
 
 /**
+ * Generate actual .env file with secure random secrets
+ */
+async function generateEnvFile(ir: ProjectIR): Promise<GeneratedFile> {
+  // Use dynamic import for crypto since this file uses ES modules
+  const crypto = await import("crypto");
+
+  // Generate cryptographically secure random secrets
+  const jwtSecret = crypto.randomBytes(32).toString("hex");
+  const jwtRefreshSecret = crypto.randomBytes(32).toString("hex");
+
+  // Create context with generated secrets
+  const envContext = {
+    ...ir,
+    generatedSecrets: {
+      jwtSecret,
+      jwtRefreshSecret,
+    },
+  };
+
+  // Render the .env.example template
+  let rendered = renderTemplate("nestjs/.env.example.njk", envContext);
+
+  // Replace placeholder secrets with generated ones
+  rendered = rendered
+    .replace(
+      /JWT_SECRET=CHANGE_THIS_TO_A_STRONG_SECRET_MINIMUM_32_CHARACTERS/g,
+      `JWT_SECRET=${jwtSecret}`
+    )
+    .replace(
+      /JWT_REFRESH_SECRET=CHANGE_THIS_TO_A_DIFFERENT_STRONG_SECRET_MINIMUM_32_CHARACTERS/g,
+      `JWT_REFRESH_SECRET=${jwtRefreshSecret}`
+    );
+
+  return {
+    path: ".env",
+    content: rendered,
+  };
+}
+
+/**
  * Generate generator metadata file (Sprint 8)
  */
 async function generateMetadata(ir: ProjectIR): Promise<GeneratedFile> {
@@ -830,6 +882,32 @@ async function generateMetadata(ir: ProjectIR): Promise<GeneratedFile> {
 
   return {
     path: "generator-meta.json",
+    content,
+  };
+}
+
+/**
+ * Generate global HTTP exception filter
+ */
+async function generateExceptionFilter(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("filters/http-exception.filter.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/filters/http-exception.filter.ts",
+    content,
+  };
+}
+
+/**
+ * Generate pagination utility DTO
+ */
+async function generatePaginationDto(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("nestjs/pagination.dto.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/pagination.dto.ts",
     content,
   };
 }

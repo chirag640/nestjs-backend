@@ -44,11 +44,14 @@ export function toSnakeCase(str: string): string {
 }
 
 /**
- * Simple English pluralization
- * @example "user" → "users", "category" → "categories"
+ * Simple English pluralization with case preservation
+ * @example "user" → "users", "User" → "Users", "category" → "categories", "Category" → "Categories"
  */
 export function pluralize(word: string): string {
+  if (!word) return word;
+
   const lower = word.toLowerCase();
+  const isUpperCase = word[0] === word[0].toUpperCase();
 
   // Irregular plurals
   const irregulars: Record<string, string> = {
@@ -61,29 +64,38 @@ export function pluralize(word: string): string {
   };
 
   if (irregulars[lower]) {
-    return irregulars[lower];
+    const result = irregulars[lower];
+    return isUpperCase
+      ? result.charAt(0).toUpperCase() + result.slice(1)
+      : result;
   }
+
+  let result: string;
 
   // Words ending in y
   if (lower.endsWith("y") && !/[aeiou]y$/.test(lower)) {
-    return lower.slice(0, -1) + "ies";
+    result = lower.slice(0, -1) + "ies";
   }
-
   // Words ending in s, ss, sh, ch, x, z
-  if (/(?:s|ss|sh|ch|x|z)$/.test(lower)) {
-    return lower + "es";
+  else if (/(?:s|ss|sh|ch|x|z)$/.test(lower)) {
+    result = lower + "es";
   }
-
   // Words ending in f or fe
-  if (lower.endsWith("f")) {
-    return lower.slice(0, -1) + "ves";
+  else if (lower.endsWith("f")) {
+    result = lower.slice(0, -1) + "ves";
+  } else if (lower.endsWith("fe")) {
+    result = lower.slice(0, -2) + "ves";
   }
-  if (lower.endsWith("fe")) {
-    return lower.slice(0, -2) + "ves";
+  // Default: add s
+  else {
+    result = lower + "s";
   }
 
-  // Default: add s
-  return lower + "s";
+  // Preserve original casing (PascalCase or camelCase)
+  if (isUpperCase) {
+    return result.charAt(0).toUpperCase() + result.slice(1);
+  }
+  return result;
 }
 
 /**
@@ -190,6 +202,7 @@ export function fieldTypeToMongooseType(fieldType: string): string {
  */
 export function getValidatorDecorator(field: {
   type: string;
+  name?: string;
   minLength?: number;
   maxLength?: number;
   min?: number;
@@ -201,7 +214,12 @@ export function getValidatorDecorator(field: {
 
   switch (field.type) {
     case "string":
-      decorators.push("IsString()");
+      // Use @IsEmail() for fields named 'email' or containing 'email'
+      if (field.name && field.name.toLowerCase().includes("email")) {
+        decorators.push("IsEmail()");
+      } else {
+        decorators.push("IsString()");
+      }
       if (field.minLength) decorators.push(`MinLength(${field.minLength})`);
       if (field.maxLength) decorators.push(`MaxLength(${field.maxLength})`);
       if (field.pattern) {
