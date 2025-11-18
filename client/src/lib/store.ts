@@ -16,6 +16,7 @@ interface WizardStore {
     data: Partial<WizardConfig["modelDefinition"]>
   ) => void;
   updateAuthConfig: (data: Partial<WizardConfig["authConfig"]>) => void;
+  syncUserModel: () => void;
   updateOAuthConfig: (data: Partial<WizardConfig["oauthConfig"]>) => void;
   updateFeatureSelection: (
     data: Partial<WizardConfig["featureSelection"]>
@@ -109,6 +110,78 @@ export const useWizardStore = create<WizardStore>()(
             authConfig: { ...state.config.authConfig, ...data } as any,
           },
         }));
+        // Auto-sync User model when auth is enabled/disabled
+        get().syncUserModel();
+      },
+
+      syncUserModel: () => {
+        const { config } = get();
+        const authEnabled = config.authConfig?.enabled ?? false;
+        const models = config.modelDefinition?.models || [];
+        const userModelExists = models.some((m) => m.name === "User");
+
+        if (authEnabled && !userModelExists) {
+          // Create User model automatically
+          const userModel: any = {
+            id: `user-model-${Date.now()}`,
+            name: "User",
+            fields: [
+              {
+                id: `field-${Date.now()}-1`,
+                name: "email",
+                type: "string",
+                required: true,
+                unique: true,
+                indexed: true,
+              },
+              {
+                id: `field-${Date.now()}-2`,
+                name: "password",
+                type: "string",
+                required: true,
+                unique: false,
+                indexed: false,
+              },
+              {
+                id: `field-${Date.now()}-3`,
+                name: "role",
+                type: "string",
+                required: true,
+                unique: false,
+                indexed: true,
+              },
+            ],
+            timestamps: true,
+          };
+
+          set((state) => ({
+            config: {
+              ...state.config,
+              modelDefinition: {
+                ...state.config.modelDefinition,
+                models: [userModel, ...models],
+              } as any,
+            },
+          }));
+        } else if (!authEnabled && userModelExists) {
+          // Remove User model if auth is disabled
+          const filteredModels = models.filter((m) => m.name !== "User");
+          // Also remove relationships involving User model
+          const relationships = config.modelDefinition?.relationships || [];
+          const filteredRelationships = relationships.filter(
+            (r) => r.sourceModel !== "User" && r.targetModel !== "User"
+          );
+
+          set((state) => ({
+            config: {
+              ...state.config,
+              modelDefinition: {
+                models: filteredModels,
+                relationships: filteredRelationships,
+              } as any,
+            },
+          }));
+        }
       },
 
       updateOAuthConfig: (data) => {

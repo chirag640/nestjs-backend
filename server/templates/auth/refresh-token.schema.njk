@@ -1,4 +1,3 @@
-{% if database == 'MongoDB' %}
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
@@ -7,19 +6,19 @@ export type RefreshTokenDocument = RefreshToken & Document;
 @Schema({ timestamps: true })
 export class RefreshToken {
   @Prop({ required: true, index: true })
-  userId: string;
+  userId!: string;
 
   @Prop({ required: true })
-  tokenHash: string;
+  tokenHash!: string;
 
   @Prop({ required: true })
-  family: string; // Token family for rotation tracking
+  family!: string; // Token family for rotation tracking
 
   @Prop({ required: true })
-  expiresAt: Date;
+  expiresAt!: Date;
 
   @Prop({ default: false })
-  isRevoked: boolean;
+  isRevoked!: boolean;
 
   @Prop()
   revokedAt?: Date;
@@ -39,4 +38,3 @@ export const RefreshTokenSchema = SchemaFactory.createForClass(RefreshToken);
 // Index for cleanup
 RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 RefreshTokenSchema.index({ userId: 1, family: 1 });
-{% endif %}

@@ -9,7 +9,7 @@ import { redisStore } from 'cache-manager-ioredis-yet';
     NestCacheModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: async (configService: ConfigService): Promise<any> => {
         const redisUrl = configService.get<string>('REDIS_URL');
 
         if (!redisUrl) {
@@ -25,14 +25,12 @@ import { redisStore } from 'cache-manager-ioredis-yet';
         
         return {
           store: await redisStore({
-            socket: {
-              host: url.hostname,
-              port: parseInt(url.port || '6379', 10),
-            },
+            host: url.hostname,
+            port: parseInt(url.port || '6379', 10),
             ...(url.password && { password: url.password }),
-            ttl: 300000, // 5 minutes in milliseconds
+            ttl: 300, // 5 minutes in seconds
           }),
-        };
+        } as any;
       },
     }),
   ],

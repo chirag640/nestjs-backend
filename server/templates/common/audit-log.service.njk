@@ -1,0 +1,166 @@
+import { Injectable } from '@nestjs/common';
+import { InjectModel{% if database === 'mongodb' %}, InjectConnection{% endif %} } from '@nestjs/mongoose';
+import { Model{% if database === 'mongodb' %}, Connection{% endif %} } from 'mongoose';
+import { AuditLog, AuditLogDocument } from './audit-log.schema';
+
+export interface AuditLogEntry {
+  userId: string;
+  action: string;
+  resource: string;
+  resourceId?: string;
+  changes?: Record<string, any>;
+  metadata?: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+@Injectable()
+export class AuditLogService {
+  constructor(
+    @InjectModel(AuditLog.name) private auditLogModel: Model<AuditLogDocument>,
+    {% if database === 'mongodb' %}@InjectConnection() private connection: Connection,{% endif %}
+  ) {}
+
+  /**
+   * Create a new audit log entry
+   */
+  async log(entry: AuditLogEntry): Promise<void> {
+    try {
+      await this.auditLogModel.create({
+        ...entry,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      // Never fail the request due to audit logging errors
+      console.error('Failed to create audit log:', error);
+    }
+  }
+
+  /**
+   * Get audit logs for a specific user
+   */
+  async getUserLogs(
+    userId: string,
+    options?: { skip?: number; limit?: number },
+  ): Promise<AuditLogDocument[]> {
+    return this.auditLogModel
+      .find({ userId })
+      .sort({ timestamp: -1 })
+      .skip(options?.skip || 0)
+      .limit(options?.limit || 50)
+      .lean()
+      .exec();
+  }
+
+  /**
+   * Get audit logs for a specific resource
+   */
+  async getResourceLogs(
+    resource: string,
+    resourceId: string,
+    options?: { skip?: number; limit?: number },
+  ): Promise<AuditLogDocument[]> {
+    return this.auditLogModel
+      .find({ resource, resourceId })
+      .sort({ timestamp: -1 })
+      .skip(options?.skip || 0)
+      .limit(options?.limit || 50)
+      .lean()
+      .exec();
+  }
+
+  /**
+   * Search audit logs by action type
+   */
+  async getLogsByAction(
+    action: string,
+    options?: { skip?: number; limit?: number },
+  ): Promise<AuditLogDocument[]> {
+    return this.auditLogModel
+      .find({ action })
+      .sort({ timestamp: -1 })
+      .skip(options?.skip || 0)
+      .limit(options?.limit || 50)
+      .lean()
+      .exec();
+  }
+
+  /**
+   * Get audit logs within a time range
+   */
+  async getLogsByTimeRange(
+    startDate: Date,
+    endDate: Date,
+    options?: { skip?: number; limit?: number },
+  ): Promise<AuditLogDocument[]> {
+    return this.auditLogModel
+      .find({
+        timestamp: { $gte: startDate, $lte: endDate },
+      })
+      .sort({ timestamp: -1 })
+      .skip(options?.skip || 0)
+      .limit(options?.limit || 100)
+      .lean()
+      .exec();
+  }
+
+  /**
+   * Get audit log statistics
+   */
+  async getStatistics(userId?: string): Promise<{
+    totalLogs: number;
+    actionCounts: Record<string, number>;
+    resourceCounts: Record<string, number>;
+  }> {
+    const matchStage = userId ? { userId } : {};
+
+    const [stats] = await this.auditLogModel.aggregate([
+      { $match: matchStage },
+      {
+        $facet: {
+          total: [{ $count: 'count' }],
+          actions: [
+            { $group: { _id: '$action', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ],
+          resources: [
+            { $group: { _id: '$resource', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ],
+        },
+      },
+    ]);
+
+    return {
+      totalLogs: stats.total[0]?.count || 0,
+      actionCounts: stats.actions.reduce(
+        (acc: Record<string, number>, item: any) => {
+          acc[item._id] = item.count;
+          return acc;
+        },
+        {},
+      ),
+      resourceCounts: stats.resources.reduce(
+        (acc: Record<string, number>, item: any) => {
+          acc[item._id] = item.count;
+          return acc;
+        },
+        {},
+      ),
+    };
+  }
+
+  /**
+   * Clean up old audit logs (for GDPR compliance and storage management)
+   */
+  async cleanup(daysToKeep: number = 90): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+
+    const result = await this.auditLogModel.deleteMany({
+      timestamp: { $lt: cutoffDate },
+    });
+
+    return result.deletedCount || 0;
+  }
+}

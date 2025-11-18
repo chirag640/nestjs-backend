@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './user.schema';
+import { sanitizeString } from '../../common/sanitize.util';
 
 @Injectable()
 export class UserRepository {
@@ -29,7 +30,12 @@ export class UserRepository {
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ email }).exec();
+    // Prevent NoSQL injection: sanitize input to ensure it's a primitive string
+    const sanitizedEmail = sanitizeString(email);
+    if (!sanitizedEmail) {
+      return null;
+    }
+    return this.userModel.findOne({ email: sanitizedEmail }).exec();
   }
 
   async update(id: string, data: Partial<User>): Promise<UserDocument | null> {
@@ -48,6 +54,10 @@ export class UserRepository {
     return this.userModel.countDocuments().exec();
   }
 
+  async findOne(query: any): Promise<UserDocument | null> {
+    return this.userModel.findOne(query).exec();
+  }
+
   {% if auth.jwt.blacklist %}
   async updateRefreshToken(userId: string, refreshToken: string | null): Promise<void> {
     await this.userModel.findByIdAndUpdate(userId, { refreshToken }).exec();
@@ -56,7 +66,16 @@ export class UserRepository {
 
   {% if oauth and oauth.enabled %}
   async findByOAuthId(oauthId: string, provider: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ oauthId, oauthProvider: provider }).select('-password').exec();
+    // Prevent NoSQL injection: sanitize OAuth inputs
+    const sanitizedOAuthId = sanitizeString(oauthId);
+    const sanitizedProvider = sanitizeString(provider);
+    if (!sanitizedOAuthId || !sanitizedProvider) {
+      return null;
+    }
+    return this.userModel.findOne({ 
+      oauthId: sanitizedOAuthId, 
+      oauthProvider: sanitizedProvider 
+    }).select('-password').exec();
   }
   {% endif %}
 }

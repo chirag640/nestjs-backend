@@ -1,0 +1,58 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { AuditLogService } from './audit-log.service';
+import { AUDIT_LOG_KEY, AuditLogMetadata } from './audit-log.decorator';
+
+@Injectable()
+export class AuditLogInterceptor implements NestInterceptor {
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly auditLogService: AuditLogService,
+  ) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const auditMetadata = this.reflector.get<AuditLogMetadata>(
+      AUDIT_LOG_KEY,
+      context.getHandler(),
+    );
+
+    if (!auditMetadata) {
+      return next.handle();
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const { user, body, params, ip, headers } = request;
+
+    // Only audit if user is authenticated
+    if (!user || !user.userId) {
+      return next.handle();
+    }
+
+    return next.handle().pipe(
+      tap((response) => {
+        // Log after successful execution
+        this.auditLogService.log({
+          userId: user.userId,
+          action: auditMetadata.action,
+          resource: auditMetadata.resource,
+          resourceId: params?.id || body?.id || response?.id,
+          changes: body,
+          metadata: {
+            method: request.method,
+            url: request.url,
+            statusCode: context.switchToHttp().getResponse().statusCode,
+          },
+          ipAddress: ip || headers['x-forwarded-for'] || headers['x-real-ip'],
+          userAgent: headers['user-agent'],
+        });
+      }),
+    );
+  }
+}

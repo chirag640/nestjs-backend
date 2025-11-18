@@ -40,7 +40,8 @@ export abstract class BaseRepository<T extends Document> {
       this.logger.log('Transaction completed successfully');
       return result!;
     } catch (error) {
-      this.logger.error(`Transaction failed: ${error.message}`, error.stack);
+      const err = error as Error;
+      this.logger.error(`Transaction failed: ${err.message}`, err.stack);
       throw error;
     } finally {
       await session.endSession();

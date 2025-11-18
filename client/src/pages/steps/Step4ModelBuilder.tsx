@@ -12,7 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Plus, Trash2, GripVertical, Network } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  GripVertical,
+  Network,
+  Shield,
+  Lock,
+} from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { Model, Field } from "@shared/schema";
@@ -180,6 +187,7 @@ export default function Step3ModelBuilder() {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [newModelName, setNewModelName] = useState("");
   const relationships = config.modelDefinition?.relationships || [];
+  const authEnabled = config.authConfig?.enabled ?? false;
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -276,6 +284,19 @@ export default function Step3ModelBuilder() {
   };
 
   const deleteModel = (modelId: string) => {
+    const modelToDelete = models.find((m) => m.id === modelId);
+
+    // Prevent deletion of User model when auth is enabled
+    if (authEnabled && modelToDelete?.name === "User") {
+      toast({
+        title: "Cannot Delete User Model",
+        description:
+          "The User model is required for authentication. Disable authentication in Step 3 to remove it.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const updatedModels = models.filter((m) => m.id !== modelId);
     updateModelDefinition({ models: updatedModels });
     if (selectedModelId === modelId) {
@@ -406,11 +427,24 @@ export default function Step3ModelBuilder() {
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
-                  {models.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.name}
-                    </SelectItem>
-                  ))}
+                  {models.map((model) => {
+                    const isUserModel = model.name === "User" && authEnabled;
+                    return (
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex items-center gap-2">
+                          {isUserModel && (
+                            <Shield className="w-3 h-3 text-primary" />
+                          )}
+                          {model.name}
+                          {isUserModel && (
+                            <span className="text-xs text-muted-foreground">
+                              (Auth)
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -418,6 +452,19 @@ export default function Step3ModelBuilder() {
 
           {selectedModel && (
             <div className="space-y-4">
+              {selectedModel.name === "User" && authEnabled && (
+                <div className="flex items-start gap-2 p-3 bg-primary/10 border border-primary/20 rounded-lg text-xs">
+                  <Lock className="w-4 h-4 text-primary mt-0.5" />
+                  <div>
+                    <strong className="text-primary">Protected Model</strong>
+                    <p className="text-muted-foreground mt-1">
+                      This model is auto-generated for authentication. You can
+                      add custom fields but cannot delete it. Disable auth in
+                      Step 3 to remove it.
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">Fields</h3>
                 <div className="flex gap-2">
@@ -425,11 +472,18 @@ export default function Step3ModelBuilder() {
                     variant="outline"
                     size="sm"
                     onClick={() => deleteModel(selectedModel.id)}
-                    className="text-destructive"
+                    disabled={selectedModel.name === "User" && authEnabled}
+                    className="text-destructive disabled:opacity-50 disabled:cursor-not-allowed"
                     data-testid="button-delete-model"
                   >
-                    <Trash2 className="w-3.5 h-3.5 mr-1" />
-                    Delete Model
+                    {selectedModel.name === "User" && authEnabled ? (
+                      <Lock className="w-3.5 h-3.5 mr-1" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    )}
+                    {selectedModel.name === "User" && authEnabled
+                      ? "Protected"
+                      : "Delete Model"}
                   </Button>
                 </div>
               </div>
@@ -485,7 +539,7 @@ export default function Step3ModelBuilder() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => goToStep(3.5)}
+                onClick={() => goToStep(4.5)}
                 className="gap-2"
               >
                 <Network className="w-4 h-4" />

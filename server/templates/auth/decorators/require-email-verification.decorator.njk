@@ -1,0 +1,13 @@
+import { SetMetadata } from '@nestjs/common';
+
+/**
+ * Decorator to mark routes that require email verification
+ * Use with EmailVerifiedGuard
+ * 
+ * @example
+ * @RequireEmailVerification()
+ * @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
+ * @Get('profile')
+ * getProfile() { ... }
+ */
+export const RequireEmailVerification = () => SetMetadata('requireEmailVerification', true);

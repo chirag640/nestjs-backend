@@ -1,0 +1,162 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { Reflector } from '@nestjs/core';
+
+export const RESPONSE_DTO_KEY = 'responseDto';
+
+/**
+ * Decorator to specify the DTO class for response validation
+ * 
+ * @param dtoClass - The DTO class to validate responses against
+ * 
+ * @example
+ * @ResponseDto(UserOutputDto)
+ * @Get(':id')
+ * async getUser(@Param('id') id: string) {
+ *   return this.userService.findById(id);
+ * }
+ */
+export function ResponseDto(dtoClass: any) {
+  return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
+    Reflect.defineMetadata(RESPONSE_DTO_KEY, dtoClass, descriptor.value);
+    return descriptor;
+  };
+}
+
+/**
+ * Interceptor to validate API responses against their DTOs
+ * Ensures responses match the expected schema
+ */
+@Injectable()
+export class ResponseValidationInterceptor implements NestInterceptor {
+  constructor(private readonly reflector: Reflector) {}
+
+  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
+    const dtoClass = this.reflector.get<any>(RESPONSE_DTO_KEY, context.getHandler());
+
+    if (!dtoClass) {
+      // No DTO specified, skip validation
+      return next.handle();
+    }
+
+    return next.handle().pipe(
+      map(async (data) => {
+        if (!data) {
+          return data;
+        }
+
+        // Handle arrays
+        if (Array.isArray(data)) {
+          const validatedArray = await Promise.all(
+            data.map((item) => this.validateAndTransform(item, dtoClass)),
+          );
+          return validatedArray;
+        }
+
+        // Handle paginated responses
+        if (data.data && Array.isArray(data.data)) {
+          const validatedData = await Promise.all(
+            data.data.map((item) => this.validateAndTransform(item, dtoClass)),
+          );
+          return { ...data, data: validatedData };
+        }
+
+        // Handle single object
+        return this.validateAndTransform(data, dtoClass);
+      }),
+    );
+  }
+
+  private async validateAndTransform(data: any, dtoClass: any): Promise<any> {
+    // Transform plain object to DTO instance
+    const dtoInstance = plainToInstance(dtoClass, data, {
+      excludeExtraneousValues: true,
+      exposeUnsetFields: false,
+    });
+
+    // Validate the DTO
+    const errors = await validate(dtoInstance, {
+      whitelist: true,
+      forbidNonWhitelisted: false, // Don't fail on extra properties
+      skipMissingProperties: false,
+    });
+
+    if (errors.length > 0) {
+      // Log validation errors but don't fail the request
+      console.error('Response validation failed:', errors);
+      
+      // In development, throw an error to catch bugs early
+      if (process.env.NODE_ENV === 'development') {
+        throw new InternalServerErrorException({
+          message: 'Response validation failed',
+          errors: errors.map((err) => ({
+            property: err.property,
+            constraints: err.constraints,
+          })),
+        });
+      }
+    }
+
+    return dtoInstance;
+  }
+}
+
+/**
+ * Usage Example:
+ * 
+ * // 1. Define your output DTO with validation decorators:
+ * import { Expose } from 'class-transformer';
+ * import { IsString, IsEmail, IsArray } from 'class-validator';
+ * 
+ * export class UserOutputDto {
+ *   @Expose()
+ *   @IsString()
+ *   id!: string;
+ * 
+ *   @Expose()
+ *   @IsEmail()
+ *   email!: string;
+ * 
+ *   @Expose()
+ *   @IsString()
+ *   firstName!: string;
+ * 
+ *   @Expose()
+ *   @IsString()
+ *   lastName!: string;
+ * 
+ *   @Expose()
+ *   @IsArray()
+ *   roles!: string[];
+ * }
+ * 
+ * // 2. Use @ResponseDto decorator on your controller methods:
+ * @Controller('users')
+ * export class UserController {
+ *   @Get()
+ *   @ResponseDto(UserOutputDto)
+ *   async findAll() {
+ *     return this.userService.findAll();
+ *   }
+ * 
+ *   @Get(':id')
+ *   @ResponseDto(UserOutputDto)
+ *   async findOne(@Param('id') id: string) {
+ *     return this.userService.findById(id);
+ *   }
+ * }
+ * 
+ * // 3. Register the interceptor globally in main.ts:
+ * import { ResponseValidationInterceptor } from './common/response-validation.interceptor';
+ * 
+ * app.useGlobalInterceptors(new ResponseValidationInterceptor(app.get(Reflector)));
+ */

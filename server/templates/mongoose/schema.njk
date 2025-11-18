@@ -14,7 +14,7 @@ export class {{ model.name }} {
     {% if field.defaultValue !== undefined and field.defaultValue !== null %}default: {% if field.type === 'string' %}'{{ field.defaultValue | replace("\\", "\\\\") | replace("'", "\\'") }}'{% else %}{{ field.defaultValue }}{% endif %},{% endif %}
     {% if field.enum %}enum: [{% for enumValue in field.enum %}'{{ enumValue | replace("\\", "\\\\") | replace("'", "\\'") }}'{% if not loop.last %}, {% endif %}{% endfor %}],{% endif %}
   })
-  {{ field.name }}: {{ field.tsType }};
+  {{ field.name }}!: {{ field.tsType }};
 
 {% endfor %}
 }

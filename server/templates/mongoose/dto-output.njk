@@ -5,9 +5,11 @@ export class {{ model.outputDtoName }} {
     description: 'Unique identifier',
     example: '507f1f77bcf86cd799439011',
   })
-  id: string;
+  id!: string;
 
 {% for field in model.fields %}
+  {# Exclude sensitive fields from output DTOs #}
+  {% if field.name !== 'password' and field.name !== 'refreshToken' and field.name !== 'passwordResetToken' and field.name !== 'emailVerificationToken' %}
   {% if field.apiExample %}
   @ApiProperty({
     description: '{{ field.apiDescription | default(field.name) }}',
@@ -15,20 +17,21 @@ export class {{ model.outputDtoName }} {
     {% if field.type === 'array' %}type: 'array',{% endif %}
   })
   {% endif %}
-  {{ field.name }}: {{ field.tsType }};
+  {{ field.name }}!: {{ field.tsType }};
 
+  {% endif %}
 {% endfor %}
 {% if model.timestamps %}
   @ApiProperty({
     description: 'Creation timestamp',
     example: '2024-01-01T00:00:00.000Z',
   })
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty({
     description: 'Last update timestamp',
     example: '2024-01-01T00:00:00.000Z',
   })
-  updatedAt: Date;
+  updatedAt!: Date;
 {% endif %}
 }

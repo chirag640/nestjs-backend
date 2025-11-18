@@ -1,0 +1,39 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
+
+export type AuditLogDocument = AuditLog & Document;
+
+@Schema({ timestamps: false, collection: 'audit_logs' })
+export class AuditLog {
+  @Prop({ required: true, index: true })
+  userId!: string;
+
+  @Prop({ required: true, index: true })
+  action!: string;
+
+  @Prop({ required: true, index: true })
+  resource!: string;
+
+  @Prop({ index: true })
+  resourceId?: string;
+
+  @Prop({ type: Object })
+  changes?: Record<string, any>;
+
+  @Prop({ type: Object })
+  metadata?: Record<string, any>;
+
+  @Prop()
+  ipAddress?: string;
+
+  @Prop()
+  userAgent?: string;
+
+  @Prop({ required: true, index: true })
+  timestamp!: Date;
+}
+
+export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
+
+// Create TTL index for automatic cleanup after 90 days (GDPR compliance)
+AuditLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 7776000 }); // 90 days

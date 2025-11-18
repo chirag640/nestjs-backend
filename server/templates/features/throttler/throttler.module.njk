@@ -1,22 +1,46 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule as NestThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule as NestThrottlerModule{% if features.cache %}, ThrottlerStorageRedisService{% endif %} } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
+{% if features.cache %}
+import Redis from 'ioredis';
+{% endif %}
 
 @Module({
   imports: [
     NestThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        throttlers: [
-          {
-            ttl: configService.get<number>('THROTTLE_TTL') || 60000, // Time window in milliseconds (default: 1 minute)
-            limit: configService.get<number>('THROTTLE_LIMIT') || 10, // Max requests per window (default: 10)
-          },
-        ],
-      }),
+      useFactory: (configService: ConfigService): any => {
+        {% if features.cache %}
+        // Use Redis for rate limiting storage (required for multi-instance/load-balanced deployments)
+        const redisUrl = configService.get<string>('REDIS_URL');
+        
+        return {
+          throttlers: [
+            {
+              ttl: configService.get<number>('THROTTLE_TTL') || 60000, // Time window in milliseconds (default: 1 minute)
+              limit: configService.get<number>('THROTTLE_LIMIT') || 10, // Max requests per window (default: 10)
+            },
+          ],
+          storage: redisUrl 
+            ? new ThrottlerStorageRedisService(new Redis(redisUrl))
+            : undefined, // Falls back to in-memory if Redis not configured
+        };
+        {% else %}
+        // Using in-memory storage (WARNING: not suitable for multi-instance deployments)
+        // Enable caching feature to use Redis-based rate limiting
+        return {
+          throttlers: [
+            {
+              ttl: configService.get<number>('THROTTLE_TTL') || 60000, // Time window in milliseconds (default: 1 minute)
+              limit: configService.get<number>('THROTTLE_LIMIT') || 10, // Max requests per window (default: 10)
+            },
+          ],
+        };
+        {% endif %}
+      },
     }),
   ],
   providers: [

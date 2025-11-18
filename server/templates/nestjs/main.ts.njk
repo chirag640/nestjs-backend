@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 {% if features.validation %}import { ValidationPipe } from '@nestjs/common';{% endif %}
 {% if features.logging %}import { Logger } from 'nestjs-pino';{% endif %}
 {% if features.helmet %}import helmet from 'helmet';{% endif %}
-{% if features.compression %}import * as compression from 'compression';{% endif %}
+{% if features.compression %}import compression from 'compression';{% endif %}
 {% if features.versioning %}import { VersioningType } from '@nestjs/common';{% endif %}
 {% if features.swagger %}import { setupSwagger } from './config/swagger.config';{% endif %}
 import { validateEnv } from './env.schema';
@@ -62,9 +62,11 @@ async function bootstrap() {
   });
   {% endif %}
 
-  // Security: Set request body size limits to prevent DoS attacks
-  app.use(require('express').json({ limit: '10mb' }));
-  app.use(require('express').urlencoded({ limit: '10mb', extended: true }));
+  // Security: Configurable request body size limits to prevent DoS attacks
+  // Default: 1mb (increase via REQUEST_BODY_LIMIT env var if needed for file uploads)
+  const bodyLimit = process.env.REQUEST_BODY_LIMIT || '1mb';
+  app.use(require('express').json({ limit: bodyLimit }));
+  app.use(require('express').urlencoded({ limit: bodyLimit, extended: true }));
 
   {% if features.validation %}
   // Enable validation globally with DTO decorators

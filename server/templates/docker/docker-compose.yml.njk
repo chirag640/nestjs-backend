@@ -37,10 +37,10 @@ services:
 {% endif %}
 {% if auth and auth.enabled and auth.jwt %}
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
-      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-1h}
+      - JWT_ACCESS_EXPIRY=${JWT_ACCESS_EXPIRY:-15m}
   {% if auth.jwt.refreshToken %}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-your-refresh-secret-change-in-production}
-      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+      - JWT_REFRESH_EXPIRY=${JWT_REFRESH_EXPIRY:-7d}
   {% endif %}
 {% endif %}
 {% if oauth and oauth.enabled %}
@@ -58,8 +58,7 @@ services:
   {% endfor %}
 {% endif %}
 {% if features.caching %}
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {% endif %}
     depends_on:
 {% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}

@@ -1,0 +1,27 @@
+import { SetMetadata, applyDecorators } from '@nestjs/common';
+
+export const AUDIT_LOG_KEY = 'auditLog';
+
+export interface AuditLogMetadata {
+  action: string;
+  resource: string;
+}
+
+/**
+ * Decorator to enable audit logging for a controller method
+ * 
+ * @param action - The action being performed (e.g., 'CREATE', 'UPDATE', 'DELETE')
+ * @param resource - The resource type (e.g., 'User', 'Post', 'Order')
+ * 
+ * @example
+ * @AuditLog('UPDATE', 'User')
+ * @Put(':id')
+ * async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+ *   return this.userService.update(id, dto);
+ * }
+ */
+export function AuditLog(action: string, resource: string) {
+  return applyDecorators(
+    SetMetadata(AUDIT_LOG_KEY, { action, resource } as AuditLogMetadata),
+  );
+}

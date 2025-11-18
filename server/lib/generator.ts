@@ -387,6 +387,17 @@ async function generateAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
       parser: "typescript",
     },
     {
+      template: "auth/guards/email-verified.guard.njk",
+      output: "src/modules/auth/guards/email-verified.guard.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/decorators/require-email-verification.decorator.njk",
+      output:
+        "src/modules/auth/decorators/require-email-verification.decorator.ts",
+      parser: "typescript",
+    },
+    {
       template: "auth/dtos/register.dto.njk",
       output: "src/modules/auth/dtos/register.dto.ts",
       parser: "typescript",
@@ -404,6 +415,36 @@ async function generateAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
     {
       template: "auth/dtos/user-output.dto.njk",
       output: "src/modules/user/dtos/user-output.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/dtos/forgot-password.dto.njk",
+      output: "src/modules/auth/dtos/forgot-password.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/dtos/reset-password.dto.njk",
+      output: "src/modules/auth/dtos/reset-password.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/password-reset.service.njk",
+      output: "src/modules/auth/password-reset.service.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/password-reset.controller.njk",
+      output: "src/modules/auth/password-reset.controller.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/email-verification.service.njk",
+      output: "src/modules/auth/email-verification.service.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/email-verification.controller.njk",
+      output: "src/modules/auth/email-verification.controller.ts",
       parser: "typescript",
     },
     {

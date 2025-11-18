@@ -8,7 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card } from "@/components/ui/card";
-import { Plus, Trash2, Shield, Info, Lock, RefreshCw } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Shield,
+  Info,
+  Lock,
+  RefreshCw,
+  CheckCircle,
+  Database,
+} from "lucide-react";
 import { useState } from "react";
 
 export default function Step4AuthSetup() {
@@ -70,6 +79,34 @@ export default function Step4AuthSetup() {
             </div>
           </div>
         </Card>
+
+        {/* Show User Model Auto-Generation Notice */}
+        {authConfig.enabled && (
+          <Alert className="border-green-500/50 bg-green-500/10">
+            <CheckCircle className="w-4 h-4 text-green-500" />
+            <AlertDescription>
+              <div className="flex items-start gap-2">
+                <Database className="w-4 h-4 mt-0.5 text-green-500" />
+                <div>
+                  <strong className="text-green-600 dark:text-green-400">
+                    User Model Auto-Generated
+                  </strong>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    A{" "}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                      User
+                    </code>{" "}
+                    model will be automatically created with fields:{" "}
+                    <strong>email</strong>, <strong>password</strong>, and{" "}
+                    <strong>role</strong>. You can add custom fields (firstName,
+                    avatar, etc.) in the Model Definition step. This model will
+                    be available for relationships with other models.
+                  </p>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Show config only if auth is enabled */}
         {authConfig.enabled && (

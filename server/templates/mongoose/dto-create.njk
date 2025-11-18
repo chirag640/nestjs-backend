@@ -1,27 +1,15 @@
 import {
+  IsOptional,
 {% set validatorSet = [] %}
 {% for field in model.fields %}
   {% for validator in field.validators %}
     {% set cleanValidator = validator.split('(')[0].trim() %}
-    {% if cleanValidator not in validatorSet %}
+    {% if cleanValidator not in validatorSet and cleanValidator != 'IsOptional' %}
       {% set _ = validatorSet.push(cleanValidator) %}
   {{ cleanValidator }},
     {% endif %}
   {% endfor %}
 {% endfor %}
-  IsOptional,
-  MinLength,
-  MaxLength,
-  Min,
-  Max,
-  Matches,
-  IsInt,
-  IsPositive,
-  IsBoolean,
-  IsDateString,
-  IsUrl,
-  ArrayMinSize,
-  ArrayMaxSize,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -55,7 +43,7 @@ export class {{ model.createDtoName }} {
   {% if field.type === 'Date' %}
   @Type(() => Date)
   {% endif %}
-  {{ field.name }}: {{ field.tsType }};
+  {{ field.name }}!: {{ field.tsType }};
   {% else %}
   @IsOptional()
   {% if field.type === 'string' %}
@@ -72,7 +60,7 @@ export class {{ model.createDtoName }} {
   {% if field.type === 'Date' %}
   @Type(() => Date)
   {% endif %}
-  {{ field.name }}?: {{ field.tsType }};
+  {{ field.name }}!: {{ field.tsType }};
   {% endif %}
 
 {% endfor %}

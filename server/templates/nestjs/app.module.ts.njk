@@ -35,7 +35,16 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
       isGlobal: true,
     }),
 {% if database.type === 'MongoDB' %}
-    MongooseModule.forRoot(process.env.DATABASE_URL),
+    MongooseModule.forRoot(process.env.DATABASE_URL!, {
+      // Production-ready connection pool configuration
+      maxPoolSize: 10, // Maximum number of connections in the pool
+      minPoolSize: 2, // Minimum number of connections to maintain
+      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s if no server available
+      heartbeatFrequencyMS: 10000, // Check server health every 10s
+      retryWrites: true, // Automatically retry write operations
+      retryReads: true, // Automatically retry read operations
+    }),
 {% else %}
     TypeOrmModule.forRoot({
       type: '{{ database.type | lower }}',

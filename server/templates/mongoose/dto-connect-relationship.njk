@@ -8,7 +8,7 @@ export class Connect{{ relationship.fromModel }}{{ relationship.toModel }}Dto {
     example: '507f1f77bcf86cd799439011',
   })
   @IsMongoId()
-  {{ relationship.fromModel | lower }}Id: string;
+  {{ relationship.fromModel | lower }}Id!: string;
 
 {% if relationship.type === 'many-to-many' or relationship.type === 'one-to-many' %}
   @ApiProperty({
@@ -19,13 +19,13 @@ export class Connect{{ relationship.fromModel }}{{ relationship.toModel }}Dto {
   @IsArray()
   @ArrayNotEmpty()
   @IsMongoId({ each: true })
-  {{ relationship.toModel | lower }}Ids: string[];
+  {{ relationship.toModel | lower }}Ids!: string[];
 {% else %}
   @ApiProperty({
     description: 'ID of the {{ relationship.toModel }} record to connect',
     example: '507f1f77bcf86cd799439012',
   })
   @IsMongoId()
-  {{ relationship.toModel | lower }}Id: string;
+  {{ relationship.toModel | lower }}Id!: string;
 {% endif %}
 }

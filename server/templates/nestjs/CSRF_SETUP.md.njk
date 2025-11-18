@@ -1,0 +1,119 @@
+# Enabling CSRF Protection
+
+CSRF (Cross-Site Request Forgery) protection is **already generated** but not enabled by default. To enable it:
+
+## Option 1: Global CSRF Protection (Recommended for Web Apps)
+
+Add to your `app.module.ts`:
+
+```typescript
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { CsrfMiddleware } from './common/csrf.middleware';
+
+@Module({
+  // ... your existing configuration
+})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CsrfMiddleware)
+      .forRoutes('*'); // Apply to all routes
+  }
+}
+```
+
+## Option 2: Selective CSRF Protection (For API + Web)
+
+If you have both API endpoints and web forms:
+
+```typescript
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { CsrfMiddleware } from './common/csrf.middleware';
+
+@Module({
+  // ... your existing configuration
+})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CsrfMiddleware)
+      .exclude(
+        '/api/(.*)', // Exclude API routes (use JWT auth instead)
+        '/health', // Exclude health checks
+      )
+      .forRoutes('*'); // Apply to remaining routes
+  }
+}
+```
+
+## Option 3: Disable for Pure REST APIs
+
+If you're building a pure REST API consumed by mobile/desktop apps (not browsers):
+
+**No action needed** - CSRF protection is not necessary for APIs using JWT tokens in Authorization headers.
+
+## Frontend Integration
+
+If you enable CSRF protection, your frontend must:
+
+1. **Read CSRF token from cookie:**
+```javascript
+const csrfToken = document.cookie
+  .split('; ')
+  .find(row => row.startsWith('XSRF-TOKEN='))
+  ?.split('=')[1];
+```
+
+2. **Send token in request header:**
+```javascript
+fetch('/api/endpoint', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-csrf-token': csrfToken, // Required for POST/PUT/DELETE
+  },
+  body: JSON.stringify(data),
+});
+```
+
+## Environment Configuration
+
+Add to your `.env` file:
+
+```env
+# CSRF Protection (optional - auto-generated if not provided)
+CSRF_SECRET=your-csrf-secret-here-minimum-32-chars
+```
+
+## Security Notes
+
+- **Safe Methods (GET, HEAD, OPTIONS):** CSRF tokens are generated and set in cookies
+- **State-Changing Methods (POST, PUT, DELETE):** CSRF tokens must match between cookie and header
+- **Cookie Settings:** 
+  - `httpOnly: false` - Allows JavaScript to read the token
+  - `secure: true` - Only sent over HTTPS in production
+  - `sameSite: 'strict'` - Prevents cross-site cookie sending
+  - `maxAge: 3600000` - Token expires after 1 hour
+
+## When to Use CSRF Protection
+
+✅ **Enable CSRF when:**
+- Building traditional web applications with forms
+- Using session-based authentication
+- Users authenticate via browser cookies
+
+❌ **Skip CSRF when:**
+- Building pure REST APIs for mobile/desktop apps
+- Using JWT tokens in Authorization headers (CSRF doesn't apply)
+- All requests come from non-browser clients
+
+## Alternative: Double Submit Cookie Pattern
+
+If you prefer the double submit cookie pattern, the generated `CsrfMiddleware` already implements this approach:
+
+1. Server generates random token
+2. Server sends token in both cookie and requires it in header
+3. Attacker cannot read cookies due to Same-Origin Policy
+4. Only legitimate requests from your domain can include both cookie and header
+
+This is **more scalable** than server-side session storage of CSRF tokens.

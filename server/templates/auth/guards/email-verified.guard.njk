@@ -1,0 +1,44 @@
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { UserRepository } from '../../user/user.repository';
+
+/**
+ * Guard to check if user's email is verified
+ * Use @RequireEmailVerification() decorator on routes that need verified email
+ */
+@Injectable()
+export class EmailVerifiedGuard implements CanActivate {
+  constructor(
+    private reflector: Reflector,
+    private userRepository: UserRepository,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Check if route requires email verification
+    const requireVerification = this.reflector.get<boolean>(
+      'requireEmailVerification',
+      context.getHandler(),
+    );
+
+    // If not required, allow access
+    if (!requireVerification) {
+      return true;
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    if (!user || !user.sub) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    // Check if email is verified
+    const userDoc = await this.userRepository.findById(user.sub);
+    
+    if (!userDoc || !userDoc.emailVerified) {
+      throw new UnauthorizedException('Email verification required. Please verify your email to access this resource.');
+    }
+
+    return true;
+  }
+}

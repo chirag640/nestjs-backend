@@ -6,7 +6,7 @@ export type UserDocument = User & Document;
 @Schema({ timestamps: true })
 export class User {
   @Prop({ required: true, unique: true })
-  email: string;
+  email!: string;
 
   @Prop({ 
     {% if oauth and oauth.enabled %}
@@ -18,29 +18,53 @@ export class User {
     required: true
     {% endif %}
   })
-  password: string;
+  password!: string;
 
   @Prop({ required: true })
-  firstName: string;
+  firstName!: string;
 
   @Prop({ required: true })
-  lastName: string;
+  lastName!: string;
 
   @Prop({ type: [String], default: ['User'] })
-  roles: string[];
+  roles!: string[];
 
   {% if auth.jwt.blacklist %}
   @Prop({ type: String, default: null })
-  refreshToken: string | null;
+  refreshToken!: string | null;
   {% endif %}
 
   {% if oauth and oauth.enabled %}
   @Prop({ type: String, default: null })
-  oauthProvider: string | null; // 'google' | 'github' | null
+  oauthProvider!: string | null; // 'google' | 'github' | null
 
   @Prop({ type: String, default: null })
-  oauthId: string | null; // OAuth provider's user ID
+  oauthId!: string | null; // OAuth provider's user ID
   {% endif %}
+
+  // Email Verification
+  @Prop({ type: Boolean, default: false })
+  emailVerified!: boolean;
+
+  @Prop({ type: String, default: null })
+  emailVerificationToken!: string | null;
+
+  @Prop({ type: Date, default: null })
+  emailVerificationExpiry!: Date | null;
+
+  // Password Reset
+  @Prop({ type: String, default: null })
+  passwordResetToken!: string | null;
+
+  @Prop({ type: Date, default: null })
+  passwordResetExpiry!: Date | null;
+
+  // Account Security
+  @Prop({ type: Number, default: 0 })
+  failedLoginAttempts!: number;
+
+  @Prop({ type: Date, default: null })
+  accountLockedUntil!: Date | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

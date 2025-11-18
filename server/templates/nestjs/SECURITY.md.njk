@@ -1,0 +1,399 @@
+# 🔒 Security Checklist for {{ project.name }}
+
+**Project:** {{ project.name }}  
+**Generated:** {% raw %}{{ new Date().toISOString().split('T')[0] }}{% endraw %}  
+**Framework:** NestJS with TypeScript  
+**Database:** {{ database.type }}
+
+---
+
+## ⚠️ CRITICAL - Before Production Deployment
+
+### 1. Environment Variables & Secrets
+
+- [ ] **Change default JWT secrets** - The generated `.env` file has placeholder secrets
+  ```bash
+  # Generate secure secrets (run these commands):
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+  - Update `JWT_SECRET` (minimum 32 characters)
+  - Update `JWT_REFRESH_SECRET` (must be different from JWT_SECRET)
+
+- [ ] **Never commit `.env` to version control** - Already in `.gitignore`, but verify:
+  ```bash
+  git check-ignore .env  # Should return: .env
+  ```
+
+- [ ] **Use environment-specific secrets**:
+  - Development: Use `.env.development`
+  - Staging: Use `.env.staging`  
+  - Production: Use secrets management (AWS Secrets Manager, Azure Key Vault, etc.)
+
+---
+
+### 2. Database Security
+
+{% if database.type === 'MongoDB' %}
+- [ ] **Enable MongoDB authentication** - Default docker-compose has no auth
+  ```yaml
+  # Add to docker-compose.yml mongo service:
+  environment:
+    - MONGO_INITDB_ROOT_USERNAME=admin
+    - MONGO_INITDB_ROOT_PASSWORD=secure_password
+  ```
+  Then update `DATABASE_URL`:
+  ```
+  DATABASE_URL=mongodb://admin:secure_password@localhost:27017/{{ project.name | lower }}?authSource=admin
+  ```
+
+- [ ] **Enable MongoDB encryption at rest**
+- [ ] **Use MongoDB Atlas for production** (built-in security features)
+- [ ] **Enable network access restrictions** (IP whitelist)
+{% endif %}
+
+{% if database.type === 'PostgreSQL' %}
+- [ ] **Change default PostgreSQL password** - Currently set to 'postgres'
+- [ ] **Enable SSL connections** - Add `sslmode=require` to DATABASE_URL
+- [ ] **Use managed database service** (AWS RDS, Google Cloud SQL) for production
+- [ ] **Enable encryption at rest**
+{% endif %}
+
+- [ ] **Regular backups** - Implement automated daily backups
+- [ ] **Test restore procedures** - Verify backups work before disaster strikes
+
+---
+
+### 3. Authentication & Authorization
+
+{% if auth and auth.enabled %}
+- [ ] **⚠️ CRITICAL: Access tokens remain valid after logout**
+  - Current implementation: Clears refresh token but access tokens work until expiry
+  - **Production fix required**: Implement token blacklisting
+    ```typescript
+    // See auth.service.ts logout() method for TODO comment
+    // Requires Redis to store blacklisted tokens with TTL
+    ```
+
+- [ ] **Refresh token security**:
+  - ⚠️ **WARNING**: Refresh tokens currently stored in plain text
+  - **Recommended**: Hash refresh tokens before storing (like passwords)
+  - **Or**: Use separate Redis store with automatic expiration
+
+- [ ] **Account lockout** - Implement after X failed login attempts:
+  ```typescript
+  // Add to user.schema.ts:
+  failedLoginAttempts: number (default: 0)
+  lockoutUntil: Date | null
+  // Implement in auth.service.ts login() method
+  ```
+
+- [ ] **Password requirements** - Current validation:
+  - Minimum 8 characters
+  - Must contain: uppercase, lowercase, number, special char
+  - ✅ Consider increasing minimum to 12 characters for production
+
+{% if not oauth or not oauth.enabled %}
+- [ ] **Email verification** - NOT IMPLEMENTED
+  - Users can register with any email without verification
+  - **Production requirement**: Add email verification flow
+  - Prevents fake accounts and spam
+{% endif %}
+
+- [ ] **Password reset functionality** - NOT IMPLEMENTED
+  - **Production requirement**: Implement forgot password flow
+  - Generate secure reset token
+  - Send via email with expiration (24-48 hours)
+
+- [ ] **Session management** - NOT IMPLEMENTED
+  - No way to view active sessions
+  - No way to revoke specific sessions
+  - **Recommendation**: Add session tracking table/collection
+
+{% if not features.rateLimit %}
+- [ ] **Enable rate limiting** - NOT CURRENTLY ENABLED
+  - Set `features.rateLimit = true` in generator config
+  - Protects against brute force attacks
+{% else %}
+- [x] **Rate limiting enabled** - Configured with stricter limits on auth endpoints:
+  - Login: 5 attempts per minute
+  - Register: 3 attempts per 5 minutes
+  - Refresh: 5 attempts per minute
+{% endif %}
+{% endif %}
+
+---
+
+### 4. Input Validation & Sanitization
+
+- [ ] **Verify global validation is enabled** - Check `main.ts`:
+  ```typescript
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,          // ✅ Strip unknown properties
+    forbidNonWhitelisted: true, // ✅ Reject requests with unknown properties
+    transform: true,           // ✅ Auto-transform payloads
+  }));
+  ```
+
+- [ ] **Apply sanitization pipe globally** - Add to `main.ts` if handling HTML:
+  ```typescript
+  import { SanitizationPipe } from './common/sanitization.pipe';
+  app.useGlobalPipes(
+    new ValidationPipe({ ... }),
+    new SanitizationPipe(),
+  );
+  ```
+
+- [ ] **NoSQL injection prevention** (MongoDB):
+  - ✅ Using Mongoose with schema validation
+  - ✅ Class-validator on DTOs
+  - ⚠️ Be careful with dynamic queries using `$where`, `$regex`
+
+---
+
+### 5. Network & CORS
+
+- [ ] **Update ALLOWED_ORIGINS** - Currently set to `http://localhost:3000`
+  ```env
+  # Production example:
+  ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+  ```
+
+- [ ] **Enable HTTPS only** in production:
+  - Use reverse proxy (Nginx, Cloudflare, AWS ALB)
+  - Redirect HTTP → HTTPS
+  - Set `secure: true` for cookies
+
+- [ ] **HTTP security headers** - Already enabled via Helmet, verify:
+  ```typescript
+  // In main.ts - already implemented:
+  app.use(helmet());
+  ```
+
+---
+
+### 6. Logging & Monitoring
+
+- [ ] **Audit logging for sensitive operations**:
+  - Login attempts (success/failure)
+  - Password changes
+  - Role changes
+  - Data exports
+  - **NOT CURRENTLY IMPLEMENTED** - Add audit log collection
+
+- [ ] **Error tracking** - Set up service:
+  - Sentry, Rollbar, or Bugsnag
+  - Track production errors in real-time
+  - Set up alerts for critical errors
+
+- [ ] **Performance monitoring**:
+  - Application Performance Monitoring (APM)
+  - New Relic, Datadog, or open-source APM
+  - Track response times, database queries
+
+- [ ] **Log aggregation**:
+  - ELK Stack (Elasticsearch, Logstash, Kibana)
+  - AWS CloudWatch Logs
+  - Google Cloud Logging
+
+- [ ] **Sensitive data in logs**:
+  - Never log passwords, tokens, credit cards
+  - Redact PII (Personal Identifiable Information)
+  - Review logging.interceptor.ts for sensitive data
+
+---
+
+### 7. Dependencies & Updates
+
+- [ ] **Run security audit** regularly:
+  ```bash
+  npm audit
+  npm audit fix
+  ```
+
+- [ ] **Set up Dependabot** or Renovate:
+  - Automatic security updates
+  - Review and test updates in staging first
+
+- [ ] **Check for known vulnerabilities**:
+  ```bash
+  npx snyk test
+  # Or use npm audit
+  ```
+
+---
+
+### 8. Docker & Container Security
+
+- [ ] **Don't run as root** - Update Dockerfile:
+  ```dockerfile
+  # Already implemented in generated Dockerfile:
+  USER node  # ✅ Good - running as non-root user
+  ```
+
+- [ ] **Use specific base image versions**:
+  ```dockerfile
+  # ✅ Good: FROM node:20-alpine
+  # ❌ Bad:  FROM node:latest
+  ```
+
+- [ ] **Scan Docker images**:
+  ```bash
+  docker scan {{ project.name | lower }}-app:latest
+  # Or use Trivy, Snyk, etc.
+  ```
+
+- [ ] **Keep images updated** - Rebuild regularly for security patches
+
+---
+
+### 9. API Security
+
+{% if features.swagger %}
+- [ ] **Disable Swagger in production** - Or protect with authentication:
+  ```typescript
+  // In main.ts, only enable in dev/staging:
+  if (process.env.NODE_ENV !== 'production') {
+    setupSwagger(app);
+  }
+  ```
+{% endif %}
+
+- [ ] **API versioning** - Implement versioning strategy:
+  - URI versioning: `/v1/users`, `/v2/users`
+  - Header versioning: `Accept: application/vnd.api+json; version=1`
+
+- [ ] **Request size limits** - Configure in `main.ts`:
+  ```typescript
+  app.use(json({ limit: '10mb' }));  // Adjust as needed
+  app.use(urlencoded({ limit: '10mb', extended: true }));
+  ```
+
+{% if features.compression %}
+- [ ] **Verify compression is working**:
+  ```bash
+  curl -I -H "Accept-Encoding: gzip" http://your-api/health
+  # Should see: Content-Encoding: gzip
+  ```
+{% endif %}
+
+---
+
+### 10. Testing & CI/CD
+
+- [ ] **Achieve 80%+ test coverage**:
+  ```bash
+  npm run test:cov
+  ```
+
+- [ ] **Run tests in CI pipeline**:
+  - GitHub Actions, GitLab CI, CircleCI, etc.
+  - Fail builds on test failures
+  - Run security scans
+
+- [ ] **E2E tests for critical paths**:
+  - Authentication flow
+  - User registration
+  - Password reset
+  - Payment processing (if applicable)
+
+- [ ] **Load testing**:
+  - Use k6, Artillery, or JMeter
+  - Test with realistic traffic patterns
+  - Identify bottlenecks before production
+
+---
+
+### 11. Compliance & Legal
+
+- [ ] **GDPR compliance** (if handling EU user data):
+  - Right to access (data export)
+  - Right to deletion (hard delete user data)
+  - Data processing agreements
+  - Privacy policy
+
+- [ ] **Data retention policy**:
+  - How long to keep user data
+  - Automated cleanup of old data
+  - Backup retention policy
+
+- [ ] **Terms of Service** and **Privacy Policy**:
+  - Legally reviewed documents
+  - Clear data usage explanation
+
+---
+
+### 12. Operational Procedures
+
+- [ ] **Incident response plan**:
+  - Contact list for security incidents
+  - Steps to take if breach detected
+  - Communication plan (customers, legal, PR)
+
+- [ ] **Runbooks for common issues**:
+  - Database down → how to restore
+  - High CPU/memory → scaling procedures
+  - Security breach → incident response
+
+- [ ] **Regular security reviews**:
+  - Quarterly code security audits
+  - Penetration testing (annual or semi-annual)
+  - Security training for developers
+
+---
+
+## 🎯 Production Readiness Score
+
+### Current State (Auto-Generated):
+- ✅ **Authentication** - Basic JWT auth implemented
+- ✅ **Authorization** - RBAC with roles implemented
+- ✅ **Input Validation** - class-validator on all DTOs
+- ✅ **Rate Limiting** - Global throttler configured
+{% if features.caching %}
+- ✅ **Caching** - Redis support enabled
+{% endif %}
+- ✅ **Logging** - Structured logging with Pino
+- ✅ **Health Checks** - Basic health endpoint
+- ✅ **Docker Support** - Full Docker setup
+- ✅ **API Documentation** - Swagger/OpenAPI
+
+### Missing for Production:
+- ❌ **Email Verification** - Not implemented
+- ❌ **Password Reset** - Not implemented
+- ❌ **Token Blacklisting** - Logout is incomplete
+- ❌ **Audit Logging** - No security event tracking
+- ❌ **Session Management** - Can't view/revoke sessions
+- ❌ **2FA/MFA** - No multi-factor auth
+- ❌ **Monitoring** - No APM or error tracking
+- ❌ **CI/CD** - No automated pipeline
+
+**Estimated time to production-ready:** 4-6 weeks with security hardening
+
+---
+
+## 📚 Additional Resources
+
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [OWASP API Security Top 10](https://owasp.org/www-project-api-security/)
+- [NestJS Security Best Practices](https://docs.nestjs.com/security/authentication)
+- [JWT Best Practices (RFC 8725)](https://tools.ietf.org/html/rfc8725)
+- [MongoDB Security Checklist](https://docs.mongodb.com/manual/administration/security-checklist/)
+- [Node.js Security Best Practices](https://nodejs.org/en/docs/guides/security/)
+- [Docker Security Best Practices](https://docs.docker.com/develop/security-best-practices/)
+
+---
+
+## 🚨 Report Security Issues
+
+If you discover a security vulnerability in this application:
+
+1. **DO NOT** open a public GitHub issue
+2. Email security@yourcompany.com (set up dedicated email)
+3. Include detailed description and steps to reproduce
+4. We will respond within 24-48 hours
+5. Follow responsible disclosure practices
+
+---
+
+**Last Updated:** {% raw %}{{ new Date().toISOString().split('T')[0] }}{% endraw %}  
+**Security Review Required:** Every 3 months

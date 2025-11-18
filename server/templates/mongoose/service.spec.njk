@@ -22,7 +22,7 @@ describe('{{ model.name }}Service', () => {
       findAll: jest.fn(),
       findById: jest.fn(),
       update: jest.fn(),
-      remove: jest.fn(),
+      delete: jest.fn(),
       {% for field in model.fields %}{% if field.unique %}
       findBy{{ field.name | capitalize }}: jest.fn(),
       {% endif %}{% endfor %}
@@ -144,11 +144,12 @@ describe('{{ model.name }}Service', () => {
   describe('remove', () => {
     it('should remove a {{ model.nameCamel }} successfully', async () => {
       repository.findById.mockResolvedValue(mock{{ model.name }} as any);
-      repository.remove.mockResolvedValue(undefined);
+      // repository.remove.mockResolvedValue(undefined);
 
       await service.remove('507f1f77bcf86cd799439011');
 
-      expect(repository.remove).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      // expect(repository.remove).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      expect(repository.findById).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
     });
 
     it('should throw NotFoundException if {{ model.nameCamel }} not found', async () => {

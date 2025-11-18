@@ -1,0 +1,175 @@
+/**
+ * Sentry Error Tracking Integration
+ * 
+ * To enable Sentry error tracking:
+ * 
+ * 1. Install Sentry SDK:
+ *    npm install @sentry/node @sentry/profiling-node
+ * 
+ * 2. Add to your .env file:
+ *    SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+ *    SENTRY_ENVIRONMENT=production # or development, staging, etc.
+ *    SENTRY_TRACES_SAMPLE_RATE=0.1 # 10% of requests for performance monitoring
+ * 
+ * 3. Import and initialize in main.ts (BEFORE NestFactory.create):
+ */
+
+import * as Sentry from '@sentry/node';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
+
+export function initializeSentry() {
+  const dsn = process.env.SENTRY_DSN;
+  
+  if (!dsn) {
+    console.warn('⚠️  Sentry DSN not configured. Error tracking is disabled.');
+    return;
+  }
+
+  Sentry.init({
+    dsn,
+    environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
+    
+    // Performance Monitoring
+    tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+    
+    // Profiling
+    profilesSampleRate: parseFloat(process.env.SENTRY_PROFILES_SAMPLE_RATE || '0.1'),
+    integrations: [
+      nodeProfilingIntegration(),
+    ],
+    
+    // Release tracking (use git commit SHA or version)
+    release: process.env.APP_VERSION || 'unknown',
+    
+    // Filter sensitive data
+    beforeSend(event, hint) {
+      // Remove sensitive data from error reports
+      if (event.request) {
+        delete event.request.cookies;
+        
+        if (event.request.headers) {
+          delete event.request.headers['authorization'];
+          delete event.request.headers['cookie'];
+        }
+      }
+      
+      return event;
+    },
+    
+    // Ignore specific errors
+    ignoreErrors: [
+      'UnauthorizedException',
+      'ForbiddenException',
+      'NotFoundException',
+      'BadRequestException',
+    ],
+  });
+
+  console.log('✅ Sentry error tracking initialized');
+}
+
+/**
+ * Example usage in main.ts:
+ * 
+ * import { initializeSentry } from './config/sentry.config';
+ * 
+ * async function bootstrap() {
+ *   // Initialize Sentry BEFORE creating the NestJS app
+ *   initializeSentry();
+ *   
+ *   const app = await NestFactory.create(AppModule);
+ *   // ... rest of your bootstrap code
+ * }
+ * 
+ * bootstrap();
+ */
+
+/**
+ * Manual error capturing in your code:
+ * 
+ * import * as Sentry from '@sentry/node';
+ * 
+ * try {
+ *   // Your code
+ * } catch (error) {
+ *   Sentry.captureException(error, {
+ *     tags: {
+ *       feature: 'user-authentication',
+ *     },
+ *     user: {
+ *       id: userId,
+ *       email: userEmail,
+ *     },
+ *     extra: {
+ *       customData: 'any additional context',
+ *     },
+ *   });
+ *   throw error;
+ * }
+ */
+
+/**
+ * Add user context to Sentry (in JWT strategy or auth middleware):
+ * 
+ * import * as Sentry from '@sentry/node';
+ * 
+ * async validate(payload: any) {
+ *   Sentry.setUser({
+ *     id: payload.sub,
+ *     email: payload.email,
+ *   });
+ *   
+ *   return { userId: payload.sub, roles: payload.roles };
+ * }
+ */
+
+/**
+ * Create Sentry exception filter for NestJS:
+ */
+
+import { ArgumentsHost, Catch, HttpException, ExceptionFilter } from '@nestjs/common';
+
+@Catch()
+export class SentryExceptionFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const request = ctx.getRequest();
+    const response = ctx.getResponse();
+    
+    // Capture exception in Sentry
+    Sentry.withScope((scope) => {
+      scope.setTag('path', request.url);
+      scope.setTag('method', request.method);
+      
+      if (request.user) {
+        scope.setUser({
+          id: request.user.userId,
+        });
+      }
+      
+      Sentry.captureException(exception);
+    });
+    
+    // Handle HTTP exceptions
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
+      
+      response.status(status).json(exceptionResponse);
+    } else {
+      // Handle unknown errors
+      response.status(500).json({
+        statusCode: 500,
+        message: 'Internal server error',
+      });
+    }
+  }
+}
+
+/**
+ * Register the Sentry filter in main.ts:
+ * 
+ * import { SentryExceptionFilter } from './common/sentry-exception.filter';
+ * 
+ * app.useGlobalFilters(new SentryExceptionFilter());
+ */

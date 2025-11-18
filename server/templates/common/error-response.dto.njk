@@ -9,7 +9,7 @@ export class ErrorResponseDto {
     description: 'HTTP status code',
     example: 400,
   })
-  statusCode: number;
+  statusCode!: number;
 
   @ApiProperty({
     description: 'Error message or array of validation errors',
@@ -19,23 +19,23 @@ export class ErrorResponseDto {
       { type: 'array', items: { type: 'string' } },
     ],
   })
-  message: string | string[];
+  message!: string | string[];
 
   @ApiProperty({
     description: 'Error type',
     example: 'Bad Request',
   })
-  error: string;
+  error!: string;
 
   @ApiProperty({
     description: 'Timestamp of the error',
     example: '2024-01-01T00:00:00.000Z',
   })
-  timestamp: string;
+  timestamp!: string;
 
   @ApiProperty({
     description: 'Request path that caused the error',
     example: '/api/users/123',
   })
-  path: string;
+  path!: string;
 }
