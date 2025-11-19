@@ -1,0 +1,42 @@
+import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { EmailVerificationService } from './email-verification.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+
+class VerifyEmailDto {
+  token!: string;
+}
+
+@ApiTags('Authentication')
+@Controller('auth')
+export class EmailVerificationController {
+  constructor(private readonly emailVerificationService: EmailVerificationService) {}
+
+  @Post('resend-verification')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resend email verification link' })
+  @ApiResponse({ status: 200, description: 'Verification email sent' })
+  @ApiResponse({ status: 400, description: 'Email already verified' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async resendVerification(@Request() req: any) {
+    await this.emailVerificationService.sendVerificationEmail(req.user.sub);
+    return { message: 'Verification email sent' };
+  }
+
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify email using token' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Email successfully verified',
+    schema: {
+      properties: {
+        message: { type: 'string', example: 'Email verified successfully' }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.emailVerificationService.verifyEmail(dto.token);
+  }
+}

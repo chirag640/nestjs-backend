@@ -56,7 +56,9 @@ export class {{ model.name }}Service {
     return {
       id: item._id?.toString() || item.id,
 {% for field in model.fields %}
+{% if field.name != 'password' and field.name != 'refreshToken' and field.name != 'passwordResetToken' and field.name != 'emailVerificationToken' %}
       {{ field.name }}: item.{{ field.name }},
+{% endif %}
 {% endfor %}
 {% if model.timestamps %}
       createdAt: item.createdAt,

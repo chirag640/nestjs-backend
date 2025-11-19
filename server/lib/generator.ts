@@ -256,6 +256,10 @@ export async function generateProject(
   const sanitizationPipeFile = await generateSanitizationPipe(ir);
   files.push(sanitizationPipeFile);
 
+  // Generate sanitize utility
+  const sanitizeUtilFile = await generateSanitizeUtil(ir);
+  files.push(sanitizeUtilFile);
+
   // Generate CSRF middleware
   const csrfMiddlewareFile = await generateCsrfMiddleware(ir);
   files.push(csrfMiddlewareFile);
@@ -1204,6 +1208,16 @@ async function generateSanitizationPipe(ir: ProjectIR): Promise<GeneratedFile> {
 
   return {
     path: "src/common/sanitization.pipe.ts",
+    content,
+  };
+}
+
+async function generateSanitizeUtil(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("common/sanitize.util.njk", ir);
+  const content = await formatCode(rendered, "typescript");
+
+  return {
+    path: "src/common/sanitize.util.ts",
     content,
   };
 }

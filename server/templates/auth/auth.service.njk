@@ -135,12 +135,16 @@ export class AuthService {
       {% endif %}
 
       // Generate new tokens
-      {% if auth.jwt.rotation %}// Token rotation is enabled{% endif %}
+      {% if auth.jwt.rotation %}
+      // Token rotation is enabled
+      {% endif %}
       const tokens = await this.generateTokens(payload.sub, payload.roles);
 
       {% if auth.jwt.blacklist %}
       // Update refresh token in database
-      {% if auth.jwt.rotation %}// This enables token family rotation tracking{% endif %}
+      {% if auth.jwt.rotation %}
+      // This enables token family rotation tracking
+      {% endif %}
       await this.userRepository.updateRefreshToken(payload.sub, tokens.refreshToken);
       {% endif %}
 
