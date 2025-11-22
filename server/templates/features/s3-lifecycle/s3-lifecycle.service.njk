@@ -117,7 +117,8 @@ export class S3LifecycleService {
       Bucket: this.bucket,
       Key: storagePath,
       ContentType: mimeType,
-      ServerSideEncryption: 'AES256', // Enable encryption
+      ServerSideEncryption: 'aws:kms', // KMS encryption for medical data (required for HIPAA compliance)
+      SSEKMSKeyId: this.configService.get<string>('KMS_KEY_ID'), // Use same KMS key as field encryption
       Metadata: {
         'file-id': fileId,
         'entity-id': entityId,

@@ -1,0 +1,254 @@
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { EncryptionService } from '../../common/encryption.service';
+
+/**
+ * Example: Worker Service with Field-Level Encryption
+ * 
+ * Demonstrates how to encrypt sensitive medical data before storing in MongoDB.
+ * 
+ * Encrypted Fields:
+ * - healthHistory: Medical history and diagnoses
+ * - allergies: Allergic reactions and sensitivities
+ * - currentMedication: Active prescriptions
+ * - emergencyContact: Personal contact information
+ * 
+ * Usage:
+ * 1. Import EncryptionService
+ * 2. Call encryptRecord() before save
+ * 3. Call decryptRecord() after read
+ * 4. Sensitive data is automatically protected
+ */
+
+interface Worker {
+  _id?: string;
+  name: string;
+  email: string;
+  healthHistory?: string;
+  allergies?: string[];
+  currentMedication?: string;
+  emergencyContact?: {
+    name: string;
+    phone: string;
+    relationship: string;
+  };
+  // Encrypted metadata (added automatically)
+  _encrypted?: Record<string, any>;
+  _encryptedDek?: Buffer;
+}
+
+@Injectable()
+export class WorkerService {
+  constructor(
+    @InjectModel('Worker') private workerModel: Model<Worker>,
+    private readonly encryptionService: EncryptionService,
+  ) {}
+
+  /**
+   * Create a new worker with encrypted sensitive fields
+   */
+  async create(data: Worker): Promise<Worker> {
+    // Define which fields to encrypt
+    const sensitiveFields = [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'emergencyContact',
+    ];
+
+    // Encrypt sensitive fields before saving
+    const encrypted = await this.encryptionService.encryptRecord(
+      data,
+      sensitiveFields,
+    );
+
+    // Save to MongoDB (sensitive data is now encrypted)
+    const worker = new this.workerModel(encrypted);
+    const saved = await worker.save();
+
+    // Decrypt before returning to user
+    return this.encryptionService.decryptRecord(
+      saved.toObject(),
+      sensitiveFields,
+    );
+  }
+
+  /**
+   * Find a worker by ID and decrypt sensitive fields
+   */
+  async findOne(id: string): Promise<Worker | null> {
+    const worker = await this.workerModel.findById(id).lean();
+
+    if (!worker) {
+      return null;
+    }
+
+    // Decrypt sensitive fields before returning
+    const sensitiveFields = [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'emergencyContact',
+    ];
+
+    return this.encryptionService.decryptRecord(worker, sensitiveFields);
+  }
+
+  /**
+   * Find all workers and decrypt batch
+   */
+  async findAll(): Promise<Worker[]> {
+    const workers = await this.workerModel.find().lean();
+
+    const sensitiveFields = [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'emergencyContact',
+    ];
+
+    // Batch decrypt for efficiency
+    return this.encryptionService.decryptRecords(workers, sensitiveFields);
+  }
+
+  /**
+   * Update worker with encryption
+   */
+  async update(id: string, updates: Partial<Worker>): Promise<Worker> {
+    const sensitiveFields = [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'emergencyContact',
+    ];
+
+    // Encrypt any sensitive fields in updates
+    const encrypted = await this.encryptionService.encryptRecord(
+      updates,
+      sensitiveFields,
+    );
+
+    const worker = await this.workerModel
+      .findByIdAndUpdate(id, encrypted, { new: true })
+      .lean();
+
+    if (!worker) {
+      throw new Error('Worker not found');
+    }
+
+    return this.encryptionService.decryptRecord(worker, sensitiveFields);
+  }
+
+  /**
+   * Auto-detect sensitive fields (optional)
+   */
+  async createWithAutoDetection(data: Worker): Promise<Worker> {
+    // Automatically detect fields that should be encrypted
+    const sensitiveFields = this.encryptionService.detectSensitiveFields(data);
+    // Returns: ['healthHistory', 'allergies', 'currentMedication', 'emergencyContact']
+
+    const encrypted = await this.encryptionService.encryptRecord(
+      data,
+      sensitiveFields,
+    );
+
+    const worker = new this.workerModel(encrypted);
+    const saved = await worker.save();
+
+    return this.encryptionService.decryptRecord(
+      saved.toObject(),
+      sensitiveFields,
+    );
+  }
+
+  /**
+   * Search workers by non-encrypted fields only
+   * 
+   * ⚠️  Important: Cannot query encrypted fields directly
+   * Encrypted data is random ciphertext and cannot be indexed or searched
+   */
+  async searchByName(name: string): Promise<Worker[]> {
+    // ✅ Search by non-encrypted fields (works)
+    const workers = await this.workerModel
+      .find({ name: new RegExp(name, 'i') })
+      .lean();
+
+    const sensitiveFields = [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'emergencyContact',
+    ];
+
+    return this.encryptionService.decryptRecords(workers, sensitiveFields);
+  }
+
+  /**
+   * Validate encryption health
+   */
+  async validateEncryption(): Promise<boolean> {
+    return this.encryptionService.healthCheck();
+  }
+
+  /**
+   * Migrate existing unencrypted data to encrypted
+   * 
+   * Run this once to encrypt existing records
+   */
+  async migrateToEncryption(): Promise<void> {
+    // Find all records without encryption
+    const unencrypted = await this.workerModel
+      .find({ _encrypted: { $exists: false } })
+      .lean();
+
+    console.log(`Found ${unencrypted.length} unencrypted records`);
+
+    const sensitiveFields = [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'emergencyContact',
+    ];
+
+    // Encrypt each record
+    for (const worker of unencrypted) {
+      const encrypted = await this.encryptionService.encryptRecord(
+        worker,
+        sensitiveFields,
+      );
+
+      await this.workerModel.updateOne({ _id: worker._id }, encrypted);
+      console.log(`Encrypted worker: ${worker._id}`);
+    }
+
+    console.log('Migration complete!');
+  }
+}
+
+/**
+ * Controller Example with Automatic Encryption Interceptor
+ */
+/*
+import { Controller, Get, Post, Body, Param, UseInterceptors } from '@nestjs/common';
+import { Encrypt, EncryptionInterceptor } from '../../common/encryption.interceptor';
+
+@Controller('workers')
+@UseInterceptors(EncryptionInterceptor) // Apply to all routes
+export class WorkersController {
+  constructor(private readonly workerService: WorkerService) {}
+
+  // Automatically encrypts request body and decrypts response
+  @Encrypt(['healthHistory', 'allergies', 'currentMedication', 'emergencyContact'])
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.workerService.findOne(id);
+  }
+
+  @Encrypt(['healthHistory', 'allergies', 'currentMedication', 'emergencyContact'])
+  @Post()
+  async create(@Body() data: Worker) {
+    return this.workerService.create(data);
+  }
+}
+*/

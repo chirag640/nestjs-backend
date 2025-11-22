@@ -796,6 +796,11 @@ async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
     files.push(...emailFiles);
   }
 
+  // Encryption Layer (KMS + AES-GCM field-level encryption)
+  // CRITICAL for medical data, financial data, or PII
+  const encryptionFiles = await generateEncryptionFiles(ir);
+  files.push(...encryptionFiles);
+
   // Database Seeding Script (always generated)
   const seedFiles = await generateSeedScript(ir);
   files.push(...seedFiles);
@@ -1015,6 +1020,61 @@ async function generateEmailFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
       const content = output.endsWith(".ts")
         ? await formatCode(rendered, output)
         : rendered;
+      files.push({
+        path: output,
+        content,
+      });
+    } catch (error) {
+      console.error(`Error generating ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Encryption Layer files
+ */
+async function generateEncryptionFiles(
+  ir: ProjectIR
+): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const encryptionFiles = [
+    {
+      template: "common/encryption-strategy.enum.njk",
+      output: "src/common/encryption-strategy.enum.ts",
+    },
+    {
+      template: "common/local-kms.service.njk",
+      output: "src/common/local-kms.service.ts",
+    },
+    {
+      template: "common/kms.service.njk",
+      output: "src/common/kms.service.ts",
+    },
+    {
+      template: "common/encryption.util.njk",
+      output: "src/common/encryption.util.ts",
+    },
+    {
+      template: "common/encryption.service.njk",
+      output: "src/common/encryption.service.ts",
+    },
+    {
+      template: "common/encryption.module.njk",
+      output: "src/common/encryption.module.ts",
+    },
+    {
+      template: "common/encryption.interceptor.njk",
+      output: "src/common/encryption.interceptor.ts",
+    },
+  ];
+
+  for (const { template, output } of encryptionFiles) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = await formatCode(rendered, output);
       files.push({
         path: output,
         content,

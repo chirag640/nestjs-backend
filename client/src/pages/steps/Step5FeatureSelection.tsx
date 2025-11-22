@@ -120,6 +120,46 @@ const ADVANCED_FEATURES = [
   },
 ];
 
+const ENCRYPTION_STRATEGIES = [
+  {
+    value: "disabled" as const,
+    label: "Disabled (No Encryption)",
+    cost: "FREE",
+    security: "None",
+    description: "No field-level encryption. Use for public data only.",
+    icon: "🔓",
+    recommended: false,
+    bestFor: "Public data, blogs, non-sensitive information",
+    color: "text-red-600",
+  },
+  {
+    value: "local" as const,
+    label: "Local (Free Alternative)",
+    cost: "FREE",
+    security: "Strong (AES-256-GCM)",
+    description:
+      "FREE encryption using environment variable key. Perfect for startups!",
+    icon: "💚",
+    recommended: true,
+    bestFor: "Startups, internal tools, < 100K users",
+    color: "text-green-600",
+    requirements: "ENCRYPTION_MASTER_KEY (64-char hex)",
+  },
+  {
+    value: "aws_kms" as const,
+    label: "AWS KMS (Enterprise)",
+    cost: "~$7/month",
+    security: "Bank-grade (HSM + Auto Rotation)",
+    description: "Enterprise encryption with AWS KMS. HIPAA/GDPR compliant.",
+    icon: "🔐",
+    recommended: false,
+    bestFor: "Medical data, financial data, enterprise, compliance",
+    color: "text-blue-600",
+    requirements: "AWS account, KMS_KEY_ID, AWS credentials",
+    compliance: "HIPAA, GDPR, PCI DSS",
+  },
+];
+
 export default function Step5FeatureSelection() {
   const { config, updateFeatureSelection } = useWizardStore();
   const features = config.featureSelection ?? ({} as FeatureSelection);
@@ -272,6 +312,129 @@ export default function Step5FeatureSelection() {
           })}
         </div>
 
+        {/* Field-Level Encryption Strategy */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Shield className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+              🔐 Field-Level Encryption Strategy
+            </h3>
+          </div>
+
+          <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+            <Info className="w-4 h-4 text-amber-600" />
+            <AlertDescription className="text-sm text-amber-900 dark:text-amber-100">
+              <strong>Choose your encryption strategy</strong> based on your
+              budget and compliance needs. Encrypts sensitive fields
+              (healthHistory, SSN, etc.) before storing in MongoDB.{" "}
+              <strong>Start with LOCAL (free)</strong>, upgrade to AWS KMS later
+              for compliance.
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid gap-3">
+            {ENCRYPTION_STRATEGIES.map((strategy) => {
+              const isSelected = features.encryptionStrategy === strategy.value;
+
+              return (
+                <Card
+                  key={strategy.value}
+                  onClick={() =>
+                    updateFeatureSelection({
+                      encryptionStrategy: strategy.value,
+                    })
+                  }
+                  className={`p-5 cursor-pointer transition-all duration-200 hover:shadow-md ${
+                    isSelected
+                      ? "border-primary/50 bg-primary/10 ring-2 ring-primary/20"
+                      : "border-border hover:border-primary/30"
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="text-3xl flex-shrink-0">
+                      {strategy.icon}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-base">
+                          {strategy.label}
+                        </h3>
+                        {strategy.recommended && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100 font-medium">
+                            💡 Recommended
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {strategy.description}
+                      </p>
+
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="px-2 py-1 rounded-md bg-background border">
+                          <strong>Cost:</strong> {strategy.cost}
+                        </span>
+                        <span className="px-2 py-1 rounded-md bg-background border">
+                          <strong>Security:</strong> {strategy.security}
+                        </span>
+                        {strategy.compliance && (
+                          <span className="px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
+                            ✅ {strategy.compliance}
+                          </span>
+                        )}
+                      </div>
+
+                      {strategy.requirements && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          <strong>Requirements:</strong> {strategy.requirements}
+                        </p>
+                      )}
+
+                      <p className="text-xs text-muted-foreground mt-2">
+                        <strong>Best for:</strong> {strategy.bestFor}
+                      </p>
+                    </div>
+
+                    {isSelected && (
+                      <div className="flex-shrink-0">
+                        <CheckCircle2 className="w-6 h-6 text-primary" />
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          {features.encryptionStrategy !== "disabled" && (
+            <Alert className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+              <AlertDescription className="text-sm text-green-900 dark:text-green-100">
+                ✅ <strong>Encryption enabled!</strong> Sensitive fields will be
+                encrypted with{" "}
+                {features.encryptionStrategy === "local" ? (
+                  <>
+                    <strong>FREE local AES-256-GCM</strong>. Set{" "}
+                    <code className="bg-green-100 dark:bg-green-900 px-1 rounded">
+                      ENCRYPTION_MASTER_KEY
+                    </code>{" "}
+                    in your .env file.
+                  </>
+                ) : (
+                  <>
+                    <strong>AWS KMS</strong> (~$7/month). Configure{" "}
+                    <code className="bg-green-100 dark:bg-green-900 px-1 rounded">
+                      KMS_KEY_ID
+                    </code>{" "}
+                    in your .env file.
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+
         {/* Feature Summary */}
         <Card className="p-4 bg-secondary/30">
           <div className="flex items-center gap-3">
@@ -307,6 +470,7 @@ ${features.rateLimit ? "  // Rate limiting via Throttler module" : ""}
 ${features.caching ? "  // Redis caching via CacheModule" : ""}
 ${features.queues ? "  // BullMQ queues: email, notification, document, cleanup" : ""}
 ${features.s3Upload ? "  // S3 file uploads with presigned URLs and lifecycle" : ""}
+${features.encryptionStrategy && features.encryptionStrategy !== "disabled" ? `  // 🔐 Encryption: ${features.encryptionStrategy.toUpperCase()} (${features.encryptionStrategy === "local" ? "FREE" : "~$7/mo"})` : ""}
   await app.listen(process.env.PORT || 3000);
 }`}
           </pre>

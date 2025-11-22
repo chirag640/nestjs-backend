@@ -167,6 +167,11 @@ export const featureSelectionSchema = z.object({
 
   // File Upload with S3 Lifecycle Management
   s3Upload: z.boolean().default(false), // Enable AWS S3 file uploads with presigned URLs and lifecycle rules
+
+  // Field-Level Encryption Strategy
+  encryptionStrategy: z
+    .enum(["disabled", "local", "aws_kms"])
+    .default("disabled"), // Encryption strategy: disabled (FREE, no encryption), local (FREE, env key), aws_kms (PAID ~$7/mo, enterprise)
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;
@@ -256,6 +261,9 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     health: true,
     rateLimit: false,
     versioning: false,
+    queues: false,
+    s3Upload: false,
+    encryptionStrategy: "disabled" as const,
   },
   dockerConfig: {
     enabled: true,

@@ -1,0 +1,601 @@
+# 🔐 Field-Level Encryption Guide
+
+## Table of Contents
+- [Overview](#overview)
+- [Why Encryption is Critical](#why-encryption-is-critical)
+- [Architecture](#architecture)
+- [Setup Guide](#setup-guide)
+- [Usage Examples](#usage-examples)
+- [Security Best Practices](#security-best-practices)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+
+---
+
+## Overview
+
+This application uses **bank-grade field-level encryption** to protect sensitive data:
+
+- **AES-256-GCM** for encryption (same as Stripe, WhatsApp, PayPal)
+- **AWS KMS** for key management
+- **Unique DEK per record** (Data Encryption Key)
+- **Authentication tags** prevent tampering
+
+### What Gets Encrypted?
+
+**MongoDB Fields:**
+- Health records (diagnoses, prescriptions, allergies)
+- Personal information (SSN, phone, address)
+- Financial data (salary, bank accounts)
+- Medical notes and treatment plans
+
+**S3 Files:**
+- Medical documents (X-rays, lab results)
+- Prescriptions and test reports
+- Patient photos and scans
+
+---
+
+## Why Encryption is Critical
+
+### ❌ Without Encryption
+
+**MongoDB breach** → All patient data exposed  
+**S3 bucket leaked** → Medical documents public  
+**Admin access** → Can read all sensitive fields  
+**Backup stolen** → Complete data loss  
+**Dev mistake** → Catastrophic consequences  
+
+### ✅ With Encryption
+
+**MongoDB breach** → Data is unreadable garbage  
+**S3 bucket leaked** → Files are encrypted (useless to attackers)  
+**Admin access** → Cannot decrypt sensitive fields  
+**Backup stolen** → Encrypted backups remain safe  
+**Dev mistake** → Minimal impact  
+
+### Legal Requirements
+
+- **HIPAA** (Health Insurance Portability and Accountability Act)
+- **GDPR** (General Data Protection Regulation)
+- **India DPDPA** (Digital Personal Data Protection Act)
+- **Medical Privacy Laws** (varies by country)
+
+**Encryption is NOT optional for medical data.**
+
+---
+
+## Architecture
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     ENCRYPTION FLOW                          │
+└─────────────────────────────────────────────────────────────┘
+
+1. WRITE OPERATION
+   ┌───────────┐
+   │   User    │ Submits patient data with sensitive fields
+   └─────┬─────┘
+         │
+         ▼
+   ┌──────────────────┐
+   │  NestJS Service  │ Calls encryptionService.encryptRecord()
+   └─────┬────────────┘
+         │
+         ▼
+   ┌──────────────────┐
+   │   KMS Service    │ Generates unique DEK for this record
+   └─────┬────────────┘
+         │
+         ├─► Plaintext DEK (32 bytes) → Used for AES encryption
+         └─► Encrypted DEK (stored in DB) → For later decryption
+         
+   ┌──────────────────┐
+   │ Encryption Util  │ Encrypts fields with AES-256-GCM
+   └─────┬────────────┘
+         │
+         ├─► Ciphertext (encrypted data)
+         ├─► IV (initialization vector)
+         └─► Auth Tag (prevents tampering)
+         
+   ┌──────────────────┐
+   │    MongoDB       │ Stores: {
+   └──────────────────┘   _encrypted: { healthHistory: {...}, allergies: {...} },
+                          _encryptedDek: <Buffer...>,
+                          name: "John" (unencrypted)
+                       }
+
+2. READ OPERATION
+   ┌───────────┐
+   │  MongoDB  │ Returns encrypted record
+   └─────┬─────┘
+         │
+         ▼
+   ┌──────────────────┐
+   │   KMS Service    │ Decrypts DEK
+   └─────┬────────────┘
+         │
+         └─► Plaintext DEK (in memory only)
+         
+   ┌──────────────────┐
+   │ Encryption Util  │ Decrypts fields + verifies auth tag
+   └─────┬────────────┘
+         │
+         ├─► Verifies IV
+         ├─► Verifies Auth Tag (detects tampering)
+         └─► Returns plaintext
+         
+   ┌──────────────────┐
+   │  NestJS Service  │ Returns decrypted data to user
+   └──────────────────┘
+```
+
+### Key Components
+
+**1. KmsService** (`src/common/kms.service.ts`)
+- Communicates with AWS KMS
+- Generates unique DEK per record
+- Decrypts DEK when reading data
+- Never stores plaintext keys
+
+**2. EncryptionService** (`src/common/encryption.service.ts`)
+- High-level encryption/decryption API
+- Handles multiple fields per record
+- Auto-detects sensitive field names
+- Batch operations for arrays
+
+**3. Encryption Utilities** (`src/common/encryption.util.ts`)
+- Low-level AES-256-GCM implementation
+- IV generation and management
+- Auth tag verification
+- Tamper detection
+
+**4. EncryptionInterceptor** (`src/common/encryption.interceptor.ts`)
+- Automatic encryption/decryption
+- Uses `@Encrypt()` decorator
+- Works with GET/POST/PUT/PATCH
+
+---
+
+## Setup Guide
+
+### Step 1: Create KMS Key in AWS
+
+```bash
+# Using AWS CLI
+aws kms create-key \
+  --description "Medical data encryption key - Production" \
+  --key-usage ENCRYPT_DECRYPT \
+  --origin AWS_KMS
+
+# Create alias for easy reference
+aws kms create-alias \
+  --alias-name alias/medical-data-prod \
+  --target-key-id <KEY_ID>
+```
+
+**Or use AWS Console:**
+1. Go to https://console.aws.amazon.com/kms
+2. Click "Create key"
+3. Choose "Symmetric" and "Encrypt and decrypt"
+4. Set description: "Medical data encryption"
+5. Choose key administrators
+6. Define key usage permissions (your IAM user/role)
+7. Copy the **Key ID** (e.g., `arn:aws:kms:us-east-1:123456789012:key/abcd-1234...`)
+
+### Step 2: Configure IAM Permissions
+
+Your IAM user/role needs these permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "kms:GenerateDataKey",
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Resource": "arn:aws:kms:us-east-1:123456789012:key/YOUR_KEY_ID"
+    }
+  ]
+}
+```
+
+### Step 3: Configure Environment Variables
+
+Edit `.env`:
+
+```bash
+# Enable field-level encryption
+ENABLE_FIELD_ENCRYPTION=true
+
+# AWS KMS Configuration
+AWS_REGION=us-east-1
+KMS_KEY_ID=arn:aws:kms:us-east-1:123456789012:key/abcd-1234-5678-90ab-cdef12345678
+
+# AWS Credentials (if not using IAM roles)
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+```
+
+### Step 4: Enable Automatic Key Rotation
+
+```bash
+aws kms enable-key-rotation --key-id <KEY_ID>
+```
+
+Or in AWS Console:
+1. Go to KMS → Customer managed keys
+2. Select your key
+3. Go to "Key rotation" tab
+4. Enable "Automatically rotate this KMS key every year"
+
+---
+
+## Usage Examples
+
+### Option 1: Manual Encryption (Full Control)
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { EncryptionService } from './common/encryption.service';
+
+@Injectable()
+export class WorkerService {
+  constructor(
+    private readonly encryptionService: EncryptionService,
+    private readonly workerRepository: WorkerRepository,
+  ) {}
+
+  async create(data: CreateWorkerDto) {
+    // Encrypt sensitive fields before saving
+    const encrypted = await this.encryptionService.encryptRecord(data, [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'socialSecurityNumber',
+    ]);
+
+    return this.workerRepository.save(encrypted);
+  }
+
+  async findOne(id: string) {
+    const encrypted = await this.workerRepository.findById(id);
+
+    // Decrypt sensitive fields after reading
+    const decrypted = await this.encryptionService.decryptRecord(encrypted, [
+      'healthHistory',
+      'allergies',
+      'currentMedication',
+      'socialSecurityNumber',
+    ]);
+
+    return decrypted;
+  }
+}
+```
+
+### Option 2: Automatic Encryption (Using Interceptor)
+
+```typescript
+import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Encrypt } from './common/encryption.interceptor';
+
+@Controller('workers')
+export class WorkersController {
+  constructor(private readonly workerService: WorkerService) {}
+
+  // Automatically encrypts response data
+  @Encrypt(['healthHistory', 'allergies', 'currentMedication'])
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.workerService.findOne(id); // Returns encrypted data from DB
+    // Interceptor automatically decrypts before sending response
+  }
+
+  // Automatically encrypts request body
+  @Encrypt(['healthHistory', 'allergies', 'currentMedication'])
+  @Post()
+  async create(@Body() data: CreateWorkerDto) {
+    // Interceptor automatically encrypts before passing to service
+    return this.workerService.create(data);
+  }
+}
+```
+
+### Option 3: Auto-Detect Sensitive Fields
+
+```typescript
+const sensitiveFields = this.encryptionService.detectSensitiveFields(data);
+// Returns: ['healthHistory', 'allergies', 'socialSecurityNumber', 'phoneNumber']
+
+const encrypted = await this.encryptionService.encryptRecord(
+  data,
+  sensitiveFields,
+);
+```
+
+### Batch Operations
+
+```typescript
+// Encrypt multiple records
+const encryptedRecords = await this.encryptionService.encryptRecords(
+  workers,
+  ['healthHistory', 'allergies'],
+);
+
+// Decrypt multiple records
+const decryptedRecords = await this.encryptionService.decryptRecords(
+  encryptedWorkers,
+  ['healthHistory', 'allergies'],
+);
+```
+
+### S3 File Encryption (Automatic)
+
+S3 files are automatically encrypted using KMS when uploaded:
+
+```typescript
+// In s3-lifecycle.service.ts
+const command = new PutObjectCommand({
+  Bucket: this.bucket,
+  Key: storagePath,
+  ServerSideEncryption: 'aws:kms', // KMS encryption
+  SSEKMSKeyId: this.configService.get<string>('KMS_KEY_ID'),
+});
+```
+
+Files are encrypted **at rest** in S3. No code changes needed!
+
+---
+
+## Security Best Practices
+
+### ✅ DO These
+
+1. **Enable automatic key rotation** (every 90 days)
+   ```bash
+   aws kms enable-key-rotation --key-id <KEY_ID>
+   ```
+
+2. **Use separate KMS keys for each environment**
+   - Dev: `alias/medical-data-dev`
+   - Staging: `alias/medical-data-staging`
+   - Prod: `alias/medical-data-prod`
+
+3. **Monitor KMS API calls**
+   - Enable AWS CloudTrail
+   - Set up alarms for unusual activity
+   - Review KMS usage monthly
+
+4. **Encrypt MongoDB backups**
+   ```bash
+   mongodump --archive=backup.gz --gzip
+   aws s3 cp backup.gz s3://backups/ --sse aws:kms --sse-kms-key-id <KEY_ID>
+   ```
+
+5. **Zero out keys from memory**
+   ```typescript
+   const key = Buffer.from(plaintextKey);
+   // ... use key ...
+   key.fill(0); // Zero out before garbage collection
+   ```
+
+6. **Sanitize logs**
+   - Never log plaintext sensitive data
+   - Never log encryption keys
+   - Filter sensitive fields in logging middleware
+
+7. **Use HTTPS everywhere**
+   - Force SSL/TLS in production
+   - No plaintext data over network
+   - Certificate pinning for mobile apps
+
+8. **Validate decryption success**
+   ```typescript
+   try {
+     const decrypted = await this.encryptionService.decryptRecord(record, fields);
+   } catch (error) {
+     if (error.message.includes('integrity check failed')) {
+       // Data was tampered with!
+       this.logger.error('Data tampering detected');
+       throw new UnauthorizedException('Data integrity violation');
+     }
+   }
+   ```
+
+### ❌ DO NOT Do These
+
+1. ❌ Store plaintext keys in database
+2. ❌ Use same DEK for multiple records
+3. ❌ Disable encryption after enabling (data becomes unreadable)
+4. ❌ Commit KMS_KEY_ID to public repos
+5. ❌ Skip IV/auth tag (fatal security flaw)
+6. ❌ Use environment variables for master key (use KMS)
+7. ❌ Encrypt everything (kills performance - only encrypt sensitive fields)
+8. ❌ Store unencrypted backups
+
+---
+
+## Troubleshooting
+
+### Error: "KMS encryption is not enabled"
+
+**Cause:** `ENABLE_FIELD_ENCRYPTION` is not set to `true`
+
+**Fix:**
+```bash
+# .env
+ENABLE_FIELD_ENCRYPTION=true
+```
+
+### Error: "KMS key generation failed: AccessDeniedException"
+
+**Cause:** IAM user lacks KMS permissions
+
+**Fix:**
+```bash
+# Add KMS permissions to IAM user
+aws iam put-user-policy \
+  --user-name your-iam-user \
+  --policy-name KMSEncryptionPolicy \
+  --policy-document file://kms-policy.json
+```
+
+### Error: "Data integrity check failed. Data may have been tampered with."
+
+**Cause:** Authentication tag mismatch (data was modified or corrupted)
+
+**Possible reasons:**
+- Database corruption
+- Direct database modification bypassing encryption
+- Encryption key changed mid-flight
+- Network corruption
+
+**Fix:**
+1. Check database integrity
+2. Restore from backup
+3. Never manually edit encrypted fields in MongoDB
+
+### Error: "Encryption key must be 32 bytes"
+
+**Cause:** Invalid KMS DEK size
+
+**Fix:**
+- Ensure KMS key is configured for `AES_256` (256-bit keys)
+- Regenerate KMS key if needed
+
+### Performance Issues
+
+**Symptom:** Slow read/write operations
+
+**Causes:**
+1. Encrypting too many fields
+2. Large field values
+3. Batch operations without pagination
+
+**Fixes:**
+```typescript
+// Only encrypt truly sensitive fields
+const sensitiveFields = ['healthHistory', 'ssn']; // Not 'name', 'email'
+
+// Paginate large queries
+const workers = await this.workerRepository.find({
+  skip: page * limit,
+  limit: limit,
+});
+
+// Use projection to avoid loading encrypted fields unnecessarily
+const workers = await this.workerRepository.find(
+  {},
+  { _encrypted: 0, _encryptedDek: 0 }, // Exclude if not needed
+);
+```
+
+---
+
+## FAQ
+
+### Q: Do I need to encrypt every field?
+
+**A:** No! Only encrypt **truly sensitive** fields:
+- ✅ Health records, diagnoses, prescriptions
+- ✅ SSN, tax ID, bank accounts
+- ✅ Passwords, tokens, API keys
+- ❌ Name, email, timestamps
+- ❌ Public information
+
+**Why?** Encryption adds overhead. Encrypt only what's legally required.
+
+### Q: What happens if I lose my KMS key?
+
+**A:** **All encrypted data becomes permanently unreadable.**
+
+**Prevention:**
+- Enable automatic backups of KMS keys
+- Use multi-region KMS keys
+- Document key ARNs in secure location
+- Never delete KMS keys (disable instead)
+
+### Q: Can I migrate from unencrypted to encrypted data?
+
+**A:** Yes! Run a migration script:
+
+```typescript
+async migrateToEncryption() {
+  const workers = await this.workerRepository.find({
+    _encrypted: { $exists: false }, // Find unencrypted records
+  });
+
+  for (const worker of workers) {
+    const encrypted = await this.encryptionService.encryptRecord(worker, [
+      'healthHistory',
+      'allergies',
+    ]);
+    await this.workerRepository.update(worker.id, encrypted);
+  }
+}
+```
+
+### Q: Does encryption work with MongoDB indexes?
+
+**A:** **Encrypted fields cannot be indexed** (ciphertext is random).
+
+**Solution:**
+- Index non-encrypted fields (name, email, timestamps)
+- Use encrypted field only for storage, not queries
+- Store searchable hash alongside encrypted value:
+
+```typescript
+record.emailEncrypted = encryptAES(email, key);
+record.emailHash = crypto.createHash('sha256').update(email).digest('hex');
+// Index emailHash for searching
+```
+
+### Q: How much does KMS cost?
+
+**AWS KMS Pricing (as of 2024):**
+- $1/month per customer master key
+- $0.03 per 10,000 API requests
+
+**Example:**
+- 1 million records/month
+- 2 API calls per record (encrypt + decrypt)
+- Cost: $1 + ($0.03 × 200) = **$7/month**
+
+**Worth it?** Absolutely. Data breach costs average **$4.45 million**.
+
+### Q: Can I use this without AWS?
+
+**A:** Yes! Replace `KmsService` with local key management:
+
+```typescript
+// Use environment variable as master key (less secure)
+const masterKey = process.env.ENCRYPTION_MASTER_KEY;
+const dek = crypto.randomBytes(32); // Generate DEK locally
+const encryptedDek = encryptAES(dek.toString('hex'), masterKey);
+```
+
+**Warning:** Not recommended for production. KMS provides:
+- Hardware security modules (HSMs)
+- Automatic key rotation
+- Audit logging
+- Multi-region redundancy
+
+---
+
+## Summary
+
+✅ **Enabled:** Field-level encryption with KMS + AES-256-GCM  
+✅ **Protected:** Medical records, PII, financial data  
+✅ **Compliant:** HIPAA, GDPR, DPDPA  
+✅ **Secure:** Same architecture as Stripe, PayPal, healthcare systems  
+✅ **Monitored:** CloudTrail, alarms, key rotation  
+
+**Your data is now enterprise-grade secure.** 🔒
+
