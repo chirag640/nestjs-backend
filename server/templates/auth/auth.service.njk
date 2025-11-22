@@ -6,6 +6,9 @@ import * as bcrypt from 'bcryptjs';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 {% endif %}
+{% if features.queues %}
+import { NotificationProducer } from '../modules/queue/producers/notification.producer';
+{% endif %}
 import { UserRepository } from '../user/user.repository';
 import { RegisterDto } from './dtos/register.dto';
 import { LoginDto } from './dtos/login.dto';
@@ -20,6 +23,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly emailVerificationService: EmailVerificationService,
     {% if features.cache %}@Inject(CACHE_MANAGER) private cacheManager: Cache,{% endif %}
+    {% if features.queues %}private readonly notificationProducer: NotificationProducer,{% endif %}
   ) {}
 
   async register(dto: RegisterDto) {
@@ -48,10 +52,24 @@ export class AuthService {
     {% endif %}
 
     // Send email verification (async, don't block registration)
+    {% if features.queues %}
+    // Queue email notification for async processing
+    this.notificationProducer.sendEmail({
+      userId: user._id.toString(),
+      type: 'verification',
+      to: user.email,
+      subject: 'Verify your email address',
+      template: 'email-verification',
+      data: { verificationUrl: `${this.configService.get('APP_URL')}/auth/verify?token=${user.emailVerificationToken}` },
+    }).catch((error) => {
+      console.error('Failed to queue verification email:', error);
+    });
+    {% else %}
     this.emailVerificationService.sendVerificationEmail(user._id.toString()).catch((error) => {
       // Log error but don't fail registration
       console.error('Failed to send verification email:', error);
     });
+    {% endif %}
 
     return {
       ...tokens,

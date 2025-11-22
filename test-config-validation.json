@@ -186,6 +186,7 @@
     "swagger": true,
     "health": true,
     "rateLimit": true,
-    "versioning": false
+    "versioning": false,
+    "queues": true
   }
 }

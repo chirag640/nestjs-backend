@@ -1,0 +1,103 @@
+{
+  "projectSetup": {
+    "projectName": "test-queue-app",
+    "description": "Test application with BullMQ background job queues",
+    "author": "Test Author",
+    "license": "MIT",
+    "nodeVersion": "20",
+    "packageManager": "npm"
+  },
+  "databaseConfig": {
+    "databaseType": "MongoDB",
+    "provider": "Atlas",
+    "connectionString": "mongodb+srv://user:password@cluster.mongodb.net/testapp",
+    "autoMigration": "push"
+  },
+  "modelDefinition": {
+    "models": [
+      {
+        "name": "User",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "unique": true
+          },
+          { "name": "name", "type": "string", "required": true },
+          {
+            "name": "role",
+            "type": "enum",
+            "values": ["admin", "user"],
+            "default": "user"
+          }
+        ]
+      },
+      {
+        "name": "Task",
+        "timestamps": true,
+        "fields": [
+          { "name": "title", "type": "string", "required": true },
+          { "name": "description", "type": "string" },
+          {
+            "name": "status",
+            "type": "enum",
+            "values": ["pending", "processing", "completed", "failed"],
+            "default": "pending"
+          },
+          { "name": "priority", "type": "number", "default": 5 }
+        ]
+      },
+      {
+        "name": "Document",
+        "timestamps": true,
+        "fields": [
+          { "name": "filename", "type": "string", "required": true },
+          { "name": "mimeType", "type": "string", "required": true },
+          { "name": "size", "type": "number", "required": true },
+          { "name": "checksum", "type": "string" },
+          { "name": "processed", "type": "boolean", "default": false }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "type": "many-to-one",
+        "sourceModel": "Task",
+        "targetModel": "User",
+        "fieldName": "assignedTo"
+      },
+      {
+        "type": "many-to-one",
+        "sourceModel": "Document",
+        "targetModel": "User",
+        "fieldName": "uploadedBy"
+      }
+    ]
+  },
+  "authConfig": {
+    "enabled": true,
+    "method": "jwt",
+    "jwt": {
+      "accessTTL": "15m",
+      "refreshTTL": "7d",
+      "rotation": true,
+      "blacklist": true
+    },
+    "roles": ["admin", "user"]
+  },
+  "featureSelection": {
+    "cors": true,
+    "helmet": true,
+    "compression": true,
+    "validation": true,
+    "logging": true,
+    "caching": true,
+    "swagger": true,
+    "health": true,
+    "rateLimit": true,
+    "versioning": false,
+    "queues": true
+  }
+}

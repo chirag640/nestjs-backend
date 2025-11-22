@@ -138,6 +138,9 @@ export interface FeaturesIR {
   health: boolean; // Terminus health checks
   rateLimit: boolean; // Throttler rate limiting
   versioning: boolean; // URI-based API versioning
+
+  // Background job queues
+  queues: boolean; // BullMQ job queues with BullBoard monitoring
 }
 
 /**

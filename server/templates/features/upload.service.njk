@@ -3,6 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+{% if features.queues %}
+import { DocumentProducer } from '../queue/producers/document.producer';
+{% endif %}
 
 export interface UploadedFileInfo {
   filename: string;
@@ -18,7 +21,12 @@ export class UploadService {
   private readonly logger = new Logger(UploadService.name);
   private readonly uploadDir: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    {% if features.queues %}
+    private readonly documentProducer: DocumentProducer,
+    {% endif %}
+  ) {
     this.uploadDir = this.configService.get<string>('UPLOAD_DIR', './uploads');
   }
 
@@ -32,7 +40,7 @@ export class UploadService {
     const fileBuffer = await fs.readFile(file.path);
     const checksum = createHash('sha256').update(fileBuffer).digest('hex');
 
-    return {
+    const fileInfo: UploadedFileInfo = {
       filename: file.filename,
       originalName: file.originalname,
       mimeType: file.mimetype,
@@ -40,6 +48,40 @@ export class UploadService {
       path: file.path,
       checksum,
     };
+
+    {% if features.queues %}
+    // Queue background processing jobs
+    try {
+      // Generate thumbnails for images
+      if (file.mimetype.startsWith('image/')) {
+        await this.documentProducer.generateThumbnail({
+          fileId: file.filename,
+          filePath: file.path,
+          sizes: [{ width: 150, height: 150 }, { width: 300, height: 300 }],
+        });
+      }
+
+      // Perform OCR for PDFs/images
+      if (file.mimetype === 'application/pdf' || file.mimetype.startsWith('image/')) {
+        await this.documentProducer.performOCR({
+          fileId: file.filename,
+          filePath: file.path,
+          language: 'eng',
+        });
+      }
+
+      // Schedule cleanup for old temp files
+      await this.documentProducer.cleanupDocument({
+        fileId: file.filename,
+        reason: 'temp_file_expiration',
+      });
+    } catch (error) {
+      this.logger.error('Failed to queue document processing jobs:', error);
+      // Don't fail the upload if background jobs fail to queue
+    }
+    {% endif %}
+
+    return fileInfo;
   }
 
   /**

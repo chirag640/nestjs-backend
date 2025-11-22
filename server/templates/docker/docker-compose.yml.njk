@@ -60,6 +60,14 @@ services:
 {% if features.caching %}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {% endif %}
+{% if features.queues %}
+      - QUEUE_REDIS_URL=${QUEUE_REDIS_URL:-redis://redis-queue:6379/1}
+      - QUEUE_NOTIFICATION_CONCURRENCY=${QUEUE_NOTIFICATION_CONCURRENCY:-5}
+      - QUEUE_DOCUMENT_CONCURRENCY=${QUEUE_DOCUMENT_CONCURRENCY:-3}
+      - QUEUE_SYNC_CONCURRENCY=${QUEUE_SYNC_CONCURRENCY:-2}
+      - QUEUE_ANALYTICS_CONCURRENCY=${QUEUE_ANALYTICS_CONCURRENCY:-1}
+      - QUEUE_CLEANUP_CONCURRENCY=${QUEUE_CLEANUP_CONCURRENCY:-1}
+{% endif %}
     depends_on:
 {% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
       - mongo
@@ -70,6 +78,9 @@ services:
 {% endif %}
 {% if features.caching %}
       - redis
+{% endif %}
+{% if features.queues %}
+      - redis-queue
 {% endif %}
     volumes:
       # Mount only source code directories, exclude build artifacts
@@ -162,6 +173,58 @@ services:
       retries: 5
 
 {% endif %}
+{% if features.queues %}
+  redis-queue:
+    image: redis:7-alpine
+    container_name: {{ projectName | lower }}-redis-queue
+    restart: always
+    ports:
+      - "${QUEUE_REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis-queue-data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Optional: Dedicated Queue Worker (for production scaling)
+  # Uncomment to run worker as separate process
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: {{ projectName | lower }}-worker
+  #   command: npm run worker:start
+  #   environment:
+  #     - NODE_ENV=production
+  #     - QUEUE_REDIS_URL=redis://redis-queue:6379/1
+{% if database.type === 'MongoDB' %}
+  #     - DATABASE_URL=mongodb://mongo:27017/{{ project.name | lower }}
+{% elif database.type === 'PostgreSQL' %}
+  #     - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/{{ project.name | lower }}
+{% elif database.type === 'MySQL' %}
+  #     - DATABASE_URL=mysql://root:root@mysql:3306/{{ project.name | lower }}
+{% endif %}
+  #   depends_on:
+  #     - redis-queue
+{% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
+  #     - mongo
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'postgres' %}
+  #     - postgres
+{% elif (orm == 'typeorm' or orm == 'prisma') and dbType == 'mysql' %}
+  #     - mysql
+{% endif %}
+  #   networks:
+  #     - app-network
+  #   restart: unless-stopped
+  #   deploy:
+  #     replicas: 1  # Scale workers by increasing this number
+
+{% endif %}
 volumes:
 {% if orm == 'mongoose' or (orm == 'prisma' and dbType == 'mongodb') %}
   mongo-data:
@@ -172,6 +235,9 @@ volumes:
 {% endif %}
 {% if features.caching %}
   redis-data:
+{% endif %}
+{% if features.queues %}
+  redis-queue-data:
 {% endif %}
 
 networks:

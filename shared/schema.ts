@@ -161,6 +161,9 @@ export const featureSelectionSchema = z.object({
   health: z.boolean().default(true), // Terminus health checks
   rateLimit: z.boolean().default(false), // Throttler rate limiting
   versioning: z.boolean().default(false), // URI-based API versioning (v1, v2)
+
+  // Background Job Queues (BullMQ)
+  queues: z.boolean().default(false), // Enable BullMQ job queues for background processing
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;

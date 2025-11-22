@@ -22,6 +22,9 @@ import { HealthModule } from './modules/health/health.module';
 {% if features.rateLimit %}
 import { ThrottlerModule } from './modules/throttler/throttler.module';
 {% endif %}
+{% if features.queues %}
+import { QueueModule } from './modules/queue/queue.module';
+{% endif %}
 {% if models and models.length > 0 %}
 // Generated model modules
 {% for model in models %}
@@ -64,6 +67,9 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
 {% endif %}
 {% if features.rateLimit %}
     ThrottlerModule,
+{% endif %}
+{% if features.queues %}
+    QueueModule,
 {% endif %}
 {% if auth and auth.enabled %}
     AuthModule,

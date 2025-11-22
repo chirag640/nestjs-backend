@@ -1,0 +1,181 @@
+import { Module, Global } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+
+// Queue Names
+export const QUEUE_NAMES = {
+  NOTIFICATION: 'notifications',
+  DOCUMENT: 'documents',
+  SYNC: 'sync',
+  ANALYTICS: 'analytics',
+  CLEANUP: 'cleanup',
+} as const;
+
+// Processors
+import { NotificationProcessor } from './processors/notification.processor';
+import { DocumentProcessor } from './processors/document.processor';
+import { SyncProcessor } from './processors/sync.processor';
+import { AnalyticsProcessor } from './processors/analytics.processor';
+import { CleanupProcessor } from './processors/cleanup.processor';
+
+// Producers
+import { NotificationProducer } from './producers/notification.producer';
+import { DocumentProducer } from './producers/document.producer';
+import { SyncProducer } from './producers/sync.producer';
+import { AnalyticsProducer } from './producers/analytics.producer';
+import { CleanupProducer } from './producers/cleanup.producer';
+
+// Queue Configuration
+import { QueueConfigService } from './queue.config';
+
+@Global()
+@Module({
+  imports: [
+    // BullMQ Core Configuration
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('QUEUE_REDIS_URL') || configService.get<string>('REDIS_URL');
+        
+        if (!redisUrl) {
+          console.warn('⚠️  QUEUE_REDIS_URL not configured. Set QUEUE_REDIS_URL in .env to enable background job queues.');
+          console.warn('   Example: QUEUE_REDIS_URL=redis://localhost:6379/1');
+          console.warn('   To start Redis: docker run -d -p 6379:6379 redis:7-alpine');
+        }
+
+        // Parse Redis URL
+        const url = redisUrl ? new URL(redisUrl) : null;
+        
+        return {
+          connection: url ? {
+            host: url.hostname,
+            port: parseInt(url.port || '6379', 10),
+            ...(url.password && { password: url.password }),
+            db: parseInt(url.pathname?.slice(1) || '1', 10), // Default to DB 1 for queues
+            maxRetriesPerRequest: 1, // Fail fast if Redis unavailable
+            retryStrategy: (times: number) => {
+              if (times > 3) {
+                console.error('❌ Queue Redis connection failed. Please start Redis or disable queues feature.');
+                return null; // Stop retrying
+              }
+              return Math.min(times * 1000, 3000);
+            },
+            enableOfflineQueue: false, // Don't queue commands if disconnected
+          } : {
+            host: configService.get<string>('QUEUE_REDIS_HOST', 'localhost'),
+            port: configService.get<number>('QUEUE_REDIS_PORT', 6379),
+            password: configService.get<string>('QUEUE_REDIS_PASSWORD'),
+            db: configService.get<number>('QUEUE_REDIS_DB', 1),
+            maxRetriesPerRequest: 1,
+            retryStrategy: (times: number) => {
+              if (times > 3) {
+                console.error('❌ Queue Redis connection failed. Please start Redis or disable queues feature.');
+                return null;
+              }
+              return Math.min(times * 1000, 3000);
+            },
+            enableOfflineQueue: false,
+          },
+          defaultJobOptions: {
+            attempts: configService.get<number>('QUEUE_MAX_RETRY_ATTEMPTS', 3),
+            backoff: {
+              type: configService.get<string>('QUEUE_RETRY_BACKOFF_TYPE', 'exponential') as 'fixed' | 'exponential',
+              delay: configService.get<number>('QUEUE_RETRY_BACKOFF_DELAY', 2000),
+            },
+            removeOnComplete: {
+              age: 3600 * 24 * configService.get<number>('QUEUE_COMPLETED_RETENTION', 7), // 7 days
+              count: 1000, // Keep max 1000 completed jobs
+            },
+            removeOnFail: {
+              age: 3600 * 24 * configService.get<number>('QUEUE_FAILED_RETENTION', 30), // 30 days
+              count: 5000, // Keep max 5000 failed jobs for debugging
+            },
+          },
+        };
+      },
+    }),
+    
+    // Register Individual Queues
+    BullModule.registerQueue(
+      { name: QUEUE_NAMES.NOTIFICATION },
+      { name: QUEUE_NAMES.DOCUMENT },
+      { name: QUEUE_NAMES.SYNC },
+      { name: QUEUE_NAMES.ANALYTICS },
+      { name: QUEUE_NAMES.CLEANUP },
+    ),
+    
+    // BullBoard Monitoring UI (Always Enabled)
+    BullBoardModule.forRoot({
+      route: '/admin/queues',
+      adapter: ExpressAdapter,
+      boardOptions: {
+        uiConfig: {
+          boardTitle: '{{ project.name }} - Job Queues',
+          boardLogo: {
+            path: 'https://cdn.icon-icons.com/icons2/2699/PNG/512/bullmq_logo_icon_168717.png',
+            width: 48,
+            height: 48,
+          },
+          miscLinks: [
+            { text: 'API Docs', url: '/api/docs' },
+            { text: 'Health Check', url: '/health' },
+          ],
+        },
+      },
+    }),
+    BullBoardModule.forFeature(
+      {
+        name: QUEUE_NAMES.NOTIFICATION,
+        adapter: BullMQAdapter,
+      },
+      {
+        name: QUEUE_NAMES.DOCUMENT,
+        adapter: BullMQAdapter,
+      },
+      {
+        name: QUEUE_NAMES.SYNC,
+        adapter: BullMQAdapter,
+      },
+      {
+        name: QUEUE_NAMES.ANALYTICS,
+        adapter: BullMQAdapter,
+      },
+      {
+        name: QUEUE_NAMES.CLEANUP,
+        adapter: BullMQAdapter,
+      },
+    ),
+  ],
+  providers: [
+    // Configuration Service
+    QueueConfigService,
+    
+    // Processors (Workers)
+    NotificationProcessor,
+    DocumentProcessor,
+    SyncProcessor,
+    AnalyticsProcessor,
+    CleanupProcessor,
+    
+    // Producers (Job Creators)
+    NotificationProducer,
+    DocumentProducer,
+    SyncProducer,
+    AnalyticsProducer,
+    CleanupProducer,
+  ],
+  exports: [
+    BullModule,
+    QueueConfigService,
+    NotificationProducer,
+    DocumentProducer,
+    SyncProducer,
+    AnalyticsProducer,
+    CleanupProducer,
+  ],
+})
+export class QueueModule {}

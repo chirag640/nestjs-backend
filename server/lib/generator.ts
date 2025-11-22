@@ -778,6 +778,126 @@ async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
     }
   }
 
+  // Background Job Queues (BullMQ)
+  if (ir.features.queues) {
+    const queueFiles = await generateQueueFiles(ir);
+    files.push(...queueFiles);
+  }
+
+  return files;
+}
+
+/**
+ * Generate Background Job Queue files (BullMQ + BullBoard)
+ */
+async function generateQueueFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const queueTemplates = [
+    // Core queue infrastructure
+    {
+      template: "features/queues/queue.module.njk",
+      output: "src/modules/queue/queue.module.ts",
+    },
+    {
+      template: "features/queues/queue.config.njk",
+      output: "src/modules/queue/queue.config.ts",
+    },
+
+    // Job interfaces
+    {
+      template: "features/queues/interfaces/notification-jobs.interface.njk",
+      output: "src/modules/queue/interfaces/notification-jobs.interface.ts",
+    },
+    {
+      template: "features/queues/interfaces/document-jobs.interface.njk",
+      output: "src/modules/queue/interfaces/document-jobs.interface.ts",
+    },
+    {
+      template: "features/queues/interfaces/sync-jobs.interface.njk",
+      output: "src/modules/queue/interfaces/sync-jobs.interface.ts",
+    },
+    {
+      template: "features/queues/interfaces/analytics-jobs.interface.njk",
+      output: "src/modules/queue/interfaces/analytics-jobs.interface.ts",
+    },
+    {
+      template: "features/queues/interfaces/cleanup-jobs.interface.njk",
+      output: "src/modules/queue/interfaces/cleanup-jobs.interface.ts",
+    },
+
+    // Producers
+    {
+      template: "features/queues/producers/notification.producer.njk",
+      output: "src/modules/queue/producers/notification.producer.ts",
+    },
+    {
+      template: "features/queues/producers/document.producer.njk",
+      output: "src/modules/queue/producers/document.producer.ts",
+    },
+    {
+      template: "features/queues/producers/sync.producer.njk",
+      output: "src/modules/queue/producers/sync.producer.ts",
+    },
+    {
+      template: "features/queues/producers/analytics.producer.njk",
+      output: "src/modules/queue/producers/analytics.producer.ts",
+    },
+    {
+      template: "features/queues/producers/cleanup.producer.njk",
+      output: "src/modules/queue/producers/cleanup.producer.ts",
+    },
+
+    // Processors
+    {
+      template: "features/queues/processors/notification.processor.njk",
+      output: "src/modules/queue/processors/notification.processor.ts",
+    },
+    {
+      template: "features/queues/processors/document.processor.njk",
+      output: "src/modules/queue/processors/document.processor.ts",
+    },
+    {
+      template: "features/queues/processors/sync.processor.njk",
+      output: "src/modules/queue/processors/sync.processor.ts",
+    },
+    {
+      template: "features/queues/processors/analytics.processor.njk",
+      output: "src/modules/queue/processors/analytics.processor.ts",
+    },
+    {
+      template: "features/queues/processors/cleanup.processor.njk",
+      output: "src/modules/queue/processors/cleanup.processor.ts",
+    },
+
+    // Worker entry points
+    {
+      template: "features/queues/workers/queue-worker.main.njk",
+      output: "src/workers/queue-worker.main.ts",
+    },
+    {
+      template: "features/queues/workers/dedicated-worker.main.njk",
+      output: "src/workers/dedicated-worker.main.ts",
+    },
+    {
+      template: "features/queues/workers/README.md.njk",
+      output: "src/workers/README.md",
+      parser: "markdown",
+    },
+  ];
+
+  for (const { template, output, parser } of queueTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser
+        ? await formatCode(rendered, parser as any)
+        : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating queue file ${output}:`, error);
+    }
+  }
+
   return files;
 }
 
