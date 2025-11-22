@@ -12,6 +12,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPreviewRoutes(app);
 
   /**
+   * POST /api/validate-config
+   * Validate wizard configuration and return detailed errors with suggestions
+   */
+  app.post("/api/validate-config", async (req: Request, res: Response) => {
+    try {
+      const validationResult = wizardConfigSchema.safeParse(req.body);
+
+      if (!validationResult.success) {
+        // Transform Zod errors into user-friendly format with suggestions
+        const errors = validationResult.error.errors.map((err) => {
+          const path = err.path.join(".");
+          let suggestion = "";
+
+          // Provide helpful suggestions based on error type
+          if (err.code === "invalid_type") {
+            suggestion = `Expected type: ${err.expected}, but received: ${err.received}`;
+          } else if (err.code === "invalid_enum_value") {
+            const options = (err as any).options;
+            suggestion = `Valid options: ${options ? options.join(", ") : "see documentation"}`;
+          } else if (err.code === "too_small") {
+            suggestion = `Minimum ${(err as any).minimum} items required`;
+          } else if (err.code === "invalid_string") {
+            suggestion =
+              "Check format requirements (e.g., camelCase, PascalCase, regex pattern)";
+          }
+
+          return {
+            path,
+            message: err.message,
+            suggestion,
+            code: err.code,
+          };
+        });
+
+        return res.status(400).json({
+          valid: false,
+          errors,
+          summary: `Found ${errors.length} validation error(s)`,
+        });
+      }
+
+      // Additional semantic validation
+      const config = validationResult.data;
+      const warnings: any[] = [];
+
+      // Check for models with no relationships (might be intentional, but worth noting)
+      const models = config.modelDefinition?.models || [];
+      const relationships = config.modelDefinition?.relationships || [];
+
+      // Collect inline relationships
+      const allRelationships = [...relationships];
+      models.forEach((model) => {
+        if (model.relationships) {
+          allRelationships.push(...model.relationships);
+        }
+      });
+
+      if (models.length > 1 && allRelationships.length === 0) {
+        warnings.push({
+          type: "info",
+          message:
+            "You have multiple models but no relationships defined. Consider adding relationships if models are related.",
+        });
+      }
+
+      // Check for auth enabled but no User model
+      if (config.authConfig?.enabled) {
+        const hasUserModel = models.some((m) => m.name === "User");
+        if (!hasUserModel) {
+          warnings.push({
+            type: "warning",
+            message:
+              "Authentication is enabled but no 'User' model found. Auth system requires a User model.",
+          });
+        }
+      }
+
+      return res.json({
+        valid: true,
+        message: "Configuration is valid",
+        warnings,
+      });
+    } catch (error) {
+      console.error("Validation error:", error);
+      return res.status(500).json({
+        valid: false,
+        error: "Internal validation error",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  /**
    * POST /api/generate
    * Generate a NestJS project based on wizard configuration
    * Query param: mode=preview (returns sessionId) or mode=download (streams ZIP)

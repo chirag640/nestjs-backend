@@ -1,0 +1,60 @@
+import { Module } from '@nestjs/common';
+import { MulterModule } from '@nestjs/platform-express';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import { UploadService } from './upload.service';
+import { UploadController } from './upload.controller';
+
+@Module({
+  imports: [
+    MulterModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const uploadDir = configService.get<string>('UPLOAD_DIR', './uploads');
+        
+        // Ensure upload directory exists
+        if (!existsSync(uploadDir)) {
+          mkdirSync(uploadDir, { recursive: true });
+        }
+
+        return {
+          storage: diskStorage({
+            destination: (req, file, cb) => {
+              cb(null, uploadDir);
+            },
+            filename: (req, file, cb) => {
+              // Generate unique filename with original extension
+              const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+              const ext = extname(file.originalname);
+              const basename = file.originalname.replace(ext, '').replace(/[^a-zA-Z0-9]/g, '_');
+              cb(null, `${basename}-${uniqueSuffix}${ext}`);
+            },
+          }),
+          limits: {
+            fileSize: configService.get<number>('MAX_FILE_SIZE', 5 * 1024 * 1024), // 5MB default
+            files: configService.get<number>('MAX_FILES', 10), // 10 files max
+          },
+          fileFilter: (req, file, cb) => {
+            const allowedMimeTypes = configService.get<string>(
+              'ALLOWED_FILE_TYPES',
+              'image/jpeg,image/png,image/gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ).split(',');
+
+            if (allowedMimeTypes.includes(file.mimetype)) {
+              cb(null, true);
+            } else {
+              cb(new Error(`File type ${file.mimetype} is not allowed. Allowed types: ${allowedMimeTypes.join(', ')}`), false);
+            }
+          },
+        };
+      },
+    }),
+  ],
+  controllers: [UploadController],
+  providers: [UploadService],
+  exports: [UploadService],
+})
+export class UploadModule {}

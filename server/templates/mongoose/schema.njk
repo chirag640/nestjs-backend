@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document as MongooseDocument, Schema as MongooseSchema } from 'mongoose';
 
-export type {{ model.name }}Document = {{ model.name }} & Document;
+export type {{ model.name }}Document = {{ model.name }} & MongooseDocument;
 
 @Schema({% if model.timestamps %}{ timestamps: true }{% endif %})
 export class {{ model.name }} {
@@ -11,12 +11,34 @@ export class {{ model.name }} {
     required: {{ field.required | lower }},
     {% if field.unique %}unique: true,{% endif %}
     {% if field.indexed %}index: true,{% endif %}
-    {% if field.defaultValue !== undefined and field.defaultValue !== null %}default: {% if field.type === 'string' %}'{{ field.defaultValue | replace("\\", "\\\\") | replace("'", "\\'") }}'{% else %}{{ field.defaultValue }}{% endif %},{% endif %}
-    {% if field.enum %}enum: [{% for enumValue in field.enum %}'{{ enumValue | replace("\\", "\\\\") | replace("'", "\\'") }}'{% if not loop.last %}, {% endif %}{% endfor %}],{% endif %}
+    {% if field.defaultValue !== undefined and field.defaultValue !== null %}default: {% if field.defaultValue === 'now' %}Date.now{% elif field.type === 'string' or field.type === 'enum' %}'{{ field.defaultValue }}'{% else %}{{ field.defaultValue }}{% endif %},{% endif %}
+    {% if field.enum %}enum: [{% for enumValue in field.enum %}'{{ enumValue }}'{% if not loop.last %}, {% endif %}{% endfor %}],{% endif %}
   })
   {{ field.name }}!: {{ field.tsType }};
 
 {% endfor %}
+{% if relationships %}
+  // Relationship fields (foreign keys)
+{% for rel in relationships %}
+{% if rel.type == 'many-to-one' and rel.sourceModel == model.name %}
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ rel.targetModel }}', required: false, index: true })
+  {{ rel.fieldName }}?: MongooseSchema.Types.ObjectId;
+
+{% elif rel.type == 'one-to-many' and rel.targetModel == model.name %}
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ rel.sourceModel }}', required: false, index: true })
+  {{ rel.sourceModel | lower }}Id?: MongooseSchema.Types.ObjectId;
+
+{% elif rel.type == 'one-to-one' and rel.targetModel == model.name %}
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ rel.sourceModel }}', required: false, unique: true, index: true })
+  {{ rel.sourceModel | lower }}Id?: MongooseSchema.Types.ObjectId;
+
+{% elif rel.type == 'many-to-many' and rel.sourceModel == model.name and not rel.through %}
+  @Prop({ type: [MongooseSchema.Types.ObjectId], ref: '{{ rel.targetModel }}', default: [] })
+  {{ rel.fieldName }}?: MongooseSchema.Types.ObjectId[];
+
+{% endif %}
+{% endfor %}
+{% endif %}
 }
 
 export const {{ model.name }}Schema = SchemaFactory.createForClass({{ model.name }});
@@ -37,4 +59,37 @@ export const {{ model.name }}Schema = SchemaFactory.createForClass({{ model.name
 {% if uniqueFields.length > 0 and model.timestamps %}
 // Compound index for unique field lookups with timestamps
 {{ model.name }}Schema.index({ {{ uniqueFields[0] }}: 1, createdAt: -1 });
+{% endif %}
+
+{% if relationships %}
+// Relationship indexes
+{% for rel in relationships %}
+{% if rel.type == 'many-to-one' and rel.sourceModel == model.name %}
+{{ model.name }}Schema.index({ {{ rel.fieldName }}: 1 });
+{% elif rel.type == 'one-to-many' and rel.targetModel == model.name %}
+{{ model.name }}Schema.index({ {{ rel.sourceModel | lower }}Id: 1 });
+{% endif %}
+{% endfor %}
+
+// Virtual populate for relationships
+{% for rel in relationships %}
+{% if rel.type == 'one-to-many' and rel.sourceModel == model.name %}
+{{ model.name }}Schema.virtual('{{ rel.fieldName }}', {
+  ref: '{{ rel.targetModel }}',
+  localField: '_id',
+  foreignField: '{{ rel.sourceModel | lower }}Id',
+  justOne: false,
+});
+{% elif rel.type == 'one-to-one' and rel.sourceModel == model.name %}
+{{ model.name }}Schema.virtual('{{ rel.fieldName }}', {
+  ref: '{{ rel.targetModel }}',
+  localField: '_id',
+  foreignField: '{{ rel.sourceModel | lower }}Id',
+  justOne: true,
+});
+{% endif %}
+{% endfor %}
+
+{{ model.name }}Schema.set('toJSON', { virtuals: true });
+{{ model.name }}Schema.set('toObject', { virtuals: true });
 {% endif %}

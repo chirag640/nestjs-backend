@@ -17,7 +17,7 @@ export class {{ model.name }}Repository extends BaseRepository<{{ model.name }}D
   async create(data: Partial<{{ model.name }}>): Promise<{{ model.name }}> {
     const created = new this.{{ model.nameCamel }}Model(data);
     const saved = await created.save();
-    return saved.toObject();
+    return saved.toObject() as {{ model.name }};
   }
 
   async findAll(skip: number = 0, limit: number = 10): Promise<{{ model.name }}[]> {
@@ -27,27 +27,63 @@ export class {{ model.name }}Repository extends BaseRepository<{{ model.name }}D
       .limit(limit)
       .sort({ createdAt: -1 }) // Most recent first
       .lean()
-      .exec();
+      .exec() as Promise<{{ model.name }}[]>;
   }
 
   async findById(id: string): Promise<{{ model.name }} | null> {
-    return this.{{ model.nameCamel }}Model.findById(id).lean().exec();
+    return this.{{ model.nameCamel }}Model.findById(id).lean().exec() as Promise<{{ model.name }} | null>;
   }
 
   async update(id: string, data: Partial<{{ model.name }}>): Promise<{{ model.name }} | null> {
     return this.{{ model.nameCamel }}Model
       .findByIdAndUpdate(id, data, { new: true })
       .lean()
-      .exec();
+      .exec() as Promise<{{ model.name }} | null>;
   }
 
   async delete(id: string): Promise<{{ model.name }} | null> {
-    return this.{{ model.nameCamel }}Model.findByIdAndDelete(id).lean().exec();
+    return this.{{ model.nameCamel }}Model.findByIdAndDelete(id).lean().exec() as Promise<{{ model.name }} | null>;
   }
 
   async count(): Promise<number> {
     return this.{{ model.nameCamel }}Model.countDocuments().exec();
   }
+
+{% for field in model.fields %}{% if field.unique %}
+  async findBy{{ field.name | capitalize }}({{ field.name }}: {{ field.tsType }}): Promise<{{ model.name }} | null> {
+    return this.{{ model.nameCamel }}Model.findOne({ {{ field.name }} }).lean().exec() as Promise<{{ model.name }} | null>;
+  }
+{% endif %}{% endfor %}
+
+{% if relationships %}
+  // Relationship query methods
+{% for rel in relationships %}
+{% if rel.type == 'many-to-one' and rel.sourceModel == model.name %}
+  async findBy{{ rel.fieldName | capitalize }}({{ rel.fieldName }}: string): Promise<{{ model.name }}[]> {
+    return this.{{ model.nameCamel }}Model
+      .find({ {{ rel.fieldName }} })
+      .lean()
+      .exec() as Promise<{{ model.name }}[]>;
+  }
+
+  async findBy{{ rel.fieldName | capitalize }}WithRelations({{ rel.fieldName }}: string): Promise<any[]> {
+    return this.{{ model.nameCamel }}Model
+      .find({ {{ rel.fieldName }} })
+      .populate('{{ rel.fieldName }}')
+      .exec();
+  }
+
+{% elif rel.type == 'one-to-many' and rel.targetModel == model.name %}
+  async findBy{{ rel.sourceModel }}Id({{ rel.sourceModel | lower }}Id: string): Promise<{{ model.name }}[]> {
+    return this.{{ model.nameCamel }}Model
+      .find({ {{ rel.sourceModel | lower }}Id })
+      .lean()
+      .exec() as Promise<{{ model.name }}[]>;
+  }
+
+{% endif %}
+{% endfor %}
+{% endif %}
 
 {% include "mongoose/repository-relationship-methods.njk" %}
 }

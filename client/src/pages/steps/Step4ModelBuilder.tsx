@@ -362,10 +362,11 @@ export default function Step3ModelBuilder() {
       const edgeStyles = {
         "one-to-one": { strokeDasharray: "5,5", label: "1:1" },
         "one-to-many": { strokeDasharray: "0", label: "1:N" },
+        "many-to-one": { strokeDasharray: "0", label: "N:1" },
         "many-to-many": { strokeDasharray: "3,3", label: "M:N" },
       };
 
-      const style = edgeStyles[rel.type];
+      const style = edgeStyles[rel.type as keyof typeof edgeStyles];
 
       return {
         id: rel.id,

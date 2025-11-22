@@ -10,7 +10,7 @@ describe('{{ model.name }}Service', () => {
   const mock{{ model.name }} = {
     _id: '507f1f77bcf86cd799439011',
     {% for field in model.fields %}
-    {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+    {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% elif field.type == 'datetime' %}new Date(){% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% elif field.type == 'string[]' %}['test']{% elif field.type == 'enum' %}{% if field.enum and field.enum[0] %}'{{ field.enum[0] }}'{% else %}'test-value'{% endif %}{% else %}'test-value'{% endif %},
     {% endfor %}
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -50,7 +50,7 @@ describe('{{ model.name }}Service', () => {
     it('should create a {{ model.nameCamel }} successfully', async () => {
       const createDto = {
         {% for field in model.fields %}{% if not field.defaultValue %}
-        {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+        {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' %}new Date(){% elif field.type == 'datetime' %}new Date(){% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% elif field.type == 'string[]' %}['test']{% elif field.type == 'enum' %}{% if field.enum and field.enum[0] %}'{{ field.enum[0] }}'{% else %}'test-value'{% endif %}{% else %}'test-value'{% endif %},
         {% endif %}{% endfor %}
       };
 
@@ -66,7 +66,7 @@ describe('{{ model.name }}Service', () => {
     it('should throw ConflictException if {{ field.name }} already exists', async () => {
       const createDto = {
         {% for f in model.fields %}{% if not f.defaultValue %}
-        {{ f.name }}: {% if f.type == 'string' %}'test-{{ f.name }}'{% elif f.type == 'number' %}123{% elif f.type == 'boolean' %}true{% elif f.type == 'date' %}new Date(){% else %}'test-value'{% endif %},
+        {{ f.name }}: {% if f.type == 'string' %}'test-{{ f.name }}'{% elif f.type == 'number' %}123{% elif f.type == 'boolean' %}true{% elif f.type == 'date' %}new Date(){% elif f.type == 'datetime' %}new Date(){% elif f.type == 'json' %}{ test: 'data' }{% elif f.type == 'json[]' %}[{ test: 'data' }]{% elif f.type == 'string[]' %}['test']{% elif f.type == 'enum' %}{% if f.enum and f.enum[0] %}'{{ f.enum[0] }}'{% else %}'test-value'{% endif %}{% else %}'test-value'{% endif %},
         {% endif %}{% endfor %}
       };
 

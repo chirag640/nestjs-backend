@@ -52,6 +52,29 @@ export class {{ model.name }}Service {
     }
   }
 
+{% if relationships %}
+  // Relationship service methods
+{% for rel in relationships %}
+{% if rel.type == 'many-to-one' and rel.sourceModel == model.name %}
+  async findBy{{ rel.fieldName | capitalize }}({{ rel.fieldName }}: string): Promise<{{ model.outputDtoName }}[]> {
+    const items = await this.{{ model.nameCamel }}Repository.findBy{{ rel.fieldName | capitalize }}({{ rel.fieldName }});
+    return items.map((item) => this.mapToOutput(item));
+  }
+
+{% elif rel.type == 'one-to-many' and rel.sourceModel == model.name %}
+  async get{{ rel.fieldName | capitalize }}(id: string): Promise<any[]> {
+    const item = await this.{{ model.nameCamel }}Repository.findById(id);
+    if (!item) {
+      throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
+    }
+    // This would need the related service injected to fetch related items
+    return [];
+  }
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
   private mapToOutput(item: any): {{ model.outputDtoName }} {
     return {
       id: item._id?.toString() || item.id,

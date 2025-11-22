@@ -6,8 +6,8 @@
 {# In User schema: virtual field for single profile #}
 
 {# Add to "To Model" (e.g., Profile) schema #}
-@Prop({ type: Schema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true, unique: true })
-{{ relationship.fromModel | lower }}Id: Schema.Types.ObjectId;
+@Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true, unique: true })
+{{ relationship.fromModel | lower }}Id: MongooseSchema.Types.ObjectId;
 
 {# Add virtual populate to "From Model" (e.g., User) schema #}
 // Virtual relationship: One-to-One

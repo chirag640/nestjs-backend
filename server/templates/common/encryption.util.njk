@@ -1,0 +1,117 @@
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+
+/**
+ * Utility class for encrypting and decrypting sensitive data
+ * Uses AES-256-GCM for authenticated encryption
+ */
+export class EncryptionUtil {
+  private static readonly algorithm = 'aes-256-gcm';
+  private static readonly keyLength = 32;
+  private static readonly ivLength = 16;
+  private static readonly saltLength = 64;
+  private static readonly tagLength = 16;
+  private static readonly tagPosition = 0;
+  private static readonly encryptedPosition = this.tagLength;
+
+  /**
+   * Encrypt a string using AES-256-GCM
+   * @param text - Plain text to encrypt
+   * @param masterKey - Master encryption key (should be stored in environment variables)
+   * @returns Encrypted string in format: salt:iv:tag:encrypted
+   */
+  static encrypt(text: string, masterKey: string): string {
+    if (!text || !masterKey) {
+      throw new Error('Text and master key are required for encryption');
+    }
+
+    // Generate random salt and IV
+    const salt = randomBytes(this.saltLength);
+    const iv = randomBytes(this.ivLength);
+    
+    // Derive key from master key using scrypt
+    const key = scryptSync(masterKey, salt, this.keyLength);
+    
+    // Create cipher and encrypt
+    const cipher = createCipheriv(this.algorithm, key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    
+    // Get authentication tag
+    const tag = cipher.getAuthTag();
+    
+    // Combine all parts: salt:iv:tag:encrypted
+    return `${salt.toString('hex')}:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
+  }
+
+  /**
+   * Decrypt a string that was encrypted with encrypt()
+   * @param encryptedData - Encrypted string in format: salt:iv:tag:encrypted
+   * @param masterKey - Master encryption key (must match the one used for encryption)
+   * @returns Decrypted plain text
+   */
+  static decrypt(encryptedData: string, masterKey: string): string {
+    if (!encryptedData || !masterKey) {
+      throw new Error('Encrypted data and master key are required for decryption');
+    }
+
+    try {
+      // Split the encrypted data into parts
+      const parts = encryptedData.split(':');
+      if (parts.length !== 4) {
+        throw new Error('Invalid encrypted data format');
+      }
+
+      const [saltHex, ivHex, tagHex, encrypted] = parts;
+      
+      // Convert hex strings back to buffers
+      const salt = Buffer.from(saltHex, 'hex');
+      const iv = Buffer.from(ivHex, 'hex');
+      const tag = Buffer.from(tagHex, 'hex');
+      
+      // Derive key from master key using the same salt
+      const key = scryptSync(masterKey, salt, this.keyLength);
+      
+      // Create decipher and decrypt
+      const decipher = createDecipheriv(this.algorithm, key, iv);
+      decipher.setAuthTag(tag);
+      
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      
+      return decrypted;
+    } catch (error) {
+      throw new Error(`Decryption failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Encrypt an object by encrypting its JSON representation
+   * @param obj - Object to encrypt
+   * @param masterKey - Master encryption key
+   * @returns Encrypted string
+   */
+  static encryptObject(obj: any, masterKey: string): string {
+    const jsonString = JSON.stringify(obj);
+    return this.encrypt(jsonString, masterKey);
+  }
+
+  /**
+   * Decrypt a string back to an object
+   * @param encryptedData - Encrypted string
+   * @param masterKey - Master encryption key
+   * @returns Decrypted object
+   */
+  static decryptObject<T = any>(encryptedData: string, masterKey: string): T {
+    const jsonString = this.decrypt(encryptedData, masterKey);
+    return JSON.parse(jsonString);
+  }
+
+  /**
+   * Generate a secure random key suitable for use as a master key
+   * @param length - Length of the key in bytes (default: 32 for AES-256)
+   * @returns Hex-encoded random key
+   */
+  static generateKey(length: number = 32): string {
+    return randomBytes(length).toString('hex');
+  }
+}

@@ -6,8 +6,8 @@
 {# In Role schema: virtual field for users #}
 
 {# Add to "From Model" (e.g., User) schema #}
-@Prop({ type: [{ type: Schema.Types.ObjectId, ref: '{{ relationship.toModel }}' }], default: [] })
-{{ relationship.fieldName }}: Schema.Types.ObjectId[];
+@Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.toModel }}' }], default: [] })
+{{ relationship.fieldName }}: MongooseSchema.Types.ObjectId[];
 
 {# Add virtual populate to "To Model" (e.g., Role) schema for reverse lookup #}
 // Virtual relationship: Many-to-Many (reverse)

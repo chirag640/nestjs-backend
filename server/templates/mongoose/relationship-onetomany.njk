@@ -6,8 +6,8 @@
 {# In Post schema: userId field referencing User #}
 
 {# Add to "To Model" (e.g., Post) schema - the many side #}
-@Prop({ type: Schema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true })
-{{ relationship.fromModel | lower }}Id: Schema.Types.ObjectId;
+@Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true })
+{{ relationship.fromModel | lower }}Id: MongooseSchema.Types.ObjectId;
 
 {# Add virtual populate to "From Model" (e.g., User) schema - the one side #}
 // Virtual relationship: One-to-Many

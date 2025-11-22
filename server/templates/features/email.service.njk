@@ -1,0 +1,141 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+
+@Injectable()
+export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+  private transporter: Transporter;
+
+  constructor(private readonly configService: ConfigService) {
+    this.initializeTransporter();
+  }
+
+  private initializeTransporter() {
+    const smtpHost = this.configService.get<string>('SMTP_HOST');
+    const smtpPort = this.configService.get<number>('SMTP_PORT', 587);
+    const smtpSecure = this.configService.get<string>('SMTP_SECURE') === 'true';
+    const smtpUser = this.configService.get<string>('SMTP_USER');
+    const smtpPass = this.configService.get<string>('SMTP_PASS');
+
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      this.logger.warn('Email service not configured. SMTP credentials missing.');
+      return;
+    }
+
+    this.transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+    });
+
+    this.logger.log('Email service initialized successfully');
+  }
+
+  async sendVerificationEmail(to: string, token: string): Promise<void> {
+    if (!this.transporter) {
+      this.logger.warn('Email transporter not initialized. Skipping email send.');
+      return;
+    }
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+    const verificationUrl = `${frontendUrl}/verify-email?token=${token}`;
+    
+    try {
+      await this.transporter.sendMail({
+        from: this.configService.get<string>('SMTP_FROM', 'noreply@example.com'),
+        to,
+        subject: 'Verify your email address',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #333;">Email Verification</h1>
+            <p>Thank you for registering! Please verify your email address by clicking the button below:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${verificationUrl}" style="background-color: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                Verify Email
+              </a>
+            </div>
+            <p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
+            <p style="color: #666; font-size: 14px; word-break: break-all;">${verificationUrl}</p>
+            <p style="color: #999; font-size: 12px; margin-top: 30px;">If you didn't create an account, please ignore this email.</p>
+          </div>
+        `,
+      });
+
+      this.logger.log(`Verification email sent to ${to}`);
+    } catch (error) {
+      this.logger.error(`Failed to send verification email to ${to}:`, error);
+      throw new Error('Failed to send verification email');
+    }
+  }
+
+  async sendPasswordResetEmail(to: string, token: string): Promise<void> {
+    if (!this.transporter) {
+      this.logger.warn('Email transporter not initialized. Skipping email send.');
+      return;
+    }
+
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+    const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+    
+    try {
+      await this.transporter.sendMail({
+        from: this.configService.get<string>('SMTP_FROM', 'noreply@example.com'),
+        to,
+        subject: 'Reset your password',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #333;">Password Reset Request</h1>
+            <p>We received a request to reset your password. Click the button below to create a new password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" style="background-color: #2196F3; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                Reset Password
+              </a>
+            </div>
+            <p style="color: #666; font-size: 14px;">Or copy and paste this link into your browser:</p>
+            <p style="color: #666; font-size: 14px; word-break: break-all;">${resetUrl}</p>
+            <p style="color: #e74c3c; font-size: 14px; margin-top: 20px;">⚠️ This link will expire in 1 hour.</p>
+            <p style="color: #999; font-size: 12px; margin-top: 30px;">If you didn't request a password reset, please ignore this email and your password will remain unchanged.</p>
+          </div>
+        `,
+      });
+
+      this.logger.log(`Password reset email sent to ${to}`);
+    } catch (error) {
+      this.logger.error(`Failed to send password reset email to ${to}:`, error);
+      throw new Error('Failed to send password reset email');
+    }
+  }
+
+  async sendWelcomeEmail(to: string, name: string): Promise<void> {
+    if (!this.transporter) {
+      this.logger.warn('Email transporter not initialized. Skipping email send.');
+      return;
+    }
+    
+    try {
+      await this.transporter.sendMail({
+        from: this.configService.get<string>('SMTP_FROM', 'noreply@example.com'),
+        to,
+        subject: 'Welcome!',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #333;">Welcome, ${name}!</h1>
+            <p>Your account has been successfully verified. You can now start using our services.</p>
+            <p style="color: #666; font-size: 14px; margin-top: 30px;">If you have any questions, feel free to contact our support team.</p>
+          </div>
+        `,
+      });
+
+      this.logger.log(`Welcome email sent to ${to}`);
+    } catch (error) {
+      this.logger.error(`Failed to send welcome email to ${to}:`, error);
+      // Don't throw error for welcome email
+    }
+  }
+}

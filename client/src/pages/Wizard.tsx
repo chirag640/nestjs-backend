@@ -1,4 +1,5 @@
 import { useWizardStore } from "@/lib/store";
+import Step0_ManualConfig from "./steps/Step0_ManualConfig";
 import Step1ProjectSetup from "./steps/Step1ProjectSetup";
 import Step2DatabaseConfig from "./steps/Step2DatabaseConfig";
 import Step3AuthSetup from "./steps/Step3AuthSetup";
@@ -33,6 +34,8 @@ export default function Wizard() {
   }, [nextStep, previousStep]);
 
   switch (currentStep) {
+    case 0:
+      return <Step0_ManualConfig />;
     case 1:
       return <Step1ProjectSetup />;
     case 2:

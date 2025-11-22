@@ -8,6 +8,7 @@ import {
   fieldTypeToMongooseType,
   getValidatorDecorator,
   isReservedFieldName,
+  sanitizeModelName,
 } from "./namingUtils";
 import { geminiService } from "./geminiService";
 
@@ -283,16 +284,18 @@ export function buildIR(config: WizardConfig): ProjectIR {
  * Build IR for a single model
  */
 function buildModelIR(model: Model): ModelIR {
-  const nameCamel = toCamelCase(model.name);
-  const nameKebab = toKebabCase(model.name);
+  // Sanitize model name to avoid conflicts with built-in types
+  const sanitizedName = sanitizeModelName(model.name);
+  const nameCamel = toCamelCase(sanitizedName);
+  const nameKebab = toKebabCase(sanitizedName);
   // Apply pluralization to the PascalCase name first, then convert to kebab-case
   // This avoids issues like "Users" -> "userses"
-  const namePlural = pluralize(model.name); // Pluralize PascalCase: "User" -> "Users"
+  const namePlural = pluralize(sanitizedName); // Pluralize PascalCase: "User" -> "Users"
   const namePluralCamel = toCamelCase(namePlural); // To camelCase: "Users" -> "users"
   const namePluralKebab = toKebabCase(namePlural); // To kebab: "Users" -> "users"
 
   return {
-    name: model.name, // Already PascalCase from validation
+    name: sanitizedName, // Sanitized PascalCase name
     nameCamel,
     nameKebab,
     namePlural: namePluralCamel,
@@ -302,9 +305,9 @@ function buildModelIR(model: Model): ModelIR {
     route: `/${namePluralKebab}`,
     fields: model.fields.map((field) => buildFieldIR(field)),
     timestamps: model.timestamps ?? true,
-    createDtoName: `Create${model.name}Dto`,
-    updateDtoName: `Update${model.name}Dto`,
-    outputDtoName: `${model.name}OutputDto`,
+    createDtoName: `Create${sanitizedName}Dto`,
+    updateDtoName: `Update${sanitizedName}Dto`,
+    outputDtoName: `${sanitizedName}OutputDto`,
   };
 }
 
@@ -322,6 +325,12 @@ function buildFieldIR(field: Field): ModelFieldIR {
   const max = field.max ?? smartDefaults.max;
   const pattern = field.pattern ?? smartDefaults.pattern;
 
+  // Handle default value - support "now" literal for datetime fields
+  let defaultValue = field.default ?? field.defaultValue;
+
+  // Use 'values' if provided, fallback to 'enum' for backward compatibility
+  const enumValues = (field as any).values ?? field.enum;
+
   return {
     name: field.name, // Already camelCase from validation
     type: field.type,
@@ -330,7 +339,7 @@ function buildFieldIR(field: Field): ModelFieldIR {
     required: field.required ?? false,
     unique: field.unique ?? false,
     indexed: field.indexed ?? false,
-    defaultValue: field.defaultValue,
+    defaultValue,
     validators: getValidatorDecorator({
       type: field.type,
       name: field.name, // Pass name for email detection
@@ -340,13 +349,15 @@ function buildFieldIR(field: Field): ModelFieldIR {
       max,
       pattern,
       enum: field.enum,
+      values: enumValues,
     }),
     minLength,
     maxLength,
     min,
     max,
     pattern,
-    enum: field.enum,
+    enum: enumValues,
+    enumValues: enumValues, // For test templates
     // Enhanced validators
     enhancedValidators: smartDefaults.additionalValidators || [],
     // API Documentation
@@ -743,14 +754,29 @@ function buildOAuthIR(config: WizardConfig): OAuthIR {
  * Build Relationships IR from configuration (Sprint 6)
  */
 function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
-  const relationships = config.modelDefinition?.relationships || [];
-  const modelNames = new Set(
-    config.modelDefinition?.models?.map((m) => m.name) || []
-  );
+  const topLevelRelationships = config.modelDefinition?.relationships || [];
+  const models = config.modelDefinition?.models || [];
+  const modelNames = new Set(models.map((m) => m.name));
+
+  // Collect all relationships (top-level + inline from models)
+  const allRelationships = [...topLevelRelationships];
+
+  // Extract inline relationships from models
+  models.forEach((model) => {
+    if (model.relationships && model.relationships.length > 0) {
+      model.relationships.forEach((rel) => {
+        allRelationships.push({
+          ...rel,
+          id: rel.id || `${model.name}-${rel.fieldName}`,
+          sourceModel: rel.sourceModel || model.name, // Infer source model if not provided
+        });
+      });
+    }
+  });
 
   // Validate that referenced models exist
-  relationships.forEach((rel) => {
-    if (!modelNames.has(rel.sourceModel)) {
+  allRelationships.forEach((rel) => {
+    if (rel.sourceModel && !modelNames.has(rel.sourceModel)) {
       throw new Error(
         `Relationship references non-existent source model: ${rel.sourceModel}`
       );
@@ -762,7 +788,7 @@ function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
     }
   });
 
-  return relationships.map((rel) => {
+  return allRelationships.map((rel) => {
     const relationshipIR: RelationshipIR = {
       id: rel.id,
       type: rel.type,

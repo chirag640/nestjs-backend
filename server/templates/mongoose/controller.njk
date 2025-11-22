@@ -308,4 +308,33 @@ export class {{ model.name }}Controller {
   remove(@Param('id') id: string): Promise<void> {
     return this.{{ model.nameCamel }}Service.remove(id);
   }
+
+{% if relationships %}
+  // Relationship endpoints
+{% for rel in relationships %}
+{% if rel.type == 'many-to-one' and rel.sourceModel == model.name %}
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Get all {{ model.namePlural }} for a specific {{ rel.targetModel }}' })
+  @ApiParam({ name: '{{ rel.fieldName }}', description: '{{ rel.targetModel }} ID' })
+  @ApiResponse({ status: 200, description: 'List of {{ model.namePlural }}', type: [{{ model.outputDtoName }}] })
+  {% endif %}
+  @Get('by-{{ rel.fieldName }}/:{{ rel.fieldName }}')
+  findBy{{ rel.fieldName | capitalize }}(@Param('{{ rel.fieldName }}') {{ rel.fieldName }}: string) {
+    return this.{{ model.nameCamel }}Service.findBy{{ rel.fieldName | capitalize }}({{ rel.fieldName }});
+  }
+
+{% elif rel.type == 'one-to-many' and rel.sourceModel == model.name %}
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Get all {{ rel.fieldName }} for this {{ model.nameCamel }}' })
+  @ApiParam({ name: 'id', description: '{{ model.name }} ID' })
+  @ApiResponse({ status: 200, description: 'List of related {{ rel.fieldName }}' })
+  {% endif %}
+  @Get(':id/{{ rel.fieldName }}')
+  get{{ rel.fieldName | capitalize }}(@Param('id') id: string) {
+    return this.{{ model.nameCamel }}Service.get{{ rel.fieldName | capitalize }}(id);
+  }
+
+{% endif %}
+{% endfor %}
+{% endif %}
 }

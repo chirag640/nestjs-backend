@@ -23,6 +23,15 @@ interface WizardStore {
   ) => void;
   updateDockerConfig: (data: Partial<WizardConfig["dockerConfig"]>) => void;
   updateCICDConfig: (data: Partial<WizardConfig["cicdConfig"]>) => void;
+  // Full setters for JSON import
+  setProjectSetup: (data: WizardConfig["projectSetup"]) => void;
+  setDatabaseConfig: (data: WizardConfig["databaseConfig"]) => void;
+  setModelDefinition: (data: WizardConfig["modelDefinition"]) => void;
+  setAuthConfig: (data: WizardConfig["authConfig"]) => void;
+  setOAuthConfig: (data: WizardConfig["oauthConfig"]) => void;
+  setFeatureSelection: (data: WizardConfig["featureSelection"]) => void;
+  setDockerConfig: (data: WizardConfig["dockerConfig"]) => void;
+  setCICDConfig: (data: WizardConfig["cicdConfig"]) => void;
   resetWizard: () => void;
   isStepValid: (step: number) => boolean;
 }
@@ -32,11 +41,11 @@ const TOTAL_STEPS = 8;
 export const useWizardStore = create<WizardStore>()(
   persist(
     (set, get) => ({
-      currentStep: 1,
+      currentStep: 0, // Start at Step 0 (Manual Config Import)
       config: defaultWizardConfig,
 
       setCurrentStep: (step: number) => {
-        if (step >= 1 && step <= TOTAL_STEPS) {
+        if (step >= 0 && step <= TOTAL_STEPS) {
           set({ currentStep: step });
         }
       },
@@ -62,13 +71,13 @@ export const useWizardStore = create<WizardStore>()(
         } else if (currentStep === 5) {
           // Go back to relationship config (step 4.5) from feature selection
           set({ currentStep: 4.5 });
-        } else if (currentStep > 1) {
+        } else if (currentStep > 0) {
           set({ currentStep: currentStep - 1 });
         }
       },
 
       goToStep: (step: number) => {
-        if (step >= 1 && step <= TOTAL_STEPS) {
+        if (step >= 0 && step <= TOTAL_STEPS) {
           set({ currentStep: step });
         }
       },
@@ -223,14 +232,67 @@ export const useWizardStore = create<WizardStore>()(
         }));
       },
 
+      // Full setters for JSON import
+      setProjectSetup: (data) => {
+        set((state) => ({
+          config: { ...state.config, projectSetup: data },
+        }));
+      },
+
+      setDatabaseConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, databaseConfig: data },
+        }));
+      },
+
+      setModelDefinition: (data) => {
+        set((state) => ({
+          config: { ...state.config, modelDefinition: data },
+        }));
+      },
+
+      setAuthConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, authConfig: data },
+        }));
+      },
+
+      setOAuthConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, oauthConfig: data },
+        }));
+      },
+
+      setFeatureSelection: (data) => {
+        set((state) => ({
+          config: { ...state.config, featureSelection: data },
+        }));
+      },
+
+      setDockerConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, dockerConfig: data },
+        }));
+      },
+
+      setCICDConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, cicdConfig: data },
+        }));
+      },
+
       resetWizard: () => {
-        set({ currentStep: 1, config: defaultWizardConfig });
+        set({ currentStep: 0, config: defaultWizardConfig });
       },
 
       isStepValid: (step: number): boolean => {
         const { config } = get();
 
         switch (step) {
+          case 0: {
+            // Manual config import step - always valid (optional step)
+            return true;
+          }
           case 1: {
             const ps = config.projectSetup;
             return !!(

@@ -20,7 +20,7 @@ export class {{ model.createDtoName }} {
   @ApiProperty({
     description: '{{ field.apiDescription | default(field.name) }}',
     example: {{ field.apiExample | safe }},
-    {% if field.required %}required: true,{% else %}required: false,{% endif %}
+    {% if field.required and not field.defaultValue %}required: true,{% else %}required: false,{% endif %}
     {% if field.minLength %}minLength: {{ field.minLength }},{% endif %}
     {% if field.maxLength %}maxLength: {{ field.maxLength }},{% endif %}
     {% if field.min %}minimum: {{ field.min }},{% endif %}
@@ -28,7 +28,7 @@ export class {{ model.createDtoName }} {
     {% if field.type === 'array' %}type: 'array',{% endif %}
   })
   {% endif %}
-  {% if field.required %}
+  {% if field.required and not field.defaultValue %}
   {% if field.type === 'string' %}
   @Transform(({ value }) => value?.trim()) // Sanitize: trim whitespace
   {% endif %}
@@ -60,7 +60,7 @@ export class {{ model.createDtoName }} {
   {% if field.type === 'Date' %}
   @Type(() => Date)
   {% endif %}
-  {{ field.name }}!: {{ field.tsType }};
+  {{ field.name }}?: {{ field.tsType }};
   {% endif %}
 
 {% endfor %}

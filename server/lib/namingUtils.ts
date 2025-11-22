@@ -161,10 +161,35 @@ export const RESERVED_FIELD_NAMES = [
 ];
 
 /**
+ * Reserved model names that conflict with built-in types
+ */
+export const RESERVED_MODEL_NAMES = [
+  "Document",
+  "Model",
+  "Schema",
+  "Connection",
+  "Mongoose",
+  "Query",
+  "Aggregate",
+  "Error",
+];
+
+/**
  * Check if a field name is reserved
  */
 export function isReservedFieldName(name: string): boolean {
   return RESERVED_FIELD_NAMES.includes(name.toLowerCase());
+}
+
+/**
+ * Check if a model name is reserved and suggest an alternative
+ */
+export function sanitizeModelName(modelName: string): string {
+  if (RESERVED_MODEL_NAMES.includes(modelName)) {
+    // Prefix with the model type for clarity (e.g., Document -> HealthDocument)
+    return `Health${modelName}`;
+  }
+  return modelName;
 }
 
 /**
@@ -176,7 +201,12 @@ export function mongooseTypeToTsType(mongooseType: string): string {
     number: "number",
     boolean: "boolean",
     date: "Date",
+    datetime: "Date",
+    "string[]": "string[]",
+    json: "Record<string, any>",
+    "json[]": "Record<string, any>[]",
     objectId: "string", // ObjectId is represented as string in DTOs
+    enum: "string",
   };
 
   return typeMap[mongooseType.toLowerCase()] || "any";
@@ -191,10 +221,15 @@ export function fieldTypeToMongooseType(fieldType: string): string {
     number: "Number",
     boolean: "Boolean",
     date: "Date",
-    objectId: "Schema.Types.ObjectId",
+    datetime: "Date",
+    "string[]": "[String]",
+    json: "MongooseSchema.Types.Mixed",
+    "json[]": "[MongooseSchema.Types.Mixed]",
+    objectId: "MongooseSchema.Types.ObjectId",
+    enum: "String",
   };
 
-  return typeMap[fieldType.toLowerCase()] || "Schema.Types.Mixed";
+  return typeMap[fieldType.toLowerCase()] || "MongooseSchema.Types.Mixed";
 }
 
 /**
@@ -209,6 +244,7 @@ export function getValidatorDecorator(field: {
   max?: number;
   pattern?: string;
   enum?: string[];
+  values?: string[]; // Custom enum values
 }): string[] {
   const decorators: string[] = [];
 
@@ -244,10 +280,32 @@ export function getValidatorDecorator(field: {
       decorators.push("IsBoolean()");
       break;
     case "date":
-      decorators.push("IsDate()");
+      decorators.push("IsDateString()"); // Use IsDateString for DTO validation
+      break;
+    case "datetime":
+      decorators.push("IsDateString()");
+      break;
+    case "string[]":
+      decorators.push("IsArray()");
+      decorators.push("IsString({ each: true })");
+      break;
+    case "json":
+      decorators.push("IsObject()");
+      break;
+    case "json[]":
+      decorators.push("IsArray()");
+      decorators.push("IsObject({ each: true })");
       break;
     case "objectId":
       decorators.push("IsMongoId()");
+      break;
+    case "enum":
+      const enumValues = field.values || field.enum || [];
+      if (enumValues.length > 0) {
+        decorators.push(`IsIn(['${enumValues.join("', '")}'])`);
+      } else {
+        decorators.push("IsString()");
+      }
       break;
   }
 

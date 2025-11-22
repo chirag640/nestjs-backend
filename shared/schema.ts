@@ -25,35 +25,51 @@ export const databaseConfigSchema = z.object({
 
 export type DatabaseConfig = z.infer<typeof databaseConfigSchema>;
 
-// Step 3: Model Definition (Enhanced for Sprint 2)
+// Step 3: Model Definition (Enhanced for Sprint 2+)
 export const fieldSchema = z.object({
-  id: z.string(),
+  id: z.string().optional(), // Optional for manual JSON configs
   name: z
     .string()
     .min(1, "Field name is required")
     .regex(/^[a-z][a-zA-Z0-9]*$/, "Field name must be camelCase"),
-  type: z.enum(["string", "number", "boolean", "date", "objectId"]),
+  type: z.enum([
+    "string",
+    "number",
+    "boolean",
+    "date",
+    "datetime",
+    "string[]",
+    "json",
+    "json[]",
+    "objectId",
+    "enum",
+  ]),
   required: z.boolean().default(false),
   unique: z.boolean().default(false),
   indexed: z.boolean().default(false),
-  defaultValue: z
-    .union([z.string(), z.number(), z.boolean(), z.null()])
+  default: z
+    .union([z.string(), z.number(), z.boolean(), z.literal("now"), z.null()])
     .optional(),
+  defaultValue: z
+    .union([z.string(), z.number(), z.boolean(), z.literal("now"), z.null()])
+    .optional(), // Backward compatibility
   // Validation rules
   minLength: z.number().optional(),
   maxLength: z.number().optional(),
   min: z.number().optional(),
   max: z.number().optional(),
   pattern: z.string().optional(), // regex pattern for string validation
-  enum: z.array(z.string()).optional(), // for enum types
+  enum: z.array(z.string()).optional(), // DEPRECATED: use 'values' instead
+  values: z.array(z.string()).optional(), // for enum types - custom values
+  gender: z.enum(["male", "female", "other"]).optional(), // Example enum field (ignore in parsing)
 });
 
 export type Field = z.infer<typeof fieldSchema>;
 
 export const relationshipSchema = z.object({
-  id: z.string(),
-  type: z.enum(["one-to-one", "one-to-many", "many-to-many"]),
-  sourceModel: z.string(),
+  id: z.string().optional(), // Optional for manual JSON configs
+  type: z.enum(["one-to-one", "one-to-many", "many-to-one", "many-to-many"]),
+  sourceModel: z.string().optional(), // Optional - inferred from model context
   targetModel: z.string(),
   fieldName: z.string(),
   through: z.string().optional(), // join model name for many-to-many
@@ -63,13 +79,14 @@ export const relationshipSchema = z.object({
 export type Relationship = z.infer<typeof relationshipSchema>;
 
 export const modelSchema = z.object({
-  id: z.string(),
+  id: z.string().optional(), // Optional for manual JSON configs
   name: z
     .string()
     .min(1, "Model name is required")
     .regex(/^[A-Z][a-zA-Z0-9]*$/, "Model name must be PascalCase"),
   fields: z.array(fieldSchema).min(1, "Model must have at least one field"),
   timestamps: z.boolean().default(true), // auto-add createdAt/updatedAt
+  relationships: z.array(relationshipSchema).optional(), // Inline relationships (alternative to top-level)
 });
 
 export type Model = z.infer<typeof modelSchema>;
