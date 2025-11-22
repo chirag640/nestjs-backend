@@ -3,6 +3,7 @@ import { WizardLayout } from "@/components/wizard/WizardLayout";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { FeatureSelection } from "@shared/schema";
 import {
   Globe,
   Shield,
@@ -16,6 +17,8 @@ import {
   BookOpen,
   Timer,
   GitBranch,
+  ListTodo,
+  CloudUpload,
 } from "lucide-react";
 
 const BASIC_FEATURES = [
@@ -99,11 +102,27 @@ const ADVANCED_FEATURES = [
     description: "URI-based API versioning (v1, v2) for backward compatibility",
     recommended: false,
   },
+  {
+    key: "queues" as const,
+    icon: ListTodo,
+    title: "Background Job Queues",
+    description:
+      "BullMQ job queues with Redis for async processing, scheduled tasks, and cleanup operations",
+    recommended: false,
+  },
+  {
+    key: "s3Upload" as const,
+    icon: CloudUpload,
+    title: "AWS S3 File Uploads",
+    description:
+      "S3 file lifecycle with presigned URLs, temp staging, automatic cleanup, versioning, and Glacier archiving",
+    recommended: false,
+  },
 ];
 
 export default function Step5FeatureSelection() {
   const { config, updateFeatureSelection } = useWizardStore();
-  const features = config.featureSelection ?? ({} as FeatureSelectionType);
+  const features = config.featureSelection ?? ({} as FeatureSelection);
 
   const updateFeature = (key: keyof typeof features, checked: boolean) => {
     updateFeatureSelection({ [key]: checked });
@@ -286,6 +305,8 @@ ${features.swagger ? "  // Swagger setup at /api/docs" : ""}
 ${features.health ? "  // Health endpoint at /health" : ""}
 ${features.rateLimit ? "  // Rate limiting via Throttler module" : ""}
 ${features.caching ? "  // Redis caching via CacheModule" : ""}
+${features.queues ? "  // BullMQ queues: email, notification, document, cleanup" : ""}
+${features.s3Upload ? "  // S3 file uploads with presigned URLs and lifecycle" : ""}
   await app.listen(process.env.PORT || 3000);
 }`}
           </pre>

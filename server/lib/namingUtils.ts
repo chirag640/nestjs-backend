@@ -250,8 +250,16 @@ export function getValidatorDecorator(field: {
 
   switch (field.type) {
     case "string":
+      // Use @IsUrl() for fields named 'url' or ending with 'Url'
+      if (
+        field.name &&
+        (field.name.toLowerCase().includes("url") ||
+          field.name.toLowerCase().endsWith("url"))
+      ) {
+        decorators.push("IsUrl()");
+      }
       // Use @IsEmail() for fields named 'email' or containing 'email'
-      if (field.name && field.name.toLowerCase().includes("email")) {
+      else if (field.name && field.name.toLowerCase().includes("email")) {
         decorators.push("IsEmail()");
       } else {
         decorators.push("IsString()");

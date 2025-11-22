@@ -11,12 +11,18 @@ import {
 {% if features.rateLimit %}
 import { Throttle } from '@nestjs/throttler';
 {% endif %}
+{% if features.swagger %}
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+{% endif %}
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dtos/register.dto';
 import { LoginDto } from './dtos/login.dto';
 import { RefreshDto } from './dtos/refresh.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
+{% if features.swagger %}
+@ApiTags('Authentication')
+{% endif %}
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}

@@ -784,6 +784,22 @@ async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
     files.push(...queueFiles);
   }
 
+  // S3 File Upload Lifecycle
+  if (ir.features.s3Upload) {
+    const s3Files = await generateS3LifecycleFiles(ir);
+    files.push(...s3Files);
+  }
+
+  // Email Service (always generated when auth is enabled)
+  if (ir.auth?.enabled) {
+    const emailFiles = await generateEmailFiles(ir);
+    files.push(...emailFiles);
+  }
+
+  // Database Seeding Script (always generated)
+  const seedFiles = await generateSeedScript(ir);
+  files.push(...seedFiles);
+
   return files;
 }
 
@@ -896,6 +912,135 @@ async function generateQueueFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
     } catch (error) {
       console.error(`Error generating queue file ${output}:`, error);
     }
+  }
+
+  return files;
+}
+
+/**
+ * Generate S3 File Upload Lifecycle files
+ */
+async function generateS3LifecycleFiles(
+  ir: ProjectIR
+): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const s3Templates = [
+    // Core S3 service
+    {
+      template: "features/s3-lifecycle/s3-lifecycle.service.njk",
+      output: "src/modules/s3-lifecycle/s3-lifecycle.service.ts",
+    },
+    {
+      template: "features/s3-lifecycle/s3-lifecycle.module.njk",
+      output: "src/modules/s3-lifecycle/s3-lifecycle.module.ts",
+    },
+    {
+      template: "features/s3-lifecycle/file-upload.controller.njk",
+      output: "src/modules/s3-lifecycle/file-upload.controller.ts",
+    },
+
+    // Interfaces and DTOs
+    {
+      template: "features/s3-lifecycle/interfaces/file-metadata.interface.njk",
+      output: "src/modules/s3-lifecycle/interfaces/file-metadata.interface.ts",
+    },
+    {
+      template: "features/s3-lifecycle/dtos/file-upload.dto.njk",
+      output: "src/modules/s3-lifecycle/dtos/file-upload.dto.ts",
+    },
+
+    // Documentation
+    {
+      template: "features/s3-lifecycle/S3_LIFECYCLE_RULES.md.njk",
+      output: "S3_LIFECYCLE_RULES.md",
+    },
+  ];
+
+  for (const { template, output } of s3Templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      files.push({
+        path: output,
+        content: await formatCode(rendered, output),
+      });
+    } catch (error) {
+      console.error(`Error generating ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Email Service files
+ */
+async function generateEmailFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const emailTemplates = [
+    // Core email service
+    {
+      template: "email/email.module.njk",
+      output: "src/email/email.module.ts",
+    },
+    {
+      template: "email/email.service.njk",
+      output: "src/email/email.service.ts",
+    },
+
+    // Email templates (Handlebars)
+    {
+      template: "email/templates/email-verification.hbs",
+      output: "src/email/templates/email-verification.hbs",
+    },
+    {
+      template: "email/templates/password-reset.hbs",
+      output: "src/email/templates/password-reset.hbs",
+    },
+    {
+      template: "email/templates/welcome.hbs",
+      output: "src/email/templates/welcome.hbs",
+    },
+    {
+      template: "email/templates/notification.hbs",
+      output: "src/email/templates/notification.hbs",
+    },
+  ];
+
+  for (const { template, output } of emailTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      // Don't format .hbs files, only .ts files
+      const content = output.endsWith(".ts")
+        ? await formatCode(rendered, output)
+        : rendered;
+      files.push({
+        path: output,
+        content,
+      });
+    } catch (error) {
+      console.error(`Error generating ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Database Seeding Script
+ */
+async function generateSeedScript(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  try {
+    const rendered = renderTemplate("scripts/seed.ts.njk", ir);
+    files.push({
+      path: "src/scripts/seed.ts",
+      content: await formatCode(rendered, "src/scripts/seed.ts"),
+    });
+  } catch (error) {
+    console.error("Error generating seed script:", error);
   }
 
   return files;

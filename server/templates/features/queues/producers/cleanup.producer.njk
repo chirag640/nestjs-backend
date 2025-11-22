@@ -141,6 +141,26 @@ export class CleanupProducer {
     return job;
   }
 
+  {% if features.s3Upload %}
+  /**
+   * Clean up S3 temporary files
+   * Note: S3 lifecycle rules handle this automatically, but this provides manual control
+   */
+  async cleanupS3TempFiles(olderThanHours: number = 24) {
+    const job = await this.cleanupQueue.add(
+      's3-temp-cleanup',
+      { olderThanHours },
+      this.queueConfig.buildJobOptions(
+        this.queueConfig.PRIORITY.LOW,
+        'background',
+      ),
+    );
+
+    this.logger.log(`Queued S3 temp cleanup job ${job.id}`);
+    return job;
+  }
+  {% endif %}
+
   /**
    * Schedule daily cleanup jobs
    */
@@ -166,6 +186,11 @@ export class CleanupProducer {
       expiryThreshold: thirtyDaysAgo,
       batchSize: 1000,
     });
+
+    {% if features.s3Upload %}
+    // Clean S3 temp files older than 24 hours
+    await this.cleanupS3TempFiles(24);
+    {% endif %}
 
     this.logger.log('Scheduled daily cleanup jobs');
   }

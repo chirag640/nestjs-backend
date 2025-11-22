@@ -1,0 +1,475 @@
+# S3 Bucket Lifecycle Rules Configuration
+
+## Overview
+
+This document provides the exact S3 lifecycle rules needed for automatic file management. These rules handle cleanup, versioning, archiving, and cost optimization **automatically** without any backend code.
+
+## Bucket Structure
+
+```
+{bucket-name}/
+├── temp/              # Temporary uploads (expires in 24h)
+├── documents/         # Permanent documents
+├── archived/          # Long-term archives (Glacier)
+└── thumbnails/        # Generated thumbnails
+```
+
+## Lifecycle Rules
+
+### Rule 1: Cleanup Temporary Files
+
+**Purpose**: Automatically delete incomplete/abandoned uploads from `temp/` after 24 hours.
+
+```json
+{
+  "Rules": [
+    {
+      "Id": "cleanup-temp-files",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "temp/"
+      },
+      "Expiration": {
+        "Days": 1
+      }
+    }
+  ]
+}
+```
+
+**What it does**:
+- Any file in `temp/` older than 1 day is automatically deleted
+- Prevents storage bloat from failed/incomplete uploads
+- Saves cost on abandoned files
+
+---
+
+### Rule 2: Delete Old File Versions
+
+**Purpose**: Keep only recent versions of documents, delete older versions after 7 days.
+
+```json
+{
+  "Rules": [
+    {
+      "Id": "delete-old-versions",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "documents/"
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      }
+    }
+  ]
+}
+```
+
+**What it does**:
+- When a file is updated (versioned), old versions are kept for 7 days
+- After 7 days, old versions are permanently deleted
+- Prevents version accumulation
+- Enables version rollback within 7-day window
+
+**Requires**: Bucket versioning must be enabled.
+
+---
+
+### Rule 3: Archive Old Documents to Glacier
+
+**Purpose**: Move documents older than 180 days to cheaper Glacier storage.
+
+```json
+{
+  "Rules": [
+    {
+      "Id": "archive-old-documents",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "documents/"
+      },
+      "Transitions": [
+        {
+          "Days": 180,
+          "StorageClass": "GLACIER"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**What it does**:
+- Documents not accessed for 180 days move to Glacier
+- Reduces storage cost by ~80%
+- Documents remain accessible (with retrieval time)
+- Perfect for compliance/audit requirements
+
+**Cost Impact**: 
+- Standard: $0.023/GB/month
+- Glacier: $0.004/GB/month
+- **~83% cost reduction**
+
+---
+
+### Rule 4: Intelligent Tiering (Alternative to Glacier)
+
+**Purpose**: Automatically move objects between access tiers based on usage patterns.
+
+```json
+{
+  "Rules": [
+    {
+      "Id": "intelligent-tiering",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "documents/"
+      },
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "INTELLIGENT_TIERING"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**What it does**:
+- Monitors access patterns
+- Moves frequently accessed objects to frequent tier
+- Moves infrequently accessed to infrequent tier
+- No retrieval fees (unlike Glacier)
+- Better for unpredictable access patterns
+
+---
+
+### Rule 5: Delete Thumbnails After 90 Days
+
+**Purpose**: Thumbnails can be regenerated, so delete old ones to save cost.
+
+```json
+{
+  "Rules": [
+    {
+      "Id": "expire-thumbnails",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "thumbnails/"
+      },
+      "Expiration": {
+        "Days": 90
+      }
+    }
+  ]
+}
+```
+
+**What it does**:
+- Thumbnails older than 90 days are deleted
+- Can be regenerated if needed
+- Saves storage cost
+
+---
+
+## Complete Combined Configuration
+
+Apply all rules at once:
+
+```json
+{
+  "Rules": [
+    {
+      "Id": "cleanup-temp-files",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "temp/" },
+      "Expiration": { "Days": 1 }
+    },
+    {
+      "Id": "delete-old-versions",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "documents/" },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 }
+    },
+    {
+      "Id": "archive-old-documents",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "documents/" },
+      "Transitions": [
+        { "Days": 180, "StorageClass": "GLACIER" }
+      ]
+    },
+    {
+      "Id": "expire-thumbnails",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "thumbnails/" },
+      "Expiration": { "Days": 90 }
+    }
+  ]
+}
+```
+
+---
+
+## How to Apply via AWS Console
+
+1. Go to **S3** → Select your bucket
+2. Click **Management** tab
+3. Click **Create lifecycle rule**
+4. For each rule:
+   - Enter rule name (e.g., "cleanup-temp-files")
+   - Set filter prefix
+   - Configure actions (expiration, transition, etc)
+   - Enable the rule
+5. Save
+
+---
+
+## How to Apply via AWS CLI
+
+```bash
+# Save rules to file: lifecycle-rules.json
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket YOUR_BUCKET_NAME \
+  --lifecycle-configuration file://lifecycle-rules.json
+```
+
+---
+
+## How to Apply via Terraform
+
+```hcl
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  bucket = aws_s3_bucket.main.id
+
+  rule {
+    id     = "cleanup-temp-files"
+    status = "Enabled"
+    
+    filter {
+      prefix = "temp/"
+    }
+    
+    expiration {
+      days = 1
+    }
+  }
+
+  rule {
+    id     = "delete-old-versions"
+    status = "Enabled"
+    
+    filter {
+      prefix = "documents/"
+    }
+    
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
+
+  rule {
+    id     = "archive-old-documents"
+    status = "Enabled"
+    
+    filter {
+      prefix = "documents/"
+    }
+    
+    transition {
+      days          = 180
+      storage_class = "GLACIER"
+    }
+  }
+
+  rule {
+    id     = "expire-thumbnails"
+    status = "Enabled"
+    
+    filter {
+      prefix = "thumbnails/"
+    }
+    
+    expiration {
+      days = 90
+    }
+  }
+}
+```
+
+---
+
+## Bucket Versioning Configuration
+
+Enable versioning to support old version cleanup:
+
+```bash
+aws s3api put-bucket-versioning \
+  --bucket YOUR_BUCKET_NAME \
+  --versioning-configuration Status=Enabled
+```
+
+Or via Terraform:
+
+```hcl
+resource "aws_s3_bucket_versioning" "this" {
+  bucket = aws_s3_bucket.main.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+```
+
+---
+
+## Server-Side Encryption Configuration
+
+Enable AES256 encryption for all objects:
+
+```bash
+aws s3api put-bucket-encryption \
+  --bucket YOUR_BUCKET_NAME \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+      }
+    }]
+  }'
+```
+
+Or via Terraform:
+
+```hcl
+resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
+  bucket = aws_s3_bucket.main.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+```
+
+---
+
+## CORS Configuration for Direct Uploads
+
+Required for presigned URLs to work from web/mobile clients:
+
+```json
+[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["PUT", "POST", "GET", "DELETE"],
+    "AllowedOrigins": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]
+```
+
+Apply via CLI:
+
+```bash
+aws s3api put-bucket-cors \
+  --bucket YOUR_BUCKET_NAME \
+  --cors-configuration file://cors.json
+```
+
+---
+
+## Cost Estimation
+
+### Example: 10,000 workers, 5 documents each = 50,000 documents
+
+**Without lifecycle rules:**
+- 50,000 files × 2MB average = 100GB
+- Standard storage: $0.023/GB/month = **$2.30/month**
+- After 1 year: 600,000 files (600GB) = **$13.80/month**
+- After 5 years: 3,000,000 files (3TB) = **$69/month**
+
+**With lifecycle rules:**
+- Recent files (< 180 days): 150GB @ $0.023 = $3.45/month
+- Archived files (> 180 days): 450GB @ $0.004 = $1.80/month
+- **Total: $5.25/month** (vs $13.80) = **62% cost savings**
+
+---
+
+## Monitoring Lifecycle Rules
+
+Check rule effectiveness via CloudWatch metrics:
+
+- **NumberOfObjects**: Total object count per prefix
+- **BucketSizeBytes**: Total storage per prefix
+- **Transitions**: Objects moved between storage classes
+- **Expirations**: Objects deleted by lifecycle rules
+
+---
+
+## Best Practices
+
+✅ **Always enable versioning** for documents (allows rollback)  
+✅ **Set temp/ expiration to 1 day** (prevents bloat)  
+✅ **Archive after 180 days** (compliance + cost savings)  
+✅ **Delete old versions after 7 days** (balance between rollback and cost)  
+✅ **Enable encryption by default** (AES256 or KMS)  
+✅ **Monitor via CloudWatch** (track lifecycle effectiveness)  
+✅ **Test rules in staging first** (avoid accidental deletion)  
+✅ **Document your rules** (for team reference)  
+
+❌ **Don't skip temp/ cleanup** (will accumulate abandoned files)  
+❌ **Don't delete current versions** (only noncurrent)  
+❌ **Don't set aggressive expiration** (test first)  
+❌ **Don't forget CORS** (presigned URLs won't work)  
+
+---
+
+## Verification
+
+After applying rules, verify they're working:
+
+```bash
+# List lifecycle rules
+aws s3api get-bucket-lifecycle-configuration --bucket YOUR_BUCKET_NAME
+
+# Check object count in temp/
+aws s3 ls s3://YOUR_BUCKET_NAME/temp/ --recursive | wc -l
+
+# Monitor CloudWatch metrics
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/S3 \
+  --metric-name BucketSizeBytes \
+  --dimensions Name=BucketName,Value=YOUR_BUCKET_NAME Name=StorageType,Value=StandardStorage \
+  --start-time 2024-01-01T00:00:00Z \
+  --end-time 2024-12-31T23:59:59Z \
+  --period 86400 \
+  --statistics Average
+```
+
+---
+
+## Summary
+
+| Rule | Purpose | Impact | Cost Savings |
+|------|---------|--------|--------------|
+| Cleanup temp | Delete abandoned uploads | 99% temp reduction | 10-20% |
+| Delete old versions | Remove outdated versions | Version control | 15-25% |
+| Archive to Glacier | Long-term storage | Compliance-ready | 40-60% |
+| Expire thumbnails | Regenerable assets | Clean storage | 5-10% |
+
+**Total potential cost savings: 70-80%**
+
+---
+
+**Next Steps:**
+1. Create S3 bucket
+2. Apply lifecycle rules (copy-paste JSON above)
+3. Enable versioning
+4. Enable encryption
+5. Configure CORS
+6. Test with temp files
+7. Monitor CloudWatch metrics

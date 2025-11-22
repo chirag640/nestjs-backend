@@ -14,6 +14,9 @@ import {
   CacheCleanupJob,
   OrphanedRecordsJob,
 } from '../interfaces/cleanup-jobs.interface';
+{% if features.s3Upload %}
+import { S3LifecycleService } from '../../s3-lifecycle/s3-lifecycle.service';
+{% endif %}
 
 @Processor(QUEUE_NAMES.CLEANUP, {
   concurrency: parseInt(process.env.QUEUE_CLEANUP_CONCURRENCY || '1'),
@@ -22,7 +25,12 @@ import {
 export class CleanupProcessor extends WorkerHost {
   private readonly logger = new Logger(CleanupProcessor.name);
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    {% if features.s3Upload %}
+    private readonly s3Service: S3LifecycleService,
+    {% endif %}
+  ) {
     super();
   }
 
@@ -51,6 +59,11 @@ export class CleanupProcessor extends WorkerHost {
         
         case 'orphaned-records':
           return await this.handleOrphanedRecords(job.data as OrphanedRecordsJob, job);
+        
+        {% if features.s3Upload %}
+        case 's3-temp-cleanup':
+          return await this.handleS3TempCleanup(job.data as any, job);
+        {% endif %}
         
         default:
           throw new Error(`Unknown job type: ${job.name}`);
@@ -267,6 +280,35 @@ export class CleanupProcessor extends WorkerHost {
       cleanedAt: new Date(),
     };
   }
+
+  {% if features.s3Upload %}
+  /**
+   * Clean up S3 temporary files
+   * Removes files in temp/ older than specified hours
+   * Note: S3 lifecycle rules handle this automatically, but this provides manual control
+   */
+  private async handleS3TempCleanup(data: { olderThanHours?: number }, job: Job) {
+    const olderThanHours = data.olderThanHours || 24;
+    this.logger.log(`Cleaning S3 temp files older than ${olderThanHours} hours`);
+    
+    await job.updateProgress(30);
+
+    try {
+      const deletedCount = await this.s3Service.cleanupTempFiles(olderThanHours);
+      
+      await job.updateProgress(100);
+
+      return {
+        olderThanHours,
+        filesDeleted: deletedCount,
+        cleanedAt: new Date(),
+      };
+    } catch (error) {
+      this.logger.error('Failed to cleanup S3 temp files:', error);
+      throw error;
+    }
+  }
+  {% endif %}
 
   @OnWorkerEvent('completed')
   onCompleted(job: Job, result: any) {

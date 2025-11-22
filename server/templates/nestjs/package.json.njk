@@ -16,7 +16,9 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"{% if features.queues %},
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "seed": "ts-node src/scripts/seed.ts",
+    "seed:force": "ts-node src/scripts/seed.ts --force"{% if features.queues %},
     "worker:start": "node dist/workers/dedicated-worker.main.js",
     "worker:dev": "nodemon --watch src --exec ts-node src/workers/dedicated-worker.main.ts",
     "worker:debug": "node --inspect=0.0.0.0:9230 dist/workers/dedicated-worker.main.js"{% endif %}
@@ -40,6 +42,9 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "bcryptjs": "^3.0.3",
+    "@nestjs-modules/mailer": "^2.0.2",
+    "nodemailer": "^6.9.15",
+    "handlebars": "^4.7.8",
 {% endif %}
 {% if oauth and oauth.enabled %}
     {% for provider in oauth.providers %}
@@ -84,6 +89,10 @@
     "@bull-board/nestjs": "^6.5.0",
     "@bull-board/express": "^6.5.0",
 {% endif %}
+{% if features.s3Upload %}
+    "@aws-sdk/client-s3": "^3.682.0",
+    "@aws-sdk/s3-request-presigner": "^3.682.0",
+{% endif %}
     "class-validator": "^0.14.0",
     "class-transformer": "^0.5.1",
     "reflect-metadata": "^0.1.13",
@@ -102,6 +111,7 @@
 {% if auth and auth.enabled %}
     "@types/bcryptjs": "^2.4.6",
     "@types/passport-jwt": "^4.0.1",
+    "@types/nodemailer": "^6.4.16",
 {% endif %}
 {% if oauth and oauth.enabled %}
     {% for provider in oauth.providers %}

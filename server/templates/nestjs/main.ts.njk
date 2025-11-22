@@ -6,6 +6,7 @@ import { AppModule } from './app.module';
 {% if features.compression %}import compression from 'compression';{% endif %}
 {% if features.versioning %}import { VersioningType } from '@nestjs/common';{% endif %}
 {% if features.swagger %}import { setupSwagger } from './config/swagger.config';{% endif %}
+import cookieParser from 'cookie-parser';
 import { validateEnv } from './env.schema';
 
 async function bootstrap() {
@@ -36,6 +37,9 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
   {% endif %}
 
+  // Set global API prefix for better API organization
+  app.setGlobalPrefix('api');
+
   {% if features.versioning %}
   // Enable URI-based API versioning (e.g., /v1/users, /v2/users)
   app.enableVersioning({
@@ -52,6 +56,23 @@ async function bootstrap() {
   // Performance: Gzip compression
   app.use(compression());
   {% endif %}
+
+  // Enable cookie parsing (required for CSRF protection and session management)
+  app.use(cookieParser());
+
+  // CSRF Protection (optional - enable via ENABLE_CSRF=true environment variable)
+  // Note: For stateless JWT APIs, CSRF is often not needed
+  // Enable this for traditional session-based authentication or when using cookies for auth tokens
+  if (process.env.ENABLE_CSRF === 'true') {
+    const { CsrfMiddleware } = await import('./common/csrf.middleware');
+    app.use(new CsrfMiddleware().use.bind(new CsrfMiddleware()));
+    {% if features.logging %}
+    const logger = app.get(Logger);
+    logger.log('🛡️  CSRF protection enabled');
+    {% else %}
+    console.log('🛡️  CSRF protection enabled');
+    {% endif %}
+  }
 
   {% if features.cors %}
   // Enable CORS for cross-origin requests
@@ -75,6 +96,10 @@ async function bootstrap() {
     forbidNonWhitelisted: true,
     transform: true,
   }));
+
+  // Enable input sanitization to prevent XSS attacks
+  const { SanitizationPipe } = await import('./common/sanitization.pipe');
+  app.useGlobalPipes(new SanitizationPipe());
   {% endif %}
 
   // Register global exception filter for standardized error responses (production-ready)

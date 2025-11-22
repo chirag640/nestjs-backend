@@ -164,6 +164,9 @@ export const featureSelectionSchema = z.object({
 
   // Background Job Queues (BullMQ)
   queues: z.boolean().default(false), // Enable BullMQ job queues for background processing
+
+  // File Upload with S3 Lifecycle Management
+  s3Upload: z.boolean().default(false), // Enable AWS S3 file uploads with presigned URLs and lifecycle rules
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;

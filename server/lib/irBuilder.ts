@@ -141,6 +141,9 @@ export interface FeaturesIR {
 
   // Background job queues
   queues: boolean; // BullMQ job queues with BullBoard monitoring
+
+  // File upload with S3 lifecycle
+  s3Upload: boolean; // AWS S3 file uploads with presigned URLs and automatic lifecycle management
 }
 
 /**
