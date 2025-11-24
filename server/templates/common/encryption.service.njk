@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KmsService } from './kms.service';
-import { encryptAES, decryptAES, encryptJSON, decryptJSON, EncryptedData } from './encryption.util';
+import { encryptAES, decryptAES, encryptJSON, EncryptedData } from './encryption.util';
 
 /**
  * Field-Level Encryption Service
@@ -94,7 +94,8 @@ export class EncryptionService {
           // Remove plaintext field
           delete record[fieldName];
         } catch (error) {
-          this.logger.error(`Failed to encrypt field: ${fieldName}`, error.stack);
+          const err = error as Error;
+          this.logger.error(`Failed to encrypt field: ${fieldName}`, err.stack);
           throw new Error(`Encryption failed for field: ${fieldName}`);
         }
       }
@@ -108,8 +109,9 @@ export class EncryptionService {
 
       return record;
     } catch (error) {
-      this.logger.error('Failed to encrypt record', error.stack);
-      throw new Error(`Record encryption failed: ${error.message}`);
+      const err = error as Error;
+      this.logger.error('Failed to encrypt record', err.stack);
+      throw new Error(`Record encryption failed: ${err.message}`);
     }
   }
 
@@ -167,7 +169,8 @@ export class EncryptionService {
             record[fieldName] = decrypted;
           }
         } catch (error) {
-          this.logger.error(`Failed to decrypt field: ${fieldName}`, error.stack);
+          const err = error as Error;
+          this.logger.error(`Failed to decrypt field: ${fieldName}`, err.stack);
           throw new Error(`Decryption failed for field: ${fieldName}. Data may be corrupted or tampered.`);
         }
       }
@@ -181,8 +184,9 @@ export class EncryptionService {
 
       return record;
     } catch (error) {
-      this.logger.error('Failed to decrypt record', error.stack);
-      throw new Error(`Record decryption failed: ${error.message}`);
+      const err = error as Error;
+      this.logger.error('Failed to decrypt record', err.stack);
+      throw new Error(`Record decryption failed: ${err.message}`);
     }
   }
 
@@ -328,7 +332,8 @@ export class EncryptionService {
 
       return decrypted.testField === 'test data';
     } catch (error) {
-      this.logger.error('Encryption health check failed', error.stack);
+      const err = error as Error;
+      this.logger.error('Encryption health check failed', err.stack);
       return false;
     }
   }

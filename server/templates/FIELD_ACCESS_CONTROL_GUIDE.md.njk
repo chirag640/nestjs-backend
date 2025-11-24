@@ -1,0 +1,737 @@
+# Field-Level Access Control (FLAC) Guide
+
+## 📖 Table of Contents
+- [What is FLAC?](#what-is-flac)
+- [Why You Need FLAC](#why-you-need-flac)
+- [Architecture Overview](#architecture-overview)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Admin UI Usage](#admin-ui-usage)
+- [API Reference](#api-reference)
+- [Best Practices](#best-practices)
+- [Real-World Examples](#real-world-examples)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## 🔐 What is FLAC?
+
+**Field-Level Access Control (FLAC)** is a security layer that controls which fields users can see in API responses based on their role.
+
+### RBAC vs FLAC
+
+| Feature | RBAC (Role-Based Access Control) | FLAC (Field-Level Access Control) |
+|---------|----------------------------------|-----------------------------------|
+| **Scope** | Controls which APIs user can access | Controls which fields user can see |
+| **Example** | "Can this user call GET /workers?" | "Can this user see worker.ssn?" |
+| **Granularity** | Endpoint-level | Field-level |
+| **Use Case** | Prevent unauthorized API calls | Prevent data exposure within responses |
+
+### Example
+
+```json
+// Without FLAC - Worker sees everything (BAD)
+GET /workers/123
+{
+  "id": "123",
+  "name": "John Doe",
+  "ssn": "123-45-6789",  // ⚠️ Should NOT be visible to worker
+  "medicalNotes": "Diagnosed with diabetes",  // ⚠️ Should NOT be visible
+  "salary": 50000  // ⚠️ Should NOT be visible
+}
+
+// With FLAC - Worker only sees allowed fields (GOOD)
+GET /workers/123
+{
+  "id": "123",
+  "name": "John Doe"
+  // SSN, medical notes, and salary automatically removed
+}
+```
+
+---
+
+## 🔥 Why You Need FLAC
+
+### 1. **Prevent Accidental Data Exposure**
+Developers may accidentally return full database objects. FLAC automatically strips unauthorized fields.
+
+### 2. **Regulatory Compliance**
+- **HIPAA**: Medical data must be restricted to authorized personnel
+- **GDPR**: Personal data must follow "need-to-know" principle
+- **SOC 2**: Access controls must be documented and enforced
+
+### 3. **Protect from Developer Mistakes**
+Even if a developer forgets to filter fields, FLAC does it automatically.
+
+### 4. **Multi-Role Systems**
+When you have 5+ roles (admin, doctor, nurse, worker, employer), managing field access manually becomes impossible.
+
+### 5. **Audit Trail**
+All access attempts are logged for compliance and security monitoring.
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       Client Request                         │
+│                  GET /workers/123 (role: worker)             │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Controller                               │
+│  @FieldAccess({ entityName: 'Worker', requireSelfOnly: true })│
+│  async getWorker(@Param('id') id: string) {                 │
+│    return this.workerService.findById(id);                  │
+│  }                                                           │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Service Layer                           │
+│  Returns full worker object with ALL fields                  │
+│  { id, name, ssn, medicalNotes, salary, ... }               │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│              FieldAccessInterceptor (FLAC)                   │
+│  1. Gets user role from request (worker)                     │
+│  2. Loads field access policy for 'worker' role              │
+│  3. Filters out denied fields (ssn, medicalNotes, salary)    │
+│  4. Logs access attempt to audit log                         │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Client Response                            │
+│            { id: "123", name: "John Doe" }                   │
+│              (Sensitive fields removed)                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+1. **field-access.policy.ts** - Default access rules per role
+2. **field-filter.util.ts** - Core filtering logic
+3. **field-access.interceptor.ts** - Automatic response filtering
+4. **field-access.service.ts** - Manage dynamic rules from database
+5. **field-access.controller.ts** - Admin API for managing permissions
+6. **field-access-rule.schema.ts** - Database schema for rules
+7. **field-access.decorator.ts** - Decorators for controllers
+
+---
+
+## 🚀 Quick Start
+
+### Step 1: Enable FLAC in Wizard
+
+When generating your NestJS backend, enable **Field-Level Access Control** in Step 5:
+
+```
+☑️ Field-Level Access Control (FLAC)
+```
+
+### Step 2: Apply to Controllers
+
+```typescript
+import { FieldAccess, SelfOnly } from './access-control/field-access.decorator';
+
+@Controller('workers')
+export class WorkerController {
+  
+  // Worker can only see their own record, and only allowed fields
+  @SelfOnly('Worker')
+  @Get(':id')
+  async getWorker(@Param('id') id: string) {
+    return this.workerService.findById(id);
+  }
+
+  // Admin can see all workers
+  @FieldAccess({ entityName: 'Worker' })
+  @Get()
+  @Roles('admin')
+  async getAllWorkers() {
+    return this.workerService.findAll();
+  }
+}
+```
+
+### Step 3: Configure Access Rules
+
+Default rules are in `field-access.policy.ts`:
+
+```typescript
+export const DEFAULT_FIELD_ACCESS_POLICIES = {
+  user: {
+    allowSelfOnly: true,
+    allow: ['*'],
+    deny: [
+      'sensitiveEncrypted.*',
+      'medicalNotes',
+      'ssn',
+      'salary'
+    ]
+  },
+  doctor: {
+    allow: ['*'],
+    deny: ['adminNotes']
+  },
+  admin: {
+    allow: ['*'],
+    deny: []
+  }
+};
+```
+
+### Step 4: Test It
+
+```bash
+# As worker (can only see own data)
+curl -H "Authorization: Bearer <worker-token>" \
+  http://localhost:3000/workers/123
+
+# As doctor (can see medical fields)
+curl -H "Authorization: Bearer <doctor-token>" \
+  http://localhost:3000/workers/123
+
+# As admin (can see everything)
+curl -H "Authorization: Bearer <admin-token>" \
+  http://localhost:3000/workers/123
+```
+
+---
+
+## ⚙️ Configuration
+
+### Default Roles
+
+| Role | Self-Only | Allow | Deny | Use Case |
+|------|-----------|-------|------|----------|
+| `public` | No | None | All | Unauthenticated users |
+| `user` | Yes | All | Sensitive fields | Regular users |
+| `manager` | No | All | Admin fields | Team managers |
+| `doctor` | No | All | Admin/financial | Medical staff |
+| `admin` | No | All | Super-admin fields | Administrators |
+| `super_admin` | No | All | None | System administrators |
+
+### Field Path Patterns
+
+```typescript
+// Direct field
+'ssn'  // Matches worker.ssn
+
+// Nested field
+'profile.ssn'  // Matches worker.profile.ssn
+
+// Wildcard
+'sensitiveEncrypted.*'  // Matches all fields under sensitiveEncrypted
+
+// Array nested
+'orders.*.paymentInfo'  // Matches paymentInfo in all orders
+```
+
+### Entity-Specific Rules
+
+```typescript
+{
+  role: 'doctor',
+  entityRules: {
+    Worker: {
+      allow: ['*'],
+      deny: ['adminNotes'],
+      allowRead: true,
+      allowWrite: true,
+      allowDelete: false
+    },
+    Order: {
+      allow: ['*'],
+      deny: ['paymentInfo'],
+      allowRead: true,
+      allowWrite: false,
+      allowDelete: false
+    }
+  }
+}
+```
+
+---
+
+## 🖥️ Admin UI Usage
+
+### Accessing Permission Manager
+
+{% if features.auth %}1. Log in as admin
+2. Navigate to `/admin/permissions`
+3. You'll see the Permission Manager UI{% else %}1. Navigate to `/admin/permissions`
+2. You'll see the Permission Manager UI{% endif %}
+
+### Managing Permissions
+
+#### Create New Rule
+
+```json
+POST /field-access/rules
+{
+  "role": "nurse",
+  "entityName": "Worker",
+  "allowSelfOnly": false,
+  "allow": ["*"],
+  "deny": ["salary", "adminNotes"],
+  "allowRead": true,
+  "allowWrite": true,
+  "allowDelete": false,
+  "priority": 10,
+  "description": "Nurses can see medical data but not salary/admin notes"
+}
+```
+
+#### Update Rule
+
+```json
+PUT /field-access/rules/<rule-id>
+{
+  "deny": ["salary", "adminNotes", "ssn"]
+}
+```
+
+#### Deactivate Rule
+
+```
+PUT /field-access/rules/<rule-id>/deactivate
+```
+
+#### View Access Logs
+
+```
+GET /field-access/logs?userId=<user-id>
+GET /field-access/logs/denied  // See denied access attempts
+```
+
+#### Get Statistics
+
+```
+GET /field-access/stats
+{
+  "total": 1234,
+  "granted": 1100,
+  "denied": 134,
+  "denialRate": "10.86%",
+  "byAction": [...],
+  "byRole": [...]
+}
+```
+
+---
+
+## 📚 API Reference
+
+### Decorators
+
+#### `@FieldAccess(config)`
+
+Apply field-level access control to endpoint.
+
+```typescript
+@FieldAccess({
+  entityName: 'Worker',
+  requireSelfOnly: true,
+  enableAudit: true,
+  customDeny: ['temporaryField']
+})
+```
+
+**Parameters:**
+- `entityName` - Entity type (e.g., 'Worker', 'Order')
+- `requireSelfOnly` - Enforce self-only access
+- `skipFlac` - Bypass FLAC for this endpoint
+- `customAllow` - Additional allowed fields
+- `customDeny` - Additional denied fields
+- `enableAudit` - Log access attempts
+
+#### `@SelfOnly(entityName?)`
+
+Shorthand for self-only access.
+
+```typescript
+@SelfOnly('Worker')
+@Get(':id')
+async getWorker(@Param('id') id: string) { ... }
+```
+
+#### `@SkipFlac()`
+
+Skip FLAC for public endpoints.
+
+```typescript
+@SkipFlac()
+@Get('public-info')
+async getPublicInfo() { ... }
+```
+
+#### `@AuditAccess(entityName?)`
+
+Enable audit logging.
+
+```typescript
+@AuditAccess('Worker')
+@Put(':id')
+async updateWorker(@Param('id') id: string, @Body() dto: UpdateWorkerDto) { ... }
+```
+
+### Service Methods
+
+```typescript
+// Get effective policy (default + database)
+await fieldAccessService.getEffectivePolicy('doctor', 'Worker');
+
+// Create rule
+await fieldAccessService.createRule({
+  role: 'nurse',
+  deny: ['salary'],
+  allowRead: true
+});
+
+// Update rule
+await fieldAccessService.updateRule(ruleId, { deny: ['salary', 'ssn'] });
+
+// Get rules by role
+await fieldAccessService.getRulesByRole('nurse');
+
+// Get access logs
+await fieldAccessService.getAccessLogs(userId, 100, 0);
+
+// Get statistics
+await fieldAccessService.getAccessStats(userId);
+```
+
+---
+
+## ✅ Best Practices
+
+### 1. ✅ Centralize All Access Policies
+
+Store all rules in `field-access.policy.ts` or database. **DO NOT** hardcode field filtering in services.
+
+❌ **Bad:**
+```typescript
+async getWorker(id: string, role: string) {
+  const worker = await this.workerModel.findById(id);
+  if (role === 'worker') {
+    delete worker.ssn;
+    delete worker.salary;
+  }
+  return worker;
+}
+```
+
+✅ **Good:**
+```typescript
+@SelfOnly('Worker')
+@Get(':id')
+async getWorker(@Param('id') id: string) {
+  return this.workerService.findById(id);
+  // FLAC automatically filters fields
+}
+```
+
+### 2. ✅ Deny Overrides Allow (Always)
+
+```typescript
+{
+  allow: ['*'],
+  deny: ['ssn']  // ssn is DENIED even though allow is *
+}
+```
+
+### 3. ✅ Use Dot-Notation for Nested Fields
+
+```typescript
+deny: [
+  'profile.ssn',           // Nested object
+  'visits.*.diagnoses',    // Array of objects
+  'sensitiveEncrypted.*'   // All fields under object
+]
+```
+
+### 4. ✅ Test Each Role
+
+Create automated tests for each role:
+
+```typescript
+describe('FLAC - Worker Role', () => {
+  it('should not see SSN', async () => {
+    const worker = await request(app)
+      .get('/workers/123')
+      .set('Authorization', `Bearer ${workerToken}`);
+    
+    expect(worker.body.ssn).toBeUndefined();
+    expect(worker.body.medicalNotes).toBeUndefined();
+  });
+});
+
+describe('FLAC - Doctor Role', () => {
+  it('should see medical fields', async () => {
+    const worker = await request(app)
+      .get('/workers/123')
+      .set('Authorization', `Bearer ${doctorToken}`);
+    
+    expect(worker.body.medicalNotes).toBeDefined();
+  });
+});
+```
+
+### 5. ✅ Log Denied Access
+
+Enable audit logging for security monitoring:
+
+```typescript
+@AuditAccess('Worker')
+@Get(':id')
+async getWorker(@Param('id') id: string) { ... }
+```
+
+### 6. ✅ Restrict by Ownership
+
+Workers can only access their own record:
+
+```typescript
+{
+  allowSelfOnly: true  // Automatically checks userId
+}
+```
+
+### 7. ✅ Version Your Policies
+
+When adding new roles or fields, document changes:
+
+```typescript
+// v1.0.0 - Initial roles (worker, doctor, admin)
+// v1.1.0 - Added nurse role with partial medical access
+// v1.2.0 - Added employer role (no medical data)
+```
+
+---
+
+## 🌍 Real-World Examples
+
+### Example 1: Medical Records System
+
+```typescript
+// field-access.policy.ts
+export const DEFAULT_FIELD_ACCESS_POLICIES = {
+  worker: {
+    allowSelfOnly: true,
+    allow: ['id', 'name', 'email', 'phone'],
+    deny: [
+      'sensitiveEncrypted.*',
+      'medicalNotes',
+      'diagnoses',
+      'prescriptions',
+      'visits.*.notes',
+      'visits.*.diagnoses'
+    ]
+  },
+  nurse: {
+    allow: ['*'],
+    deny: [
+      'salary',
+      'adminNotes',
+      'prescriptions'  // Only doctors can prescribe
+    ]
+  },
+  doctor: {
+    allow: ['*'],
+    deny: ['adminNotes', 'salary']
+  },
+  admin: {
+    allow: ['*'],
+    deny: []
+  }
+};
+```
+
+### Example 2: E-Commerce Platform
+
+```typescript
+export const DEFAULT_FIELD_ACCESS_POLICIES = {
+  customer: {
+    allowSelfOnly: true,
+    allow: ['*'],
+    deny: [
+      'orders.*.supplierCost',
+      'orders.*.profitMargin',
+      'paymentMethods.*.cvv',  // Never expose CVV
+      'internalNotes'
+    ]
+  },
+  support: {
+    allow: ['*'],
+    deny: [
+      'paymentMethods.*.cvv',
+      'financialReports',
+      'profitMargins'
+    ]
+  },
+  manager: {
+    allow: ['*'],
+    deny: ['executiveCompensation']
+  },
+  admin: {
+    allow: ['*'],
+    deny: []
+  }
+};
+```
+
+### Example 3: HR Management System
+
+```typescript
+export const DEFAULT_FIELD_ACCESS_POLICIES = {
+  employee: {
+    allowSelfOnly: true,
+    allow: ['*'],
+    deny: [
+      'performanceReviews',
+      'disciplinaryRecords',
+      'backgroundCheck',
+      'managerNotes',
+      'colleagues.*.salary'
+    ]
+  },
+  hr: {
+    allow: ['*'],
+    deny: ['executiveSalaries', 'boardDocuments']
+  },
+  manager: {
+    allow: ['*'],
+    deny: [
+      'salary',  // Can't see their team's salaries
+      'hrInternalNotes',
+      'backgroundCheck'
+    ]
+  },
+  admin: {
+    allow: ['*'],
+    deny: []
+  }
+};
+```
+
+---
+
+## 🧨 Common Mistakes to Avoid
+
+### ❌ Mistake 1: Implementing Access Control Only in Services
+
+**Problem:** Developers forget to filter fields, causing leaks.
+
+**Solution:** Use FLAC interceptor globally.
+
+### ❌ Mistake 2: Allowing Admin Without MFA
+
+**Problem:** Admin can see everything. If compromised, full data breach.
+
+**Solution:** Require MFA for admin/super_admin roles.
+
+### ❌ Mistake 3: Forgetting Nested Paths
+
+**Problem:** `deny: ['medicalNotes']` doesn't block `visits[0].medicalNotes`.
+
+**Solution:** Use wildcards: `deny: ['medicalNotes', 'visits.*.medicalNotes']`.
+
+### ❌ Mistake 4: Hardcoding Logic in Controllers
+
+**Problem:** Rules scattered across codebase. Hard to maintain.
+
+**Solution:** Centralize in `field-access.policy.ts`.
+
+### ❌ Mistake 5: Returning 403 for Self-Only Violations
+
+**Problem:** User tries to access another user's data → 403 error.
+
+**Solution:** Return `null` or sanitized version, not error.
+
+---
+
+## 🐛 Troubleshooting
+
+### Problem: Fields Not Being Filtered
+
+**Check:**
+1. Is FLAC interceptor registered globally?
+   ```typescript
+   app.useGlobalInterceptors(
+     new FieldAccessInterceptor(app.get(Reflector), app.get(FieldAccessService))
+   );
+   ```
+2. Is `@FieldAccess()` decorator applied?
+3. Is user role correctly set in `req.user.role`?
+
+### Problem: All Fields Being Denied
+
+**Check:**
+1. Does policy for role exist?
+2. Is `allow: ['*']` set?
+3. Are deny rules too broad?
+
+### Problem: Self-Only Not Working
+
+**Check:**
+1. Is `allowSelfOnly: true` in policy?
+2. Is `userId` field present in resource?
+3. Is `req.user.id` correctly populated?
+
+### Problem: Audit Logs Not Appearing
+
+**Check:**
+1. Is MongoDB connection working?
+2. Is `enableAudit: true` in decorator?
+3. Check logs: `GET /field-access/logs`
+
+---
+
+## 📊 Performance Considerations
+
+### Impact
+
+- **CPU:** ~5-10ms overhead per request (filtering)
+- **Memory:** ~1KB per request (deep cloning)
+- **Database:** 1 extra query for dynamic rules (cached)
+
+### Optimization Tips
+
+1. **Cache policies:** Store in Redis for 5 minutes
+2. **Use field paths wisely:** Avoid overly broad wildcards
+3. **Minimize nesting:** Deep objects slow filtering
+4. **Disable for public endpoints:** Use `@SkipFlac()`
+
+---
+
+## 🎯 Summary
+
+**FLAC solves:**
+- ✅ Accidental data exposure
+- ✅ Compliance requirements (HIPAA, GDPR, SOC 2)
+- ✅ Multi-role complexity
+- ✅ Developer mistakes
+- ✅ Security audits
+
+**Works with:**
+- ✅ ANY database (medical, e-commerce, HR, finance)
+- ✅ ANY role system
+- ✅ ANY entity type
+
+**Includes:**
+- ✅ Default policies for common roles
+- ✅ Database-stored dynamic rules
+- ✅ Admin UI for permission management
+- ✅ Audit logs for compliance
+- ✅ Automatic response filtering
+
+---
+
+**Need help?** Check the `/field-access` API endpoints or contact your system administrator.

@@ -180,7 +180,7 @@ export class AuthService {
     return this.mapToOutputDto(user);
   }
 
-  async logout(userId: string, refreshToken: string, accessToken?: string) {
+  async logout(userId: string, _refreshToken: string, _accessToken?: string) {
     {% if auth.jwt.blacklist %}
     // Invalidate refresh token by clearing it from database
     await this.userRepository.updateRefreshToken(userId, null);

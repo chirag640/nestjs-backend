@@ -172,6 +172,9 @@ export const featureSelectionSchema = z.object({
   encryptionStrategy: z
     .enum(["disabled", "local", "aws_kms"])
     .default("disabled"), // Encryption strategy: disabled (FREE, no encryption), local (FREE, env key), aws_kms (PAID ~$7/mo, enterprise)
+
+  // Field-Level Access Control (FLAC)
+  fieldLevelAccessControl: z.boolean().default(false), // Enable role-based field filtering to hide sensitive data from unauthorized users
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;
@@ -264,6 +267,7 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     queues: false,
     s3Upload: false,
     encryptionStrategy: "disabled" as const,
+    fieldLevelAccessControl: false,
   },
   dockerConfig: {
     enabled: true,

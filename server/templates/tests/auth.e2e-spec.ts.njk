@@ -6,7 +6,9 @@ import { AppModule } from '../../src/app.module';
 describe('Authentication (e2e)', () => {
   let app: INestApplication;
   let accessToken: string;
+{% if auth.jwt.refreshToken %}
   let refreshToken: string;
+{% endif %}
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -34,7 +36,7 @@ describe('Authentication (e2e)', () => {
 {% if auth and auth.additionalFields %}
   {% for field in auth.additionalFields %}
     {% if field.required %}
-          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' or field.type == 'datetime' %}new Date().toISOString(){% elif field.type == 'enum' and field.enumValues and field.enumValues.length > 0 %}'{{ field.enumValues[0] }}'{% elif field.type == 'string[]' %}['test-item']{% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% endif %},
+          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' or field.type == 'datetime' %}new Date().toISOString(){% elif field.type == 'enum' and field.enum and field.enum.length > 0 %}'{{ field.enum[0] }}'{% elif field.type == 'string[]' %}['test-item']{% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% endif %},
     {% endif %}
   {% endfor %}
 {% endif %}

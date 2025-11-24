@@ -70,7 +70,7 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // Indexes for common queries
-UserSchema.index({ email: 1 }, { unique: true }); // Already enforced by unique constraint
+// Note: email index with unique:true is already created by @Prop decorator
 UserSchema.index({ roles: 1 }); // For role-based queries
 UserSchema.index({ createdAt: -1 }); // For sorting by creation date
 {% if oauth and oauth.enabled %}

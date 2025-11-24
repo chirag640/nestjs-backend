@@ -12,7 +12,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 {% endif %}
 {% if features.swagger %}
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags } from '@nestjs/swagger';
 {% endif %}
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dtos/register.dto';

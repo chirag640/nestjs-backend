@@ -281,7 +281,12 @@ export function getValidatorDecorator(field: {
       break;
     case "number":
       decorators.push("IsNumber()");
-      if (field.min !== undefined) decorators.push(`Min(${field.min})`);
+      // Use IsPositive() for strictly positive numbers (min > 0)
+      if (field.min !== undefined && field.min > 0) {
+        decorators.push("IsPositive()");
+      } else if (field.min !== undefined) {
+        decorators.push(`Min(${field.min})`);
+      }
       if (field.max !== undefined) decorators.push(`Max(${field.max})`);
       break;
     case "boolean":

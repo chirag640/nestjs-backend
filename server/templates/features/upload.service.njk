@@ -76,7 +76,8 @@ export class UploadService {
         reason: 'temp_file_expiration',
       });
     } catch (error) {
-      this.logger.error('Failed to queue document processing jobs:', error);
+      const err = error as Error;
+      this.logger.error('Failed to queue document processing jobs:', err.message, err.stack);
       // Don't fail the upload if background jobs fail to queue
     }
     {% endif %}
@@ -94,7 +95,8 @@ export class UploadService {
       await fs.unlink(filePath);
       this.logger.log(`File deleted: ${filename}`);
     } catch (error) {
-      this.logger.error(`Failed to delete file ${filename}:`, error);
+      const err = error as Error;
+      this.logger.error(`Failed to delete file ${filename}:`, err.message, err.stack);
       throw new Error('Failed to delete file');
     }
   }

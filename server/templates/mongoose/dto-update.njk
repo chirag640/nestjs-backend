@@ -1,7 +1,9 @@
 import {
   IsOptional,
 {% set validatorSet = [] %}
+{% set hasDateFields = false %}
 {% for field in model.fields %}
+  {% if field.tsType === 'Date' %}{% set hasDateFields = true %}{% endif %}
   {% for validator in field.validators %}
     {% set cleanValidator = validator.split('(')[0].trim() %}
     {% if cleanValidator not in validatorSet and cleanValidator != 'IsOptional' %}
@@ -9,9 +11,19 @@ import {
   {{ cleanValidator }},
     {% endif %}
   {% endfor %}
+  {% if field.enhancedValidators %}
+    {% for enhancedValidator in field.enhancedValidators %}
+      {% set cleanEnhanced = enhancedValidator.split('(')[0].trim() %}
+      {% if cleanEnhanced not in validatorSet and cleanEnhanced != 'IsOptional' %}
+        {% set _ = validatorSet.push(cleanEnhanced) %}
+  {{ cleanEnhanced }},
+      {% endif %}
+    {% endfor %}
+  {% endif %}
 {% endfor %}
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import sanitizeHtml from 'sanitize-html';
+import { Transform{% if hasDateFields %}, Type{% endif %} } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class {{ model.updateDtoName }} {
@@ -30,7 +42,11 @@ export class {{ model.updateDtoName }} {
   {% endif %}
   @IsOptional()
   {% if field.type === 'string' %}
-  @Transform(({ value }) => value?.trim()) // Sanitize: trim whitespace
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const trimmed = value.trim();
+    return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
+  }) // Sanitize: trim whitespace and remove HTML
   {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
@@ -40,7 +56,7 @@ export class {{ model.updateDtoName }} {
   @{{ enhancedValidator }}()
   {% endfor %}
   {% endif %}
-  {% if field.type === 'Date' %}
+  {% if field.tsType === 'Date' %}
   @Type(() => Date)
   {% endif %}
   {{ field.name }}?: {{ field.tsType }};

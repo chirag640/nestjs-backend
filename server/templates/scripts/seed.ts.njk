@@ -128,7 +128,9 @@ async function seed() {
     console.log('   3. Change the admin password immediately\n');
 
   } catch (error) {
-    console.error('\n❌ Seeding failed:', error);
+    const err = error as Error;
+    console.error('\n❌ Seeding failed:', err.message);
+    console.error(err.stack);
     process.exit(1);
   } finally {
     await app.close();

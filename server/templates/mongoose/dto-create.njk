@@ -1,7 +1,9 @@
 import {
   IsOptional,
 {% set validatorSet = [] %}
+{% set hasDateFields = false %}
 {% for field in model.fields %}
+  {% if field.tsType === 'Date' %}{% set hasDateFields = true %}{% endif %}
   {% for validator in field.validators %}
     {% set cleanValidator = validator.split('(')[0].trim() %}
     {% if cleanValidator not in validatorSet and cleanValidator != 'IsOptional' %}
@@ -9,10 +11,20 @@ import {
   {{ cleanValidator }},
     {% endif %}
   {% endfor %}
+  {% if field.enhancedValidators %}
+    {% for enhancedValidator in field.enhancedValidators %}
+      {% set cleanEnhanced = enhancedValidator.split('(')[0].trim() %}
+      {% if cleanEnhanced not in validatorSet and cleanEnhanced != 'IsOptional' %}
+        {% set _ = validatorSet.push(cleanEnhanced) %}
+  {{ cleanEnhanced }},
+      {% endif %}
+    {% endfor %}
+  {% endif %}
 {% endfor %}
 } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Transform{% if hasDateFields %}, Type{% endif %} } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+import sanitizeHtml from 'sanitize-html';
 
 export class {{ model.createDtoName }} {
 {% for field in model.fields %}
@@ -30,7 +42,12 @@ export class {{ model.createDtoName }} {
   {% endif %}
   {% if field.required and not field.defaultValue %}
   {% if field.type === 'string' %}
-  @Transform(({ value }) => value?.trim()) // Sanitize: trim whitespace
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const trimmed = value.trim();
+    // Sanitize HTML to prevent XSS attacks
+    return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
+  })
   {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
@@ -40,14 +57,19 @@ export class {{ model.createDtoName }} {
   @{{ enhancedValidator }}()
   {% endfor %}
   {% endif %}
-  {% if field.type === 'Date' %}
+  {% if field.tsType === 'Date' %}
   @Type(() => Date)
   {% endif %}
   {{ field.name }}!: {{ field.tsType }};
   {% else %}
   @IsOptional()
   {% if field.type === 'string' %}
-  @Transform(({ value }) => value?.trim()) // Sanitize: trim whitespace
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const trimmed = value.trim();
+    // Sanitize HTML to prevent XSS attacks
+    return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
+  })
   {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
@@ -57,7 +79,7 @@ export class {{ model.createDtoName }} {
   @{{ enhancedValidator }}()
   {% endfor %}
   {% endif %}
-  {% if field.type === 'Date' %}
+  {% if field.tsType === 'Date' %}
   @Type(() => Date)
   {% endif %}
   {{ field.name }}?: {{ field.tsType }};

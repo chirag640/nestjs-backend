@@ -48,7 +48,7 @@ import { EncryptionStrategy } from './encryption-strategy.enum';
 @Injectable()
 export class LocalKmsService {
   private readonly logger = new Logger(LocalKmsService.name);
-  private readonly masterKey: Buffer;
+  private readonly masterKey!: Buffer;
   private readonly enabled: boolean;
 
   constructor(private configService: ConfigService) {
@@ -118,8 +118,9 @@ export class LocalKmsService {
         encryptedKey: new Uint8Array(combined),
       };
     } catch (error) {
-      this.logger.error('Failed to generate local data key', error.stack);
-      throw new Error(`Local key generation failed: ${error.message}`);
+      const err = error as Error;
+      this.logger.error('Failed to generate local data key', err.stack);
+      throw new Error(`Local key generation failed: ${err.message}`);
     }
   }
 
@@ -151,8 +152,9 @@ export class LocalKmsService {
 
       return new Uint8Array(plaintextDek);
     } catch (error) {
-      this.logger.error('Failed to decrypt local key', error.stack);
-      throw new Error(`Local key decryption failed: ${error.message}`);
+      const err = error as Error;
+      this.logger.error('Failed to decrypt local key', err.stack);
+      throw new Error(`Local key decryption failed: ${err.message}`);
     }
   }
 
@@ -189,7 +191,8 @@ export class LocalKmsService {
       // Verify decrypted key matches original
       return Buffer.from(plaintextKey).equals(Buffer.from(decrypted));
     } catch (error) {
-      this.logger.error('Local KMS health check failed', error.stack);
+      const err = error as Error;
+      this.logger.error('Local KMS health check failed', err.stack);
       return false;
     }
   }

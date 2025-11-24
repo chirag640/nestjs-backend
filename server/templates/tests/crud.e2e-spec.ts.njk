@@ -48,7 +48,7 @@ describe('{{ model.name }} CRUD (e2e)', () => {
         .send({
 {% for field in model.fields %}
   {% if not field.isPrimary and not field.isTimestamp %}
-          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' or field.type == 'datetime' %}new Date().toISOString(){% elif field.type == 'enum' and field.enumValues and field.enumValues.length > 0 %}'{{ field.enumValues[0] }}'{% elif field.type == 'string[]' %}['test-item']{% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% endif %},
+          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' or field.type == 'datetime' %}new Date().toISOString(){% elif field.type == 'enum' and field.enum and field.enum.length > 0 %}'{{ field.enum[0] }}'{% elif field.type == 'string[]' %}['test-item']{% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% endif %},
   {% endif %}
 {% endfor %}
         })
@@ -86,7 +86,7 @@ describe('{{ model.name }} CRUD (e2e)', () => {
         .send({
 {% for field in model.fields %}
   {% if not field.isPrimary and not field.isTimestamp and field.required %}
-          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' or field.type == 'datetime' %}new Date().toISOString(){% elif field.type == 'enum' and field.enumValues and field.enumValues.length > 0 %}'{{ field.enumValues[0] }}'{% elif field.type == 'string[]' %}['test-item']{% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% endif %},
+          {{ field.name }}: {% if field.type == 'string' %}'test-{{ field.name }}'{% elif field.type == 'number' %}123{% elif field.type == 'boolean' %}true{% elif field.type == 'date' or field.type == 'datetime' %}new Date().toISOString(){% elif field.type == 'enum' and field.enum and field.enum.length > 0 %}'{{ field.enum[0] }}'{% elif field.type == 'string[]' %}['test-item']{% elif field.type == 'json' %}{ test: 'data' }{% elif field.type == 'json[]' %}[{ test: 'data' }]{% endif %},
   {% endif %}
 {% endfor %}
         })

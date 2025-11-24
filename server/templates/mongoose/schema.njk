@@ -1,5 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document as MongooseDocument, Schema as MongooseSchema } from 'mongoose';
+{% set needsMongooseSchema = false %}
+{% if relationships and relationships | length > 0 %}{% set needsMongooseSchema = true %}{% endif %}
+{% for field in model.fields %}
+  {% if 'MongooseSchema' in field.mongooseType %}{% set needsMongooseSchema = true %}{% endif %}
+{% endfor %}
+import { Document as MongooseDocument{% if needsMongooseSchema %}, Schema as MongooseSchema{% endif %} } from 'mongoose';
 
 export type {{ model.name }}Document = {{ model.name }} & MongooseDocument;
 
@@ -59,6 +64,18 @@ export const {{ model.name }}Schema = SchemaFactory.createForClass({{ model.name
 {% if uniqueFields.length > 0 and model.timestamps %}
 // Compound index for unique field lookups with timestamps
 {{ model.name }}Schema.index({ {{ uniqueFields[0] }}: 1, createdAt: -1 });
+{% endif %}
+
+{% set textSearchFields = [] %}
+{% for field in model.fields %}
+  {% if field.type === 'string' and (field.name.includes('name') or field.name.includes('title') or field.name.includes('description')) %}
+    {% set _ = textSearchFields.push(field.name) %}
+  {% endif %}
+{% endfor %}
+
+{% if textSearchFields.length > 0 %}
+// Text search index for common search queries
+{{ model.name }}Schema.index({ {% for field in textSearchFields %}{{ field }}: 'text'{% if not loop.last %}, {% endif %}{% endfor %} });
 {% endif %}
 
 {% if relationships %}

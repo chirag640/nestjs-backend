@@ -4,14 +4,38 @@ import { {{ model.createDtoName }} } from './dto/create-{{ model.fileName }}.dto
 import { {{ model.updateDtoName }} } from './dto/update-{{ model.fileName }}.dto';
 import { {{ model.outputDtoName }} } from './dto/{{ model.fileName }}-output.dto';
 import { PaginatedResponse, createPaginatedResponse } from '../../pagination.dto';
+{% if model.encryptedFields and model.encryptedFields.length > 0 %}
+import { EncryptionService } from '../../common/encryption.service';
+{% endif %}
 
 @Injectable()
 export class {{ model.name }}Service {
-  constructor(private readonly {{ model.nameCamel }}Repository: {{ model.name }}Repository) {}
+  constructor(
+    private readonly {{ model.nameCamel }}Repository: {{ model.name }}Repository,
+    {% if model.encryptedFields and model.encryptedFields.length > 0 %}
+    private readonly encryptionService: EncryptionService,
+    {% endif %}
+  ) {}
 
   async create(dto: {{ model.createDtoName }}): Promise<{{ model.outputDtoName }}> {
+    {% if model.encryptedFields and model.encryptedFields.length > 0 %}
+    // Encrypt sensitive fields before storing
+    const encrypted = await this.encryptionService.encryptRecord(
+      dto,
+      [{% for field in model.encryptedFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+    );
+    const created = await this.{{ model.nameCamel }}Repository.create(encrypted);
+    
+    // Decrypt for response
+    const decrypted = await this.encryptionService.decryptRecord(
+      created,
+      [{% for field in model.encryptedFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+    );
+    return this.mapToOutput(decrypted);
+    {% else %}
     const created = await this.{{ model.nameCamel }}Repository.create(dto);
     return this.mapToOutput(created);
+    {% endif %}
   }
 
   async findAll(page?: number, limit?: number): Promise<PaginatedResponse<{{ model.outputDtoName }}>> {
@@ -34,15 +58,43 @@ export class {{ model.name }}Service {
     if (!item) {
       throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
     }
+    {% if model.encryptedFields and model.encryptedFields.length > 0 %}
+    // Decrypt sensitive fields
+    const decrypted = await this.encryptionService.decryptRecord(
+      item,
+      [{% for field in model.encryptedFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+    );
+    return this.mapToOutput(decrypted);
+    {% else %}
     return this.mapToOutput(item);
+    {% endif %}
   }
 
   async update(id: string, dto: {{ model.updateDtoName }}): Promise<{{ model.outputDtoName }}> {
+    {% if model.encryptedFields and model.encryptedFields.length > 0 %}
+    // Encrypt sensitive fields before updating
+    const encrypted = await this.encryptionService.encryptRecord(
+      dto,
+      [{% for field in model.encryptedFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+    );
+    const updated = await this.{{ model.nameCamel }}Repository.update(id, encrypted);
+    if (!updated) {
+      throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
+    }
+    
+    // Decrypt for response
+    const decrypted = await this.encryptionService.decryptRecord(
+      updated,
+      [{% for field in model.encryptedFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+    );
+    return this.mapToOutput(decrypted);
+    {% else %}
     const updated = await this.{{ model.nameCamel }}Repository.update(id, dto);
     if (!updated) {
       throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
     }
     return this.mapToOutput(updated);
+    {% endif %}
   }
 
   async remove(id: string): Promise<void> {

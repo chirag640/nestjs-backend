@@ -5,15 +5,15 @@ import { Request, Response, NextFunction } from 'express';
 export class TimeoutMiddleware implements NestMiddleware {
   constructor(private readonly timeoutMs: number = 30000) {}
 
-  use(req: Request, res: Response, next: NextFunction) {
-    const timeout = setTimeout(() => {
+  use(_req: Request, res: Response, next: NextFunction) {
+    const timeoutId = setTimeout(() => {
       if (!res.headersSent) {
         throw new RequestTimeoutException('Request timeout exceeded');
       }
     }, this.timeoutMs);
 
-    res.on('finish', () => clearTimeout(timeout));
-    res.on('close', () => clearTimeout(timeout));
+    res.on('finish', () => clearTimeout(timeoutId));
+    res.on('close', () => clearTimeout(timeoutId));
 
     next();
   }

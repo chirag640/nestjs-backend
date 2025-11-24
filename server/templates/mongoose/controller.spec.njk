@@ -3,6 +3,9 @@ import { {{ model.name }}Controller } from './{{ model.fileName }}.controller';
 import { {{ model.name }}Service } from './{{ model.fileName }}.service';
 {% if auth and auth.enabled %}
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+{% if auth.rbac and auth.rbac.enabled %}
+import { RolesGuard } from '../auth/guards/roles.guard';
+{% endif %}
 import { ExecutionContext } from '@nestjs/common';
 {% endif %}
 
@@ -42,10 +45,16 @@ describe('{{ model.name }}Controller', () => {
     .useValue({
       canActivate: (context: ExecutionContext) => {
         const request = context.switchToHttp().getRequest();
-        request.user = { id: 'user-id', roles: ['User'] };
+        request.user = { id: 'user-id', roles: ['Admin'] }; // Mock as Admin for tests
         return true;
       },
     })
+    {% if auth.rbac and auth.rbac.enabled %}
+    .overrideGuard(RolesGuard)
+    .useValue({
+      canActivate: () => true, // Allow all for unit tests
+    })
+    {% endif %}
     {% endif %}
     .compile();
 

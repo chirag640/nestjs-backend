@@ -1,0 +1,34 @@
+import { Controller, Get } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiExcludeEndpoint } from '@nestjs/swagger';
+import { MetricsService } from './metrics.service';
+
+@ApiTags('Metrics')
+@Controller('metrics')
+export class MetricsController {
+  constructor(private readonly metricsService: MetricsService) {}
+
+  /**
+   * Prometheus metrics endpoint
+   * This endpoint returns metrics in Prometheus text format
+   * Configure Prometheus to scrape this endpoint periodically
+   */
+  @Get()
+  @ApiExcludeEndpoint() // Exclude from Swagger to avoid clutter
+  async getMetrics(): Promise<string> {
+    return this.metricsService.getMetrics();
+  }
+
+  /**
+   * JSON metrics endpoint for debugging
+   * Not recommended for production scraping - use /metrics instead
+   */
+  @Get('json')
+  @ApiOperation({ summary: 'Get metrics in JSON format (for debugging)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Metrics in JSON format',
+  })
+  async getMetricsJSON() {
+    return this.metricsService.getMetricsJSON();
+  }
+}

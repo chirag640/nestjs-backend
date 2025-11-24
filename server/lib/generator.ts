@@ -1,7 +1,14 @@
 import * as prettier from "prettier";
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { renderTemplate, type TemplateContext } from "./templateRenderer";
 import type { WizardConfig } from "../../shared/schema";
 import { buildIR, type ProjectIR, type ModelIR } from "./irBuilder";
+
+// ES module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface GeneratedFile {
   path: string;
@@ -11,8 +18,43 @@ export interface GeneratedFile {
 /**
  * Format code using Prettier
  */
-async function formatCode(code: string, parser: string): Promise<string> {
+async function formatCode(
+  code: string,
+  filePathOrParser: string
+): Promise<string> {
   try {
+    // Determine parser - either already a parser name or extract from file extension
+    let parser: string;
+
+    // Check if it's already a parser name (no path separators or extensions)
+    if (
+      !filePathOrParser.includes("/") &&
+      !filePathOrParser.includes("\\") &&
+      !filePathOrParser.includes(".")
+    ) {
+      // It's already a parser name like "json", "yaml", "typescript", etc.
+      parser = filePathOrParser;
+    } else {
+      // It's a file path, detect parser from extension
+      if (filePathOrParser.endsWith(".json")) {
+        parser = "json";
+      } else if (
+        filePathOrParser.endsWith(".yml") ||
+        filePathOrParser.endsWith(".yaml")
+      ) {
+        parser = "yaml";
+      } else if (filePathOrParser.endsWith(".md")) {
+        parser = "markdown";
+      } else if (filePathOrParser.endsWith(".ts")) {
+        parser = "typescript";
+      } else if (filePathOrParser.endsWith(".js")) {
+        parser = "babel";
+      } else {
+        // Default to typescript for unknown extensions
+        parser = "typescript";
+      }
+    }
+
     return await prettier.format(code, {
       parser,
       singleQuote: true,
@@ -801,6 +843,11 @@ async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
   const encryptionFiles = await generateEncryptionFiles(ir);
   files.push(...encryptionFiles);
 
+  // Field-Level Access Control (FLAC)
+  // Role-based field filtering to hide sensitive data from unauthorized users
+  const flacFiles = await generateFieldAccessFiles(ir);
+  files.push(...flacFiles);
+
   // Database Seeding Script (always generated)
   const seedFiles = await generateSeedScript(ir);
   files.push(...seedFiles);
@@ -1015,11 +1062,20 @@ async function generateEmailFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
 
   for (const { template, output } of emailTemplates) {
     try {
-      const rendered = renderTemplate(template, ir);
-      // Don't format .hbs files, only .ts files
-      const content = output.endsWith(".ts")
-        ? await formatCode(rendered, output)
-        : rendered;
+      let content: string;
+
+      // For .hbs files (Handlebars), copy them as-is without Nunjucks rendering
+      if (template.endsWith(".hbs")) {
+        const templatePath = join(__dirname, "..", "templates", template);
+        content = readFileSync(templatePath, "utf-8");
+      } else {
+        // For .njk files (Nunjucks), render and format
+        const rendered = renderTemplate(template, ir);
+        content = output.endsWith(".ts")
+          ? await formatCode(rendered, output)
+          : rendered;
+      }
+
       files.push({
         path: output,
         content,
@@ -1075,6 +1131,76 @@ async function generateEncryptionFiles(
     try {
       const rendered = renderTemplate(template, ir);
       const content = await formatCode(rendered, output);
+      files.push({
+        path: output,
+        content,
+      });
+    } catch (error) {
+      console.error(`Error generating ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Field-Level Access Control (FLAC) files
+ */
+async function generateFieldAccessFiles(
+  ir: ProjectIR
+): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  // FLAC files are always generated when auth is enabled
+  if (!ir.auth.enabled) {
+    return files;
+  }
+
+  const flacFiles = [
+    {
+      template: "access-control/field-access.policy.njk",
+      output: "src/access-control/field-access.policy.ts",
+    },
+    {
+      template: "access-control/field-filter.util.njk",
+      output: "src/access-control/field-filter.util.ts",
+    },
+    {
+      template: "access-control/field-access-rule.schema.njk",
+      output: "src/access-control/field-access-rule.schema.ts",
+    },
+    {
+      template: "access-control/field-access.decorator.njk",
+      output: "src/access-control/field-access.decorator.ts",
+    },
+    {
+      template: "access-control/field-access.interceptor.njk",
+      output: "src/access-control/field-access.interceptor.ts",
+    },
+    {
+      template: "access-control/field-access.service.njk",
+      output: "src/access-control/field-access.service.ts",
+    },
+    {
+      template: "access-control/field-access.controller.njk",
+      output: "src/access-control/field-access.controller.ts",
+    },
+    {
+      template: "access-control/field-access.module.njk",
+      output: "src/access-control/field-access.module.ts",
+    },
+    {
+      template: "FIELD_ACCESS_CONTROL_GUIDE.md.njk",
+      output: "FIELD_ACCESS_CONTROL_GUIDE.md",
+    },
+  ];
+
+  for (const { template, output } of flacFiles) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = output.endsWith(".md")
+        ? rendered
+        : await formatCode(rendered, output);
       files.push({
         path: output,
         content,

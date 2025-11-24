@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { Model, Connection, ClientSession } from 'mongoose';
+import { Model, Connection } from 'mongoose';
 import { {{ model.name }}, {{ model.name }}Document } from './schemas/{{ model.fileName }}.schema';
 import { BaseRepository } from '../../common/base.repository';
 

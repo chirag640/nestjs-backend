@@ -65,6 +65,14 @@ export interface ModelIR {
   createDtoName: string; // CreateUserDto
   updateDtoName: string; // UpdateUserDto
   outputDtoName: string; // UserOutputDto
+
+  // RBAC (Role-Based Access Control)
+  rbacRoles?: {
+    create?: string[]; // Roles allowed to create
+    read?: string[]; // Roles allowed to read (null = all authenticated)
+    update?: string[]; // Roles allowed to update
+    delete?: string[]; // Roles allowed to delete
+  };
 }
 
 /**
@@ -80,6 +88,9 @@ export interface AuthIR {
     blacklist: boolean;
   };
   roles: string[];
+  rbac?: {
+    enabled: boolean; // Enable role-based access control on controllers
+  };
   // Generated names
   modulePath: string; // src/modules/auth
   strategyName: string; // JwtStrategy
@@ -111,7 +122,7 @@ export interface OAuthIR {
  */
 export interface RelationshipIR {
   id: string;
-  type: "one-to-one" | "one-to-many" | "many-to-many";
+  type: "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
   fromModel: string;
   toModel: string;
   fieldName: string;
@@ -300,6 +311,9 @@ function buildModelIR(model: Model): ModelIR {
   const namePluralCamel = toCamelCase(namePlural); // To camelCase: "Users" -> "users"
   const namePluralKebab = toKebabCase(namePlural); // To kebab: "Users" -> "users"
 
+  // Smart RBAC roles based on entity sensitivity
+  const rbacRoles = getSmartRbacRoles(sanitizedName, model.fields);
+
   return {
     name: sanitizedName, // Sanitized PascalCase name
     nameCamel,
@@ -314,6 +328,7 @@ function buildModelIR(model: Model): ModelIR {
     createDtoName: `Create${sanitizedName}Dto`,
     updateDtoName: `Update${sanitizedName}Dto`,
     outputDtoName: `${sanitizedName}OutputDto`,
+    rbacRoles,
   };
 }
 
@@ -363,7 +378,6 @@ function buildFieldIR(field: Field): ModelFieldIR {
     max,
     pattern,
     enum: enumValues,
-    enumValues: enumValues, // For test templates
     // Enhanced validators
     enhancedValidators: smartDefaults.additionalValidators || [],
     // API Documentation
@@ -375,6 +389,99 @@ function buildFieldIR(field: Field): ModelFieldIR {
 /**
  * Get smart validation defaults for a field (extracted from Gemini fallback logic)
  */
+/**
+ * Determine smart RBAC roles based on entity name and fields
+ * Sensitive entities get admin-only create/update/delete by default
+ */
+function getSmartRbacRoles(
+  modelName: string,
+  fields: Field[]
+): {
+  create?: string[];
+  read?: string[];
+  update?: string[];
+  delete?: string[];
+} {
+  const lowerName = modelName.toLowerCase();
+
+  // High-sensitivity entities (admin-only CRUD)
+  const highSensitivity = [
+    "user",
+    "account",
+    "admin",
+    "role",
+    "permission",
+    "audit",
+    "log",
+    "config",
+    "setting",
+    "payment",
+    "transaction",
+    "invoice",
+    "billing",
+    "subscription",
+    "license",
+    "credential",
+  ];
+
+  // Medium-sensitivity entities (admin + manager for CUD, any authenticated for read)
+  const mediumSensitivity = [
+    "patient",
+    "doctor",
+    "employee",
+    "worker",
+    "staff",
+    "department",
+    "organization",
+    "team",
+    "project",
+    "order",
+    "contract",
+    "document",
+    "report",
+    "record",
+  ];
+
+  // Check if model has sensitive fields
+  const hasSensitiveFields = fields.some((f) => {
+    const fieldName = f.name.toLowerCase();
+    return (
+      fieldName.includes("password") ||
+      fieldName.includes("ssn") ||
+      fieldName.includes("salary") ||
+      fieldName.includes("credit") ||
+      fieldName.includes("secret") ||
+      fieldName.includes("token")
+    );
+  });
+
+  // High sensitivity: Admin-only
+  if (
+    highSensitivity.some((s) => lowerName.includes(s)) ||
+    hasSensitiveFields
+  ) {
+    return {
+      create: ["Admin"],
+      update: ["Admin"],
+      delete: ["Admin"],
+      // read is undefined = requires auth but no specific role
+    };
+  }
+
+  // Medium sensitivity: Admin + Manager
+  if (mediumSensitivity.some((s) => lowerName.includes(s))) {
+    return {
+      create: ["Admin", "Manager"],
+      update: ["Admin", "Manager"],
+      delete: ["Admin"],
+      // read is undefined = requires auth but no specific role
+    };
+  }
+
+  // Low sensitivity: No specific role restrictions (just auth required)
+  return {};
+}
+
 function getSmartFieldDefaults(
   fieldName: string,
   fieldType: string
@@ -702,6 +809,9 @@ function buildAuthIR(config: WizardConfig): AuthIR {
     method: authConfig.method,
     jwt: jwtConfig,
     roles: authConfig.roles,
+    rbac: {
+      enabled: authConfig.enabled, // Enable RBAC by default when auth is enabled
+    },
     modulePath: "src/modules/auth",
     strategyName: "JwtStrategy",
     guardName: "JwtAuthGuard",
@@ -727,6 +837,8 @@ function buildFeaturesIR(config: WizardConfig): FeaturesIR {
     health: features.health ?? true,
     rateLimit: features.rateLimit ?? false,
     versioning: features.versioning ?? false,
+    queues: features.queues ?? false,
+    s3Upload: features.s3Upload ?? false,
   };
 }
 
@@ -796,9 +908,11 @@ function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
 
   return allRelationships.map((rel) => {
     const relationshipIR: RelationshipIR = {
-      id: rel.id,
+      id:
+        rel.id ||
+        `${rel.sourceModel || "unknown"}_${rel.targetModel}_${rel.fieldName}`,
       type: rel.type,
-      fromModel: rel.sourceModel,
+      fromModel: rel.sourceModel || "Unknown",
       toModel: rel.targetModel,
       fieldName: rel.fieldName,
       through: rel.through,

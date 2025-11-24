@@ -118,6 +118,14 @@ const ADVANCED_FEATURES = [
       "S3 file lifecycle with presigned URLs, temp staging, automatic cleanup, versioning, and Glacier archiving",
     recommended: false,
   },
+  {
+    key: "fieldLevelAccessControl" as const,
+    icon: Shield,
+    title: "Field-Level Access Control (FLAC)",
+    description:
+      "Role-based field filtering to hide sensitive data (medical notes, SSN, salaries) from unauthorized users. Includes admin UI for managing permissions.",
+    recommended: true,
+  },
 ];
 
 const ENCRYPTION_STRATEGIES = [

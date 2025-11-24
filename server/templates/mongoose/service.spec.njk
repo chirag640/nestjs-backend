@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { {{ model.name }}Service } from './{{ model.fileName }}.service';
 import { {{ model.name }}Repository } from './{{ model.fileName }}.repository';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException{% if model.fields | selectattr('unique') | list | length > 0 %}, ConflictException{% endif %} } from '@nestjs/common';
 
 describe('{{ model.name }}Service', () => {
   let service: {{ model.name }}Service;

@@ -69,7 +69,8 @@ export function encryptAES(plaintext: string, key: Buffer): EncryptedData {
       tag: authTag.toString('base64'),
     };
   } catch (error) {
-    throw new Error(`Encryption failed: ${error.message}`);
+    const err = error as Error;
+    throw new Error(`Encryption failed: ${err.message}`);
   }
 }
 
@@ -116,11 +117,12 @@ export function decryptAES(data: EncryptedData, key: Buffer): string {
 
     return plaintext;
   } catch (error) {
+    const err = error as Error;
     // Auth tag mismatch means data was tampered with
-    if (error.message.includes('Unsupported state or unable to authenticate data')) {
+    if (err.message.includes('Unsupported state or unable to authenticate data')) {
       throw new Error('Data integrity check failed. Data may have been tampered with.');
     }
-    throw new Error(`Decryption failed: ${error.message}`);
+    throw new Error(`Decryption failed: ${err.message}`);
   }
 }
 

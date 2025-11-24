@@ -21,7 +21,7 @@ import { Reflector } from '@nestjs/core';
  * }
  */
 export const Encrypt = (fields: string[]) => {
-  return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
+  return (_target: any, _propertyKey: string, descriptor: PropertyDescriptor) => {
     Reflect.defineMetadata('encrypt_fields', fields, descriptor.value);
     return descriptor;
   };
@@ -123,7 +123,8 @@ export class EncryptionInterceptor implements NestInterceptor {
           );
         }
       } catch (error) {
-        this.logger.error('Failed to encrypt request body', error.stack);
+        const err = error as Error;
+        this.logger.error('Failed to encrypt request body', err.stack);
         throw error;
       }
     }
@@ -143,7 +144,8 @@ export class EncryptionInterceptor implements NestInterceptor {
           }
           return data;
         } catch (error) {
-          this.logger.error('Failed to decrypt response data', error.stack);
+          const err = error as Error;
+          this.logger.error('Failed to decrypt response data', err.stack);
           throw error;
         }
       }),

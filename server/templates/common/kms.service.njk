@@ -40,8 +40,8 @@ import { LocalKmsService } from './local-kms.service';
 @Injectable()
 export class KmsService {
   private readonly logger = new Logger(KmsService.name);
-  private kmsClient: KMSClient;
-  private readonly kmsKeyId: string;
+  private kmsClient!: KMSClient;
+  private readonly kmsKeyId!: string;
   private readonly enabled: boolean;
   private readonly strategy: EncryptionStrategy;
 
@@ -60,7 +60,7 @@ export class KmsService {
     if (this.strategy === EncryptionStrategy.AWS_KMS) {
       // Initialize AWS KMS
       const region = this.configService.get<string>('AWS_REGION');
-      this.kmsKeyId = this.configService.get<string>('KMS_KEY_ID');
+      this.kmsKeyId = this.configService.get<string>('KMS_KEY_ID') || '';
 
       if (!region || !this.kmsKeyId) {
         this.logger.error(
@@ -147,8 +147,9 @@ export class KmsService {
         encryptedKey: response.CiphertextBlob,
       };
     } catch (error) {
-      this.logger.error('Failed to generate data key from AWS KMS', error.stack);
-      throw new Error(`AWS KMS key generation failed: ${error.message}`);
+      const err = error as Error;
+      this.logger.error('Failed to generate data key from AWS KMS', err.stack);
+      throw new Error(`AWS KMS key generation failed: ${err.message}`);
     }
   }
 
@@ -192,8 +193,9 @@ export class KmsService {
 
       return response.Plaintext;
     } catch (error) {
-      this.logger.error('Failed to decrypt key with AWS KMS', error.stack);
-      throw new Error(`AWS KMS decryption failed: ${error.message}`);
+      const err = error as Error;
+      this.logger.error('Failed to decrypt key with AWS KMS', err.stack);
+      throw new Error(`AWS KMS decryption failed: ${err.message}`);
     }
   }
 
@@ -233,7 +235,8 @@ export class KmsService {
       await this.generateDataKey();
       return true;
     } catch (error) {
-      this.logger.error('Encryption health check failed', error.stack);
+      const err = error as Error;
+      this.logger.error('Encryption health check failed', err.stack);
       return false;
     }
   }

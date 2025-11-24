@@ -1,4 +1,4 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory{% if features.fieldLevelAccessControl %}, Reflector{% endif %} } from '@nestjs/core';
 import { AppModule } from './app.module';
 {% if features.validation %}import { ValidationPipe } from '@nestjs/common';{% endif %}
 {% if features.logging %}import { Logger } from 'nestjs-pino';{% endif %}
@@ -114,6 +114,13 @@ async function bootstrap() {
   // Register logging interceptor for automatic request/response logging with PII sanitization
   const { LoggingInterceptor } = await import('./common/logging.interceptor');
   app.useGlobalInterceptors(new LoggingInterceptor());
+  {% endif %}
+
+  {% if features.fieldLevelAccessControl %}
+  // Register field-level access control interceptor for role-based field filtering
+  const { FieldAccessInterceptor } = await import('./access-control/field-access.interceptor');
+  const { FieldAccessService } = await import('./access-control/field-access.service');
+  app.useGlobalInterceptors(new FieldAccessInterceptor(app.get(Reflector), app.get(FieldAccessService)));
   {% endif %}
 
   // Register request ID middleware for distributed tracing

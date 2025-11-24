@@ -1,0 +1,42 @@
+import { Connection } from 'mongoose';
+
+/**
+ * Migration: {{ migrationName }}
+ * Description: {{ description }}
+ * Created: {{ timestamp }}
+ */
+
+export async function up(connection: Connection): Promise<void> {
+  // Add your migration logic here
+  const db = connection.db;
+  
+  // Example: Create collection with schema validation
+  // await db.createCollection('{{ collectionName }}', {
+  //   validator: {
+  //     $jsonSchema: {
+  //       bsonType: 'object',
+  //       required: ['field1', 'field2'],
+  //       properties: {
+  //         field1: { bsonType: 'string' },
+  //         field2: { bsonType: 'number' },
+  //       },
+  //     },
+  //   },
+  // });
+
+  // Example: Create indexes
+  // await db.collection('{{ collectionName }}').createIndex({ field1: 1 }, { unique: true });
+  // await db.collection('{{ collectionName }}').createIndex({ field2: 1, createdAt: -1 });
+
+  console.log('Migration {{ migrationName }} completed successfully');
+}
+
+export async function down(connection: Connection): Promise<void> {
+  // Add your rollback logic here
+  const db = connection.db;
+  
+  // Example: Drop collection
+  // await db.collection('{{ collectionName }}').drop();
+
+  console.log('Migration {{ migrationName }} rolled back successfully');
+}

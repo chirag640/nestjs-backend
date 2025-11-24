@@ -29,6 +29,9 @@ import { QueueModule } from './modules/queue/queue.module';
 import { S3LifecycleModule } from './modules/s3-lifecycle/s3-lifecycle.module';
 {% endif %}
 import { EncryptionModule } from './common/encryption.module';
+{% if features.fieldLevelAccessControl %}
+import { FieldAccessModule } from './access-control/field-access.module';
+{% endif %}
 {% if models and models.length > 0 %}
 // Generated model modules
 {% for model in models %}
@@ -79,6 +82,9 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
     S3LifecycleModule,
 {% endif %}
     EncryptionModule, // Global encryption layer (KMS + AES-GCM)
+{% if features.fieldLevelAccessControl %}
+    FieldAccessModule, // Role-based field filtering (FLAC)
+{% endif %}
 {% if auth and auth.enabled %}
     AuthModule,
 {% endif %}

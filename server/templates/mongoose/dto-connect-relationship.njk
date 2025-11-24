@@ -1,31 +1,31 @@
 {# DTO for connecting existing records in a relationship #}
-import { IsMongoId, IsArray, ArrayMinSize, ArrayNotEmpty } from 'class-validator';
+import { IsMongoId{% if relationship.type === 'many-to-many' or relationship.type === 'one-to-many' %}, IsArray, ArrayNotEmpty{% endif %} } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-export class Connect{{ relationship.fromModel }}{{ relationship.toModel }}Dto {
+export class Connect{{ relationship.fromModel | default('') }}{{ relationship.toModel | default('') }}Dto {
   @ApiProperty({
-    description: 'ID of the {{ relationship.fromModel }} record',
+    description: 'ID of the {{ relationship.fromModel | default('Source') }} record',
     example: '507f1f77bcf86cd799439011',
   })
   @IsMongoId()
-  {{ relationship.fromModel | lower }}Id!: string;
+  {{ relationship.fromModel | lower | default('source') }}Id!: string;
 
 {% if relationship.type === 'many-to-many' or relationship.type === 'one-to-many' %}
   @ApiProperty({
-    description: 'Array of {{ relationship.toModel }} IDs to connect',
+    description: 'Array of {{ relationship.toModel | default('Target') }} IDs to connect',
     example: ['507f1f77bcf86cd799439012', '507f1f77bcf86cd799439013'],
     type: [String],
   })
   @IsArray()
   @ArrayNotEmpty()
   @IsMongoId({ each: true })
-  {{ relationship.toModel | lower }}Ids!: string[];
+  {{ relationship.toModel | lower | default('target') }}Ids!: string[];
 {% else %}
   @ApiProperty({
-    description: 'ID of the {{ relationship.toModel }} record to connect',
+    description: 'ID of the {{ relationship.toModel | default('Target') }} record to connect',
     example: '507f1f77bcf86cd799439012',
   })
   @IsMongoId()
-  {{ relationship.toModel | lower }}Id!: string;
+  {{ relationship.toModel | lower | default('target') }}Id!: string;
 {% endif %}
 }

@@ -33,13 +33,17 @@ import { ErrorResponseDto } from '../../common/error-response.dto';
 {% endif %}
 {% if auth and auth.enabled %}
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+{% if auth.rbac and auth.rbac.enabled %}
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+{% endif %}
 {% endif %}
 
 {% if features.swagger %}
 @ApiTags('{{ model.namePlural }}')
 {% endif %}
 {% if auth and auth.enabled %}
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard{% if auth.rbac and auth.rbac.enabled %}, RolesGuard{% endif %})
 {% if features.swagger %}
 @ApiBearerAuth()
 {% endif %}
@@ -94,6 +98,11 @@ export class {{ model.name }}Controller {
   {% endif %}
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  {% if auth and auth.rbac and auth.rbac.enabled %}
+  {% if model.rbacRoles and model.rbacRoles.create %}
+  @Roles({% for role in model.rbacRoles.create %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+  {% endif %}
+  {% endif %}
   {% if features.rateLimit %}
   @Throttle({ default: { limit: 100, ttl: 60000 } }) // 100 requests per minute
   {% endif %}
@@ -244,6 +253,11 @@ export class {{ model.name }}Controller {
   })
   {% endif %}
   @Patch(':id')
+  {% if auth and auth.rbac and auth.rbac.enabled %}
+  {% if model.rbacRoles and model.rbacRoles.update %}
+  @Roles({% for role in model.rbacRoles.update %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+  {% endif %}
+  {% endif %}
   {% if features.rateLimit %}
   @Throttle({ default: { limit: 100, ttl: 60000 } }) // 100 requests per minute for updates
   {% endif %}
@@ -302,6 +316,11 @@ export class {{ model.name }}Controller {
   {% endif %}
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  {% if auth and auth.rbac and auth.rbac.enabled %}
+  {% if model.rbacRoles and model.rbacRoles.delete %}
+  @Roles({% for role in model.rbacRoles.delete %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+  {% endif %}
+  {% endif %}
   {% if features.rateLimit %}
   @Throttle({ default: { limit: 50, ttl: 60000 } }) // 50 requests per minute for deletes
   {% endif %}

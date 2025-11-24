@@ -1,21 +1,21 @@
-import { Label } from '@/components/ui/label';
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { InfoIcon } from 'lucide-react';
+} from "@/components/ui/select";
+import { InfoIcon } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@/components/ui/tooltip';
+} from "@/components/ui/tooltip";
 
 interface SelectFieldProps {
   label: string;
-  value: string;
+  value: string | undefined;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   placeholder?: string;
@@ -34,7 +34,7 @@ export function SelectField({
   tooltip,
   testId,
 }: SelectFieldProps) {
-  const selectId = `select-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  const selectId = `select-${label.toLowerCase().replace(/\s+/g, "-")}`;
 
   return (
     <div className="space-y-2">
@@ -55,12 +55,16 @@ export function SelectField({
         )}
       </div>
 
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value || ""} onValueChange={onChange}>
         <SelectTrigger
           id={selectId}
-          data-testid={testId || `select-${label.toLowerCase().replace(/\s+/g, '-')}`}
+          data-testid={
+            testId || `select-${label.toLowerCase().replace(/\s+/g, "-")}`
+          }
         >
-          <SelectValue placeholder={placeholder || `Select ${label.toLowerCase()}`} />
+          <SelectValue
+            placeholder={placeholder || `Select ${label.toLowerCase()}`}
+          />
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (

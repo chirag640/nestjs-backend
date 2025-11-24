@@ -56,7 +56,7 @@ export abstract class BaseRepository<T extends Document> {
     session?: ClientSession,
   ): Promise<T> {
     const [created] = await this.model.create([data], { session });
-    return created;
+    return created as T;
   }
 
   /**

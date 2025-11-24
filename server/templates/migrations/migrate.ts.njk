@@ -1,0 +1,121 @@
+import * as mongoose from 'mongoose';
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface Migration {
+  name: string;
+  timestamp: Date;
+}
+
+const MigrationSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  timestamp: { type: Date, default: Date.now },
+});
+
+const MigrationModel = mongoose.model<Migration & mongoose.Document>('Migration', MigrationSchema);
+
+async function runMigrations() {
+  const connection = await mongoose.connect(process.env.DATABASE_URL!);
+  
+  try {
+    console.log('Connected to database');
+    
+    // Get list of migration files
+    const migrationsDir = path.join(__dirname, 'migrations');
+    const migrationFiles = fs.readdirSync(migrationsDir)
+      .filter(file => file.endsWith('.ts') || file.endsWith('.js'))
+      .filter(file => file !== 'migration.template.ts' && file !== 'migration.template.js')
+      .sort();
+
+    console.log(`Found ${migrationFiles.length} migration(s)`);
+
+    for (const file of migrationFiles) {
+      const migrationName = file.replace(/\.(ts|js)$/, '');
+      
+      // Check if migration has already been run
+      const existingMigration = await MigrationModel.findOne({ name: migrationName });
+      
+      if (existingMigration) {
+        console.log(`⏭️  Skipping ${migrationName} (already applied)`);
+        continue;
+      }
+
+      console.log(`⏩ Running ${migrationName}...`);
+      
+      // Load and execute migration
+      const migration = await import(path.join(migrationsDir, file));
+      await migration.up(connection);
+      
+      // Record migration
+      await MigrationModel.create({ name: migrationName });
+      
+      console.log(`✅ ${migrationName} completed`);
+    }
+
+    console.log('All migrations completed successfully');
+  } catch (error) {
+    const err = error as Error;
+    console.error('Migration failed:', err.message, err.stack);
+    process.exit(1);
+  } finally {
+    await connection.close();
+  }
+}
+
+async function rollbackMigration(migrationName?: string) {
+  const connection = await mongoose.connect(process.env.DATABASE_URL!);
+  
+  try {
+    console.log('Connected to database');
+    
+    let migrationToRollback: Migration & mongoose.Document | null;
+    
+    if (migrationName) {
+      // Rollback specific migration
+      migrationToRollback = await MigrationModel.findOne({ name: migrationName });
+    } else {
+      // Rollback last migration
+      migrationToRollback = await MigrationModel.findOne().sort({ timestamp: -1 });
+    }
+
+    if (!migrationToRollback) {
+      console.log('No migration to rollback');
+      return;
+    }
+
+    console.log(`⏪ Rolling back ${migrationToRollback.name}...`);
+    
+    // Load and execute rollback
+    const migrationsDir = path.join(__dirname, 'migrations');
+    const migrationFile = `${migrationToRollback.name}.ts`;
+    const migration = await import(path.join(migrationsDir, migrationFile));
+    
+    await migration.down(connection);
+    
+    // Remove migration record
+    await MigrationModel.deleteOne({ name: migrationToRollback.name });
+    
+    console.log(`✅ ${migrationToRollback.name} rolled back successfully`);
+  } catch (error) {
+    const err = error as Error;
+    console.error('Rollback failed:', err.message, err.stack);
+    process.exit(1);
+  } finally {
+    await connection.close();
+  }
+}
+
+// CLI
+const command = process.argv[2];
+const migrationName = process.argv[3];
+
+if (command === 'up') {
+  runMigrations();
+} else if (command === 'down') {
+  rollbackMigration(migrationName);
+} else {
+  console.log('Usage:');
+  console.log('  npm run migrate:up                  - Run all pending migrations');
+  console.log('  npm run migrate:down [migration]    - Rollback last or specific migration');
+  process.exit(1);
+}
