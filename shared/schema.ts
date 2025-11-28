@@ -74,6 +74,8 @@ export const relationshipSchema = z.object({
   fieldName: z.string(),
   through: z.string().optional(), // join model name for many-to-many
   attributes: z.array(fieldSchema).optional(), // attributes for N:M relationships
+  foreignKeyName: z.string().optional(), // Custom FK name (e.g. "authorId" instead of "userId")
+  inverseFieldName: z.string().optional(), // Custom inverse field name (e.g. "posts" instead of "user")
 });
 
 export type Relationship = z.infer<typeof relationshipSchema>;
@@ -175,6 +177,10 @@ export const featureSelectionSchema = z.object({
 
   // Field-Level Access Control (FLAC)
   fieldLevelAccessControl: z.boolean().default(false), // Enable role-based field filtering to hide sensitive data from unauthorized users
+
+  // Production Readiness (Sprint 9)
+  gitHooks: z.boolean().default(true), // Enable Husky and lint-staged
+  sonarQube: z.boolean().default(false), // Enable SonarQube configuration
 });
 
 export type FeatureSelection = z.infer<typeof featureSelectionSchema>;
@@ -268,6 +274,8 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     s3Upload: false,
     encryptionStrategy: "disabled" as const,
     fieldLevelAccessControl: false,
+    gitHooks: true,
+    sonarQube: false,
   },
   dockerConfig: {
     enabled: true,

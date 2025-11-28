@@ -186,6 +186,131 @@ export default function Step0_ManualConfig() {
         },
       },
     },
+    perfectRelationships: {
+      name: "Complex Relationships",
+      description: "Demo of 1:1, 1:N, M:N with custom naming",
+      config: {
+        projectSetup: {
+          projectName: "relationship-demo",
+          description: "Demonstration of all relationship types with custom naming",
+          author: "Foundation Wizard",
+          license: "MIT",
+          nodeVersion: "20",
+          packageManager: "npm",
+        },
+        databaseConfig: {
+          databaseType: "MongoDB",
+          provider: "Atlas",
+          connectionString: "mongodb://localhost:27017/relationship-demo",
+          autoMigration: "push",
+        },
+        modelDefinition: {
+          models: [
+            {
+              name: "User",
+              fields: [
+                { name: "email", type: "string", required: true, unique: true },
+                { name: "name", type: "string", required: true },
+              ],
+              timestamps: true,
+            },
+            {
+              name: "Profile",
+              fields: [
+                { name: "bio", type: "string", required: false },
+                { name: "avatarUrl", "type": "string", "required": false },
+              ],
+              timestamps: true,
+            },
+            {
+              name: "Post",
+              fields: [
+                { name: "title", type: "string", required: true },
+                { name: "content", type: "string", required: true },
+                { name: "published", type: "boolean", default: false },
+              ],
+              timestamps: true,
+            },
+            {
+              name: "Category",
+              fields: [
+                { name: "name", type: "string", required: true, unique: true },
+              ],
+              timestamps: true,
+            },
+            {
+              name: "Tag",
+              fields: [
+                { name: "name", type: "string", required: true, unique: true },
+              ],
+              timestamps: true,
+            },
+          ],
+          relationships: [
+            {
+              type: "one-to-one",
+              sourceModel: "User",
+              targetModel: "Profile",
+              fieldName: "profileId",
+              foreignKeyName: "profileId",
+              inverseFieldName: "user",
+            },
+            {
+              type: "one-to-many",
+              sourceModel: "User",
+              targetModel: "Post",
+              fieldName: "posts",
+              foreignKeyName: "authorId",
+              inverseFieldName: "author",
+            },
+            {
+              type: "many-to-one",
+              sourceModel: "Post",
+              targetModel: "Category",
+              fieldName: "categoryId",
+              foreignKeyName: "categoryId",
+              inverseFieldName: "posts",
+            },
+            {
+              type: "many-to-many",
+              sourceModel: "Post",
+              targetModel: "Tag",
+              fieldName: "tags",
+              inverseFieldName: "posts",
+            },
+          ],
+        },
+        authConfig: {
+          enabled: true,
+          method: "jwt",
+          jwt: {
+            accessTTL: "15m",
+            refreshTTL: "7d",
+            rotation: true,
+            blacklist: true,
+          },
+          roles: ["Admin", "User"],
+        },
+        featureSelection: {
+          cors: true,
+          helmet: true,
+          compression: true,
+          validation: true,
+          logging: true,
+          caching: false,
+          swagger: true,
+          health: true,
+          rateLimit: false,
+          versioning: false,
+          queues: false,
+          s3Upload: false,
+          encryptionStrategy: "disabled",
+          fieldLevelAccessControl: false,
+          gitHooks: true,
+          sonarQube: false,
+        },
+      },
+    },
   };
 
   const handleValidate = async () => {
@@ -504,6 +629,13 @@ export default function Step0_ManualConfig() {
               onClick={() => handleLoadTemplate("ecommerce")}
             >
               E-commerce
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleLoadTemplate("perfectRelationships")}
+            >
+              Perfect Relationships
             </Button>
             <Button variant="outline" size="sm" onClick={handleCopyExample}>
               <Copy className="w-4 h-4 mr-2" />

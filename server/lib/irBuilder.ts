@@ -155,6 +155,10 @@ export interface FeaturesIR {
 
   // File upload with S3 lifecycle
   s3Upload: boolean; // AWS S3 file uploads with presigned URLs and automatic lifecycle management
+
+  // Production Readiness
+  gitHooks: boolean; // Husky + lint-staged
+  sonarQube: boolean; // SonarQube configuration
 }
 
 /**
@@ -840,6 +844,8 @@ function buildFeaturesIR(config: WizardConfig): FeaturesIR {
     versioning: features.versioning ?? false,
     queues: features.queues ?? false,
     s3Upload: features.s3Upload ?? false,
+    gitHooks: features.gitHooks ?? true,
+    sonarQube: features.sonarQube ?? false,
   };
 }
 
@@ -945,6 +951,85 @@ function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
         outputDtoName: `${joinModelName}OutputDto`,
       };
       relationshipIR.throughModel = joinModel;
+    }
+
+    // Inject foreign key fields into the appropriate models
+    // This ensures they appear in DTOs and Schemas as regular fields
+    if (rel.type === "one-to-many") {
+      // One-to-Many: Inject FK into Target model (e.g., User -> Posts, inject userId into Post)
+      const targetModel = models.find((m) => m.name === rel.targetModel);
+      if (targetModel) {
+        const fkName = rel.foreignKeyName || `${toCamelCase(rel.sourceModel || "Unknown")}Id`;
+        // Check if field already exists to avoid duplicates
+        if (!targetModel.fields.find((f) => f.name === fkName)) {
+          targetModel.fields.push({
+            name: fkName,
+            type: "objectId", // Use objectId type for correct Mongoose/TS mapping
+            required: true, // Relationships are usually required unless specified otherwise
+            isRelationship: true,
+            ref: rel.sourceModel,
+            validators: ["IsMongoId()"], // Add validator manually as we are bypassing buildFieldIR
+            mongooseType: "MongooseSchema.Types.ObjectId",
+            tsType: "string",
+          } as any);
+        }
+      }
+    } else if (rel.type === "many-to-one") {
+      // Many-to-One: Inject FK into Source model (e.g., Post -> User, inject userId into Post)
+      const sourceModel = models.find((m) => m.name === rel.sourceModel);
+      if (sourceModel) {
+        const fkName = rel.fieldName; // In many-to-one, the field name IS the FK
+        if (!sourceModel.fields.find((f) => f.name === fkName)) {
+          sourceModel.fields.push({
+            name: fkName,
+            type: "objectId",
+            required: true,
+            isRelationship: true,
+            ref: rel.targetModel,
+            validators: ["IsMongoId()"],
+            mongooseType: "MongooseSchema.Types.ObjectId",
+            tsType: "string",
+          } as any);
+        }
+      }
+    } else if (rel.type === "one-to-one") {
+      // One-to-One: Inject FK into Source model (usually)
+      const sourceModel = models.find((m) => m.name === rel.sourceModel);
+      if (sourceModel) {
+        const fkName = rel.fieldName;
+        if (!sourceModel.fields.find((f) => f.name === fkName)) {
+          sourceModel.fields.push({
+            name: fkName,
+            type: "objectId",
+            required: true,
+            unique: true, // One-to-one must be unique
+            isRelationship: true,
+            ref: rel.targetModel,
+            validators: ["IsMongoId()"],
+            mongooseType: "MongooseSchema.Types.ObjectId",
+            tsType: "string",
+          } as any);
+        }
+      }
+    } else if (rel.type === "many-to-many" && !rel.through) {
+      // Many-to-Many (Simple): Inject array of ObjectIds into Source model
+      const sourceModel = models.find((m) => m.name === rel.sourceModel);
+      if (sourceModel) {
+        const fieldName = rel.fieldName;
+        if (!sourceModel.fields.find((f) => f.name === fieldName)) {
+          sourceModel.fields.push({
+            name: fieldName,
+            type: "objectId[]", // Array of ObjectIds
+            required: false,
+            isRelationship: true,
+            ref: rel.targetModel,
+            validators: ["IsArray()", "IsMongoId({ each: true })"],
+            mongooseType: "[MongooseSchema.Types.ObjectId]",
+            tsType: "string[]",
+            defaultValue: "[]",
+          } as any);
+        }
+      }
     }
 
     return relationshipIR;

@@ -68,6 +68,23 @@ services:
       - app-network
 {% endif %}
 
+{% if features.sonarQube %}
+  sonarqube:
+    image: sonarqube:community
+    container_name: {{ project.name }}-sonarqube
+    restart: unless-stopped
+    ports:
+      - '9000:9000'
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    networks:
+      - app-network
+{% endif %}
+
 networks:
   app-network:
     driver: bridge
@@ -79,4 +96,10 @@ volumes:
   postgres_data:
 {% elif database.type === 'MySQL' %}
   mysql_data:
+{% endif %}
+
+{% if features.sonarQube %}
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
 {% endif %}

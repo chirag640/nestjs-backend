@@ -24,7 +24,7 @@ async function formatCode(
 ): Promise<string> {
   try {
     // Determine parser - either already a parser name or extract from file extension
-    let parser: string;
+    let parser: string = "typescript";
 
     // Check if it's already a parser name (no path separators or extensions)
     if (
@@ -64,7 +64,7 @@ async function formatCode(
       printWidth: 100,
     });
   } catch (error) {
-    console.error(`Prettier formatting error (${parser}):`, error);
+    console.error(`Prettier formatting error (${filePathOrParser}):`, error);
     // Return unformatted code if formatting fails
     return code;
   }
@@ -154,6 +154,26 @@ export async function generateProject(
       output: "README.md",
       parser: "markdown",
     },
+    {
+      template: "nestjs/CONTRIBUTING.md.njk",
+      output: "CONTRIBUTING.md",
+      parser: "markdown",
+    },
+    {
+      template: "nestjs/CHANGELOG.md.njk",
+      output: "CHANGELOG.md",
+      parser: "markdown",
+    },
+    {
+      template: "nestjs/app.controller.spec.ts.njk",
+      output: "src/app.controller.spec.ts",
+      parser: "typescript",
+    },
+    {
+      template: "nestjs/app.service.spec.ts.njk",
+      output: "src/app.service.spec.ts",
+      parser: "typescript",
+    },
   ];
 
   // Render and format each template
@@ -184,18 +204,6 @@ export async function generateProject(
     for (const model of ir.models) {
       const modelFiles = await generateModelFiles(model, ir);
       files.push(...modelFiles);
-    }
-  }
-
-  // Generate auth files if auth is enabled
-  if (ir.auth && ir.auth.enabled) {
-    const authFiles = await generateAuthFiles(ir);
-    files.push(...authFiles);
-
-    // Generate OAuth files if OAuth is enabled
-    if (ir.oauth && ir.oauth.enabled) {
-      const oauthFiles = await generateOAuthFiles(ir);
-      files.push(...oauthFiles);
     }
   }
 
@@ -852,6 +860,18 @@ async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
   const seedFiles = await generateSeedScript(ir);
   files.push(...seedFiles);
 
+  // Git Hooks (Husky + lint-staged)
+  if (ir.features.gitHooks) {
+    const gitHooksFiles = await generateGitHooksFiles(ir);
+    files.push(...gitHooksFiles);
+  }
+
+  // SonarQube Configuration
+  if (ir.features.sonarQube) {
+    const sonarFiles = await generateSonarFiles(ir);
+    files.push(...sonarFiles);
+  }
+
   return files;
 }
 
@@ -1152,7 +1172,7 @@ async function generateFieldAccessFiles(
   const files: GeneratedFile[] = [];
 
   // FLAC files are always generated when auth is enabled
-  if (!ir.auth.enabled) {
+  if (!ir.auth?.enabled) {
     return files;
   }
 
@@ -1596,6 +1616,71 @@ async function generateTimeoutMiddleware(
     path: "src/common/timeout.middleware.ts",
     content,
   };
+}
+
+/**
+ * Generate Git Hooks files (Husky + lint-staged)
+ */
+async function generateGitHooksFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  // .lintstagedrc
+  try {
+    const rendered = renderTemplate("nestjs/.lintstagedrc.njk", ir);
+    const content = await formatCode(rendered, "json");
+    files.push({
+      path: ".lintstagedrc",
+      content,
+    });
+  } catch (error) {
+    console.error("Error generating .lintstagedrc:", error);
+  }
+
+  // Husky hooks
+  const hooks = [
+    {
+      template: "husky/pre-commit.njk",
+      output: ".husky/pre-commit",
+    },
+    {
+      template: "husky/commit-msg.njk",
+      output: ".husky/commit-msg",
+    },
+  ];
+
+  for (const { template, output } of hooks) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      // Hooks are shell scripts, no formatting needed usually, or use simple formatting
+      files.push({
+        path: output,
+        content: rendered,
+      });
+    } catch (error) {
+      console.error(`Error generating ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate SonarQube configuration files
+ */
+async function generateSonarFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  try {
+    const rendered = renderTemplate("sonar/sonar-project.properties.njk", ir);
+    files.push({
+      path: "sonar-project.properties",
+      content: rendered,
+    });
+  } catch (error) {
+    console.error("Error generating sonar-project.properties:", error);
+  }
+
+  return files;
 }
 
 /**

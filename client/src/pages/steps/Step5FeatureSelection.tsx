@@ -128,6 +128,25 @@ const ADVANCED_FEATURES = [
   },
 ];
 
+const PRODUCTION_FEATURES = [
+  {
+    key: "gitHooks" as const,
+    icon: GitBranch,
+    title: "Git Hooks",
+    description:
+      "Husky and lint-staged configuration for pre-commit linting and commit message validation",
+    recommended: true,
+  },
+  {
+    key: "sonarQube" as const,
+    icon: Activity,
+    title: "SonarQube Analysis",
+    description:
+      "Static code analysis configuration and Docker service for continuous code quality inspection",
+    recommended: false,
+  },
+];
+
 const ENCRYPTION_STRATEGIES = [
   {
     value: "disabled" as const,
@@ -176,7 +195,10 @@ export default function Step5FeatureSelection() {
     updateFeatureSelection({ [key]: checked });
   };
 
-  const totalFeatures = BASIC_FEATURES.length + ADVANCED_FEATURES.length;
+  const totalFeatures =
+    BASIC_FEATURES.length +
+    ADVANCED_FEATURES.length +
+    PRODUCTION_FEATURES.length;
   const enabledCount = Object.values(features).filter(Boolean).length;
 
   return (
@@ -266,6 +288,69 @@ export default function Step5FeatureSelection() {
             </h3>
           </div>
           {ADVANCED_FEATURES.map((feature) => {
+            const Icon = feature.icon;
+            const isEnabled = features[feature.key];
+
+            return (
+              <Card
+                key={feature.key}
+                className={`p-5 transition-all duration-200 ${
+                  isEnabled ? "border-primary/30 bg-primary/5" : "border-border"
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      isEnabled
+                        ? "bg-primary/20 border border-primary/30"
+                        : "bg-secondary/50"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-5 h-5 ${
+                        isEnabled ? "text-primary" : "text-muted-foreground"
+                      }`}
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-base">
+                        {feature.title}
+                      </h3>
+                      {feature.recommended && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {feature.description}
+                    </p>
+                  </div>
+
+                  <Switch
+                    checked={isEnabled}
+                    onCheckedChange={(checked) =>
+                      updateFeature(feature.key, checked)
+                    }
+                    data-testid={`toggle-${feature.key}`}
+                  />
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Production Features Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Settings className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+              Production Readiness
+            </h3>
+          </div>
+          {PRODUCTION_FEATURES.map((feature) => {
             const Icon = feature.icon;
             const isEnabled = features[feature.key];
 
@@ -478,6 +563,8 @@ ${features.rateLimit ? "  // Rate limiting via Throttler module" : ""}
 ${features.caching ? "  // Redis caching via CacheModule" : ""}
 ${features.queues ? "  // BullMQ queues: email, notification, document, cleanup" : ""}
 ${features.s3Upload ? "  // S3 file uploads with presigned URLs and lifecycle" : ""}
+${features.gitHooks ? "  // Git hooks: pre-commit (lint-staged), commit-msg (commitlint)" : ""}
+${features.sonarQube ? "  // SonarQube: docker-compose service + sonar-project.properties" : ""}
 ${features.encryptionStrategy && features.encryptionStrategy !== "disabled" ? `  // 🔐 Encryption: ${features.encryptionStrategy.toUpperCase()} (${features.encryptionStrategy === "local" ? "FREE" : "~$7/mo"})` : ""}
   await app.listen(process.env.PORT || 3000);
 }`}

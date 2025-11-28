@@ -100,6 +100,7 @@ export default function Step3_1RelationshipConfig() {
     const typeDescriptions = {
       "one-to-one": "Each record in both models has exactly one related record",
       "one-to-many": `Each ${rel.sourceModel} can have multiple ${rel.targetModel}`,
+      "many-to-one": `Multiple ${rel.sourceModel} can relate to one ${rel.targetModel}`,
       "many-to-many": `Multiple ${rel.sourceModel} can relate to multiple ${rel.targetModel}`,
     };
     return typeDescriptions[rel.type] || "";
@@ -284,6 +285,44 @@ export default function Step3_1RelationshipConfig() {
                         Name of the field in {relationship.sourceModel} that
                         references {relationship.targetModel}
                       </p>
+                    </div>
+
+                    {/* Advanced Options */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Foreign Key Name (Optional)</Label>
+                        <Input
+                          placeholder="e.g., authorId"
+                          value={relationship.foreignKeyName || ""}
+                          onChange={(e) =>
+                            updateRelationship(index, {
+                              foreignKeyName: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Custom name for the foreign key field. Defaults to{" "}
+                          {relationship.sourceModel
+                            ? `${relationship.sourceModel.charAt(0).toLowerCase() + relationship.sourceModel.slice(1)}Id`
+                            : "modelId"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <Label>Inverse Field Name (Optional)</Label>
+                        <Input
+                          placeholder="e.g., posts"
+                          value={relationship.inverseFieldName || ""}
+                          onChange={(e) =>
+                            updateRelationship(index, {
+                              inverseFieldName: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Name of the virtual field on the other model.
+                        </p>
+                      </div>
                     </div>
 
                     {/* Join Model (Many-to-Many) */}
