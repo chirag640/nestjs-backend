@@ -116,6 +116,18 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor());
   {% endif %}
 
+  // Register response validation interceptor to ensure API responses match DTOs
+  // Enable strict mode with: STRICT_RESPONSE_VALIDATION=true (fails on extra fields)
+  // Adjust slow route threshold with: SLOW_ROUTE_THRESHOLD=1000 (default: 500ms)
+  const { ResponseValidationInterceptor } = await import('./common/response-validation.interceptor');
+  const { Reflector } = await import('@nestjs/core');
+  app.useGlobalInterceptors(new ResponseValidationInterceptor(app.get(Reflector)));
+
+  // Register deprecated endpoint interceptor for API lifecycle management
+  // Use @DeprecatedEndpoint() decorator to mark old endpoints
+  const { DeprecatedInterceptor } = await import('./common/deprecated.interceptor');
+  app.useGlobalInterceptors(new DeprecatedInterceptor(app.get(Reflector)));
+
   {% if features.fieldLevelAccessControl %}
   // Register field-level access control interceptor for role-based field filtering
   const { FieldAccessInterceptor } = await import('./access-control/field-access.interceptor');

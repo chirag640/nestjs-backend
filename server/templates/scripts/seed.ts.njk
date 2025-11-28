@@ -11,17 +11,18 @@ import * as bcrypt from 'bcryptjs';
  * 
  * This script seeds the database with initial data including:
  * - Admin user with default credentials
- * - Sample data for testing (optional)
+ * - Sample data for all models (auto-generated)
  * 
  * Usage:
  *   npm run seed          # Run seeding
  *   npm run seed:reset    # Drop database and reseed
+ *   SEED_COUNT=100 npm run seed  # Seed with custom count
  * 
  * ⚠️ WARNING: Only run this in development/staging environments!
  */
 
 async function seed() {
-  console.log('🌱 Starting database seeding...\n');
+  console.log('🌱 Starting database seeding...\\n');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
@@ -43,8 +44,11 @@ async function seed() {
         return;
       }
       
-      console.log('   --force detected. Clearing existing data...\n');
-      await connection.collection('users').deleteMany({});
+      console.log('   --force detected. Clearing existing data...\\n');
+      // Clear all collections
+{% for seedModel in seeding.models %}
+      await connection.collection('{{ seedModel.modelName | lower }}s').deleteMany({});
+{% endfor %}
     }
 
     // Seed admin user
@@ -76,19 +80,56 @@ async function seed() {
     console.log('✅ Admin user created successfully');
     console.log(`   Email: ${adminUser.email}`);
     console.log(`   Password: ${adminPassword}`);
-    console.log(`   ⚠️  CHANGE THIS PASSWORD IN PRODUCTION!\n`);
+    console.log(`   ⚠️  CHANGE THIS PASSWORD IN PRODUCTION!\\n`);
 
-{% if models and models.length > 0 %}
-    // Seed sample data (optional)
-    if (process.env.SEED_SAMPLE_DATA === 'true') {
-      console.log('📊 Seeding sample data...');
+{% if seeding.models and seeding.models.length > 0 %}
+    // Seed sample data (auto-generated)
+    console.log('📊 Seeding sample data for all models...\\n');
+    
+    const seedCount = parseInt(process.env.SEED_COUNT || '{{ seeding.models[0].count }}', 10);
+    
+    // Store created IDs for relationships
+    const createdIds = new Map<string, any[]>();
+
+{% for seedModel in seeding.models %}
+    // Seed {{ seedModel.modelName }} (order: {{ seedModel.order }})
+    console.log('📝 Seeding {{ seedModel.modelName }}...');
+    const {{ seedModel.modelName | lower }}s: any[] = [];
+    
+    for (let i = 0; i < seedCount; i++) {
+      const record{{ seedModel.modelName }} = {
+{% for field in seedModel.fields %}
+        {{ field.fieldName }}: {{ field.generator }},
+{% endfor %}
+{% for rel in seedModel.relationships %}
+{% if rel.type === 'one' %}
+        // Relationship: {{ rel.fieldName }} -> {{ rel.targetModel }}
+        {{ rel.fieldName }}: createdIds.get('{{ rel.targetModel }}') 
+          ? createdIds.get('{{ rel.targetModel }}')[Math.floor(Math.random() * createdIds.get('{{ rel.targetModel }}').length)]
+          : null,
+{% elif rel.type === 'array' %}
+        // Relationship: {{ rel.fieldName }} -> {{ rel.targetModel }}[] (Many-to-Many)
+        {{ rel.fieldName }}: createdIds.get('{{ rel.targetModel }}')
+          ? createdIds.get('{{ rel.targetModel }}').slice(0, Math.floor(Math.random() * 5) + 1)
+          : [],
+{% endif %}
+{% endfor %}
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
       
-      // Add your sample data seeding logic here
-      // Example:
-      // await connection.collection('{{ models[0].name | lower }}s').insertMany([...]);
-      
-      console.log('✅ Sample data seeded successfully\n');
+      {{ seedModel.modelName | lower }}s.push(record{{ seedModel.modelName }});
     }
+    
+    const inserted{{ seedModel.modelName }} = await connection
+      .collection('{{ seedModel.modelName | lower }}s')
+      .insertMany({{ seedModel.modelName | lower }}s);
+    
+    createdIds.set('{{ seedModel.modelName }}', Object.values(inserted{{ seedModel.modelName }}.insertedIds));
+    console.log(`✅ Seeded ${seedCount} {{ seedModel.modelName }}s`);
+    
+{% endfor %}
+    console.log('\\n✅ All sample data seeded successfully!');
 {% endif %}
 
 {% elif database.type === 'PostgreSQL' or database.type === 'MySQL' %}
@@ -121,15 +162,15 @@ async function seed() {
     console.log('✅ Database seeded successfully');
 {% endif %}
 
-    console.log('\n🎉 Seeding completed successfully!');
-    console.log('\n📝 Next steps:');
+    console.log('\\n🎉 Seeding completed successfully!');
+    console.log('\\n📝 Next steps:');
     console.log('   1. Start the application: npm run start:dev');
     console.log('   2. Login with admin credentials');
-    console.log('   3. Change the admin password immediately\n');
+    console.log('   3. Test the API endpoints: http://localhost:3000/api\\n');
 
   } catch (error) {
     const err = error as Error;
-    console.error('\n❌ Seeding failed:', err.message);
+    console.error('\\n❌ Seeding failed:', err.message);
     console.error(err.stack);
     process.exit(1);
   } finally {
@@ -140,7 +181,7 @@ async function seed() {
 // Handle reset flag
 if (process.argv.includes('--reset')) {
   console.log('🔄 Resetting database...');
-  console.log('⚠️  This will delete ALL data!\n');
+  console.log('⚠️  This will delete ALL data!\\n');
   
   // Add confirmation logic here if needed
   // For now, just proceed with seeding

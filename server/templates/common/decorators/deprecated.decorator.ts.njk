@@ -1,0 +1,54 @@
+import { SetMetadata } from '@nestjs/common';
+
+/**
+ * Metadata key for deprecated endpoints
+ */
+export const DEPRECATED_METADATA_KEY = 'deprecated';
+
+/**
+ * Options for marking an endpoint as deprecated
+ */
+export interface DeprecatedOptions {
+  /** API version being deprecated (e.g., 'v1') */
+  version?: string;
+  
+  /** Sunset date in ISO format (e.g., '2025-12-31') */
+  sunset?: string;
+  
+  /** Custom deprecation message */
+  message?: string;
+  
+  /** Replacement endpoint (e.g., 'GET /v2/users?page=1') */
+  replacedBy?: string;
+}
+
+/**
+ * Decorator to mark an endpoint as deprecated
+ * 
+ * Automatically adds deprecation headers to responses and logs warnings when accessed.
+ * 
+ * @param options - Deprecation configuration
+ * 
+ * @example
+ * ```typescript
+ * @Get()
+ * @DeprecatedEndpoint({
+ *   version: 'v1',
+ *   sunset: '2025-12-31',
+ *   message: 'Use pagination instead',
+ *   replacedBy: 'GET /v2/users?page=1&limit=10'
+ * })
+ * async findAll() {
+ *   return this.userService.findAll();
+ * }
+ * ```
+ * 
+ * Response headers added:
+ * - X-API-Deprecated: true
+ * - X-API-Sunset: 2025-12-31
+ * - X-API-Replacement: GET /v2/users?page=1&limit=10
+ * - Deprecation: version="v1"
+ */
+export function DeprecatedEndpoint(options: DeprecatedOptions = {}) {
+  return SetMetadata(DEPRECATED_METADATA_KEY, options);
+}

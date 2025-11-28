@@ -1,0 +1,90 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  Logger,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { Response } from 'express';
+import { DEPRECATED_METADATA_KEY, DeprecatedOptions } from './decorators/deprecated.decorator';
+
+/**
+ * Interceptor to handle deprecated endpoints
+ * 
+ * Adds deprecation headers and logs warnings when deprecated endpoints are accessed
+ */
+@Injectable()
+export class DeprecatedInterceptor implements NestInterceptor {
+  private readonly logger = new Logger('DeprecatedAPI');
+
+  constructor(private readonly reflector: Reflector) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    // Get deprecation metadata from handler
+    const deprecatedOptions = this.reflector.get<DeprecatedOptions>(
+      DEPRECATED_METADATA_KEY,
+      context.getHandler(),
+    );
+
+    if (!deprecatedOptions) {
+      // Not a deprecated endpoint, proceed normally
+      return next.handle();
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const response = context.switchToHttp().getResponse<Response>();
+    const { method, url, headers } = request;
+
+    // Add deprecation headers to response
+    response.setHeader('X-API-Deprecated', 'true');
+    
+    if (deprecatedOptions.version) {
+      response.setHeader('Deprecation', `version="${deprecatedOptions.version}"`);
+    }
+    
+    if (deprecatedOptions.sunset) {
+      response.setHeader('X-API-Sunset', deprecatedOptions.sunset);
+    }
+    
+    if (deprecatedOptions.replacedBy) {
+      response.setHeader('X-API-Replacement', deprecatedOptions.replacedBy);
+    }
+
+    // Build warning message
+    const warningParts: string[] = [`${method} ${url}`];
+    
+    if (deprecatedOptions.sunset) {
+      warningParts.push(`sunset: ${deprecatedOptions.sunset}`);
+    }
+    
+    if (deprecatedOptions.replacedBy) {
+      warningParts.push(`replacement: ${deprecatedOptions.replacedBy}`);
+    }
+    
+    if (deprecatedOptions.message) {
+      warningParts.push(`message: ${deprecatedOptions.message}`);
+    }
+
+    return next.handle().pipe(
+      tap(() => {
+        // Log deprecation warning
+        this.logger.warn({
+          type: 'DEPRECATED_ENDPOINT_ACCESSED',
+          method,
+          url,
+          version: deprecatedOptions.version,
+          sunset: deprecatedOptions.sunset,
+          replacedBy: deprecatedOptions.replacedBy,
+          message: deprecatedOptions.message,
+          userAgent: headers['user-agent'],
+          ip: request.ip,
+          userId: (request as any).user?.id,
+          warning: `⚠️ DEPRECATED: ${warningParts.join(', ')}`,
+        });
+      }),
+    );
+  }
+}

@@ -84,24 +84,35 @@ export class ResponseValidationInterceptor implements NestInterceptor {
     });
 
     // Validate the DTO
+    const strictMode = process.env.STRICT_RESPONSE_VALIDATION === 'true';
+    
     const errors = await validate(dtoInstance, {
       whitelist: true,
-      forbidNonWhitelisted: false, // Don't fail on extra properties
+      forbidNonWhitelisted: strictMode, // Strict mode: fail on extra properties
       skipMissingProperties: false,
     });
 
     if (errors.length > 0) {
-      // Log validation errors but don't fail the request
-      console.error('Response validation failed:', errors);
+      const errorDetails = errors.map((err) => ({
+        property: err.property,
+        constraints: err.constraints,
+        value: err.value,
+      }));
+
+      // Log validation errors
+      console.error('Response validation failed:', {
+        strictMode,
+        errors: errorDetails,
+      });
       
-      // In development, throw an error to catch bugs early
-      if (process.env.NODE_ENV === 'development') {
+      // In development OR strict mode, throw an error to catch bugs early
+      if (process.env.NODE_ENV === 'development' || strictMode) {
         throw new InternalServerErrorException({
-          message: 'Response validation failed',
-          errors: errors.map((err) => ({
-            property: err.property,
-            constraints: err.constraints,
-          })),
+          message: `Response validation failed${strictMode ? ' (strict mode enabled)' : ''}`,
+          errors: errorDetails,
+          hint: strictMode 
+            ? 'Set STRICT_RESPONSE_VALIDATION=false to allow extra fields'
+            : 'Set STRICT_RESPONSE_VALIDATION=true to enforce strict validation',
         });
       }
     }

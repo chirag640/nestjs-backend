@@ -1035,3 +1035,213 @@ function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
     return relationshipIR;
   });
 }
+
+/**
+ * Seeding Metadata Interfaces
+ */
+export interface FieldSeedingStrategy {
+  fieldName: string;
+  generator: string; // JavaScript expression to generate value
+  dependsOn?: string; // Field this depends on (for relationships)
+}
+
+export interface ModelSeedingMetadata {
+  modelName: string;
+  count: number; // Number of records to seed
+  order: number; // Seeding order (based on dependencies)
+  fields: FieldSeedingStrategy[];
+  relationships: {
+    fieldName: string;
+    targetModel: string;
+    type: 'one' | 'many' | 'array';
+  }[];
+}
+
+export interface SeedingMetadata {
+  models: ModelSeedingMetadata[];
+}
+
+/**
+ * Build seeding metadata for all models
+ * Analyzes models and generates data generation strategies
+ */
+export function buildSeedingMetadata(ir: ProjectIR): SeedingMetadata {
+  const seedingModels: ModelSeedingMetadata[] = [];
+  const modelDependencies = new Map<string, Set<string>>();
+
+  // First pass: Identify dependencies
+  for (const model of ir.models) {
+    const deps = new Set<string>();
+    
+    for (const field of model.fields) {
+      // Check if field is a relationship (has ref property)
+      if ((field as any).ref) {
+        deps.add((field as any).ref);
+      }
+    }
+    
+    modelDependencies.set(model.name, deps);
+  }
+
+  // Topological sort to determine seeding order
+  const visited = new Set<string>();
+  const order: string[] = [];
+
+  function visit(modelName: string) {
+    if (visited.has(modelName)) return;
+    visited.add(modelName);
+
+    const deps = modelDependencies.get(modelName) || new Set();
+    for (const dep of Array.from(deps)) {
+      visit(dep);
+    }
+
+    order.push(modelName);
+  }
+
+  for (const model of ir.models) {
+    visit(model.name);
+  }
+
+  // Second pass: Build seeding strategies
+  for (let i = 0; i < order.length; i++) {
+    const modelName = order[i];
+    const model = ir.models.find(m => m.name === modelName);
+    if (!model) continue;
+
+    const fieldStrategies: FieldSeedingStrategy[] = [];
+    const relationships: ModelSeedingMetadata['relationships'] = [];
+
+    for (const field of model.fields) {
+      // Skip relationship fields - they'll be handled separately
+      if ((field as any).isRelationship) {
+        const ref = (field as any).ref;
+        const isArray = field.type.includes('[]');
+        
+        relationships.push({
+          fieldName: field.name,
+          targetModel: ref,
+          type: isArray ? 'array' : 'one',
+        });
+        continue;
+      }
+
+      // Skip auto-managed fields
+      if (field.name === 'id' || field.name === 'createdAt' || field.name === 'updatedAt') {
+        continue;
+      }
+
+      const strategy = generateFieldStrategy(field, modelName);
+      if (strategy) {
+        fieldStrategies.push(strategy);
+      }
+    }
+
+    seedingModels.push({
+      modelName: model.name,
+      count: 50, // Default count
+      order: i,
+      fields: fieldStrategies,
+      relationships,
+    });
+  }
+
+  return { models: seedingModels };
+}
+
+/**
+ * Generate data generation strategy for a single field
+ */
+function generateFieldStrategy(field: ModelFieldIR, modelName: string): FieldSeedingStrategy | null {
+  const { name, type } = field;
+
+  // Handle enums first
+  if (field.enum && field.enum.length > 0) {
+    const values = field.enum.map(v => `'${v}'`).join(', ');
+    return {
+      fieldName: name,
+      generator: `[${values}][Math.floor(Math.random() * ${field.enum.length})]`,
+    };
+  }
+
+  // Type-based generation
+  switch (type) {
+    case 'string':
+      // Special cases based on field name
+      if (name.toLowerCase().includes('email')) {
+        return {
+          fieldName: name,
+          generator: `\`user\${i + 1}@${modelName.toLowerCase()}.com\``,
+        };
+      }
+      if (name.toLowerCase().includes('name') || name.toLowerCase().includes('title')) {
+        return {
+          fieldName: name,
+          generator: `'${modelName} ' + (i + 1)`,
+        };
+      }
+      if (name.toLowerCase().includes('url')) {
+        return {
+          fieldName: name,
+          generator: `'https://example.com/${name}/' + (i + 1)`,
+        };
+      }
+      if (name.toLowerCase().includes('description') || name.toLowerCase().includes('bio') || name.toLowerCase().includes('content')) {
+        return {
+          fieldName: name,
+          generator: `'Sample ${name} for ${modelName} #' + (i + 1)`,
+        };
+      }
+      // Default string
+      return {
+        fieldName: name,
+        generator: `'${name}_' + (i + 1)`,
+      };
+
+    case 'number':
+      if (name.toLowerCase().includes('price') || name.toLowerCase().includes('amount')) {
+        return {
+          fieldName: name,
+          generator: `Math.floor(Math.random() * 10000) / 100`, // 0-100 with 2 decimals
+        };
+      }
+      if (name.toLowerCase().includes('age')) {
+        return {
+          fieldName: name,
+          generator: `Math.floor(Math.random() * 80) + 18`, // 18-97
+        };
+      }
+      return {
+        fieldName: name,
+        generator: `Math.floor(Math.random() * 1000)`,
+      };
+
+    case 'boolean':
+      return {
+        fieldName: name,
+        generator: `Math.random() > 0.5`,
+      };
+
+    case 'date':
+    case 'datetime':
+      return {
+        fieldName: name,
+        generator: `new Date(Date.now() - Math.floor(Math.random() * 365 * 24 * 60 * 60 * 1000))`, // Random date within last year
+      };
+
+    case 'string[]':
+      return {
+        fieldName: name,
+        generator: `['${name}_1', '${name}_2', '${name}_3'].slice(0, Math.floor(Math.random() * 3) + 1)`,
+      };
+
+    case 'json':
+      return {
+        fieldName: name,
+        generator: `{ key: 'value', index: i + 1 }`,
+      };
+
+    default:
+      return null;
+  }
+}

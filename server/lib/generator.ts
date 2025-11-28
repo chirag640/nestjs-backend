@@ -4,7 +4,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { renderTemplate, type TemplateContext } from "./templateRenderer";
 import type { WizardConfig } from "../../shared/schema";
-import { buildIR, type ProjectIR, type ModelIR } from "./irBuilder";
+import { buildIR, buildSeedingMetadata, type ProjectIR, type ModelIR } from "./irBuilder";
 
 // ES module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -85,8 +85,11 @@ export async function generateProject(
   // Build Intermediate Representation
   const ir: ProjectIR = buildIR(config);
 
-  // Use full IR as context for templates
-  const context = ir;
+  // Build seeding metadata for automated data generation
+  const seeding = buildSeedingMetadata(ir);
+
+  // Use full IR as context for templates, plus seeding metadata
+  const context = { ...ir, seeding };
 
   const files: GeneratedFile[] = [];
 
