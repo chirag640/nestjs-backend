@@ -41,13 +41,22 @@ export class {{ model.updateDtoName }} {
   })
   {% endif %}
   @IsOptional()
-  {% if field.type === 'string' %}
   @Transform(({ value }) => {
+    // Handle string "null" from frontend forms
+    if (value === 'null' || value === 'undefined' || value === '') return undefined;
     if (!value) return value;
+    {% if field.type === 'string' %}
     const trimmed = value.trim();
     return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
-  }) // Sanitize: trim whitespace and remove HTML
-  {% endif %}
+    {% elif field.tsType === 'Date' %}
+    // Handle various date formats
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value; // Let validator handle invalid dates
+    return date.toISOString(); // Normalize to ISO 8601
+    {% else %}
+    return value;
+    {% endif %}
+  })
   {% for validator in field.validators %}
   @{{ validator }}
   {% endfor %}

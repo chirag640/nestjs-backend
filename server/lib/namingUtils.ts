@@ -293,10 +293,10 @@ export function getValidatorDecorator(field: {
       decorators.push("IsBoolean()");
       break;
     case "date":
-      decorators.push("IsDateString()"); // Use IsDateString for DTO validation
+      decorators.push("IsISO8601({ strict: false })"); // Accept multiple date formats
       break;
     case "datetime":
-      decorators.push("IsDateString()");
+      decorators.push("IsISO8601({ strict: false })"); // Accept multiple date formats
       break;
     case "string[]":
       decorators.push("IsArray()");

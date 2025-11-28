@@ -690,9 +690,10 @@ function getSmartFieldDefaults(
   // Date field
   if (fieldType === "Date") {
     return {
-      additionalValidators: ["IsDateString"],
+      additionalValidators: ["IsISO8601({ strict: false })"],
       exampleValue: "'2024-01-01T00:00:00.000Z'",
-      description: "Date and time",
+      description:
+        "Date and time in ISO 8601 format (YYYY-MM-DD or full timestamp)",
     };
   }
 

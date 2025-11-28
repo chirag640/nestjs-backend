@@ -385,7 +385,7 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
     }
     // Date field
     else if (fieldType === "Date") {
-      rules.additionalValidators = ["IsDateString()"];
+      rules.additionalValidators = ["IsISO8601({ strict: false })"];
       exampleValue = "2024-01-01T00:00:00.000Z";
       description = "Date and time";
     }

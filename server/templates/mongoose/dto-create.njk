@@ -48,6 +48,14 @@ export class {{ model.createDtoName }} {
     // Sanitize HTML to prevent XSS attacks
     return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
   })
+  {% elif field.tsType === 'Date' %}
+  @Transform(({ value }) => {
+    if (!value) return value;
+    // Handle various date formats
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value; // Let validator handle invalid dates
+    return date.toISOString(); // Normalize to ISO 8601
+  })
   {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
@@ -63,14 +71,23 @@ export class {{ model.createDtoName }} {
   {{ field.name }}!: {{ field.tsType }};
   {% else %}
   @IsOptional()
-  {% if field.type === 'string' %}
   @Transform(({ value }) => {
+    // Handle string "null" from frontend forms
+    if (value === 'null' || value === 'undefined' || value === '') return undefined;
     if (!value) return value;
+    {% if field.type === 'string' %}
     const trimmed = value.trim();
     // Sanitize HTML to prevent XSS attacks
     return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
+    {% elif field.tsType === 'Date' %}
+    // Handle various date formats
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value; // Let validator handle invalid dates
+    return date.toISOString(); // Normalize to ISO 8601
+    {% else %}
+    return value;
+    {% endif %}
   })
-  {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
   {% endfor %}
