@@ -1,0 +1,36 @@
+/**
+ * Authentication types for {{ project.name }}
+ */
+
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  roles: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AuthResult {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface TokenRefreshResult {
+  accessToken: string;
+  refreshToken?: string;
+}

@@ -1,0 +1,60 @@
+/**
+ * OpenAPI/Swagger JSON Export Script
+ * 
+ * Generates openapi.json from the NestJS app for SDK generation.
+ * 
+ * Usage: npx ts-node src/scripts/swagger-export.ts
+ */
+
+import { NestFactory } from '@nestjs/core';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { writeFileSync } from 'fs';
+import { join } from 'path';
+import { AppModule } from '../app.module';
+
+async function exportSwagger() {
+  console.log('🔧 Initializing NestJS app for swagger export...');
+  
+  const app = await NestFactory.create(AppModule, {
+    logger: false, // Quiet mode
+  });
+
+  const config = new DocumentBuilder()
+    .setTitle('{{ project.name }}')
+    .setDescription('{{ project.description }}')
+    .setVersion('1.0.0')
+    .addBearerAuth()
+    .addTag('Authentication')
+    {% for model in models %}
+    .addTag('{{ model.namePlural }}')
+    {% endfor %}
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+
+  // Export as JSON
+  const outputPath = join(process.cwd(), 'openapi.json');
+  writeFileSync(outputPath, JSON.stringify(document, null, 2));
+  console.log(`✅ OpenAPI spec exported to: ${outputPath}`);
+
+  // Export as YAML (optional)
+  try {
+    const yaml = require('js-yaml');
+    const yamlPath = join(process.cwd(), 'openapi.yaml');
+    writeFileSync(yamlPath, yaml.dump(document));
+    console.log(`✅ OpenAPI spec exported to: ${yamlPath}`);
+  } catch {
+    console.log('ℹ️  js-yaml not installed, skipping YAML export');
+  }
+
+  await app.close();
+  
+  console.log('\n📦 To generate SDKs, run:');
+  console.log('   npm run generate:sdk:typescript');
+  console.log('   npm run generate:sdk:dart');
+}
+
+exportSwagger().catch((err) => {
+  console.error('❌ Failed to export swagger:', err);
+  process.exit(1);
+});

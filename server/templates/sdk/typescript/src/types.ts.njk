@@ -1,0 +1,45 @@
+/**
+ * Standardized API response types
+ */
+
+export interface ApiResponse<T> {
+  status: 'success' | 'error';
+  statusCode: number;
+  data?: T;
+  error?: ApiErrorDetails;
+  meta: ApiMeta;
+}
+
+export interface ApiMeta {
+  timestamp: string;
+  requestId?: string;
+  path?: string;
+  pagination?: PaginationMeta;
+}
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ApiErrorDetails {
+  code: string;
+  message: string | string[];
+  details?: unknown;
+}
+
+export interface ApiError {
+  code: string;
+  message: string | string[];
+  statusCode: number;
+  details?: unknown;
+}
+
+export interface PaginatedResponse<T> extends ApiResponse<T[]> {
+  meta: ApiMeta & { pagination: PaginationMeta };
+}
+
+// Helper type for unwrapping response data
+export type ResponseData<T> = T extends ApiResponse<infer U> ? U : never;

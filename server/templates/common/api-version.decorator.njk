@@ -1,0 +1,56 @@
+import { SetMetadata, applyDecorators } from '@nestjs/common';
+import { ApiHeader } from '@nestjs/swagger';
+
+export const API_VERSION_KEY = 'api_version';
+
+/**
+ * API Version Decorator
+ * 
+ * Mark endpoints with specific API version.
+ * 
+ * @example
+ * ```typescript
+ * @ApiVersion('1')
+ * @Get('users')
+ * getUsersV1() { ... }
+ * 
+ * @ApiVersion('2')
+ * @Get('users')
+ * getUsersV2() { ... }
+ * ```
+ */
+export const ApiVersion = (version: string) =>
+  applyDecorators(
+    SetMetadata(API_VERSION_KEY, version),
+    ApiHeader({
+      name: 'X-API-Version',
+      description: `API version (current: ${version})`,
+      required: false,
+    }),
+  );
+
+/**
+ * Deprecated Endpoint Decorator
+ * 
+ * Mark endpoint as deprecated with sunset date.
+ * 
+ * @example
+ * ```typescript
+ * @DeprecatedEndpoint('2024-06-01', 'Use /v2/users instead')
+ * @Get('users')
+ * getUsers() { ... }
+ * ```
+ */
+export const DeprecatedEndpoint = (sunsetDate: string, message?: string) =>
+  applyDecorators(
+    SetMetadata('deprecated', { sunsetDate, message }),
+    SetMetadata('deprecation_message', message || `This endpoint will be removed after ${sunsetDate}`),
+  );
+
+/**
+ * Minimum Version Decorator
+ * 
+ * Require minimum API version for endpoint.
+ */
+export const MinVersion = (minVersion: string) =>
+  SetMetadata('min_version', minVersion);

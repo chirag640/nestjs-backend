@@ -1,0 +1,42 @@
+/**
+ * {{ project.name }} TypeScript SDK
+ *
+ * Auto-generated SDK for React/Next.js integration.
+ *
+ * @example
+ * ```typescript
+ * import { ApiClient, useAuth, useQuery } from '{{ project.name | lower | replace(' ', '-') }}-sdk';
+ *
+ * const api = new ApiClient({ baseUrl: 'http://localhost:3000' });
+ *
+ * // Login
+ * const { login, logout, user } = useAuth(api);
+ * await login({ email: 'user@example.com', password: 'password' });
+ *
+ * // Fetch data
+ * const { data, isLoading } = useQuery('/users');
+ * ```
+ */
+
+// Core exports
+export { ApiClient } from './api-client';
+export type { ApiClientConfig } from './api-client';
+
+// Types
+export type {
+  ApiResponse,
+  ApiError,
+  ApiMeta,
+  PaginatedResponse,
+  PaginationMeta,
+} from './types';
+
+// React hooks
+export { useAuth, AuthProvider, useAuthContext } from './hooks/use-auth';
+export { useApiQuery, useApiMutation } from './hooks/use-query';
+
+// Auth types
+export type { User, AuthResult, LoginCredentials, RegisterData } from './auth-types';
+
+// Error utilities
+export { isApiError, getErrorMessage, ErrorCodes } from './errors';

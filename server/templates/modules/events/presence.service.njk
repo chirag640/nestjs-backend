@@ -1,0 +1,90 @@
+import { Injectable{% if features.cache %}, Inject{% endif %} } from '@nestjs/common';
+{% if features.cache %}
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+{% endif %}
+
+/**
+ * User Presence Service
+ * 
+ * Tracks online/offline status of users.
+ * Uses Redis cache if available, falls back to in-memory.
+ */
+@Injectable()
+export class PresenceService {
+  private readonly presenceKey = 'presence:';
+  private readonly ttl = 300; // 5 minutes
+
+  {% if features.cache %}
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+  {% else %}
+  // In-memory fallback (not suitable for multi-instance)
+  private presence = new Map<string, { online: boolean; lastSeen: Date }>();
+
+  constructor() {}
+  {% endif %}
+
+  /**
+   * Set user as online
+   */
+  async setOnline(userId: string): Promise<void> {
+    const data = { online: true, lastSeen: new Date() };
+    {% if features.cache %}
+    await this.cacheManager.set(`${this.presenceKey}${userId}`, data, this.ttl * 1000);
+    {% else %}
+    this.presence.set(userId, data);
+    {% endif %}
+  }
+
+  /**
+   * Set user as offline
+   */
+  async setOffline(userId: string): Promise<void> {
+    const data = { online: false, lastSeen: new Date() };
+    {% if features.cache %}
+    await this.cacheManager.set(`${this.presenceKey}${userId}`, data, this.ttl * 1000);
+    {% else %}
+    this.presence.set(userId, data);
+    {% endif %}
+  }
+
+  /**
+   * Get user presence status
+   */
+  async getStatus(userId: string): Promise<{ online: boolean; lastSeen: Date | null }> {
+    {% if features.cache %}
+    const data = await this.cacheManager.get<{ online: boolean; lastSeen: Date }>(
+      `${this.presenceKey}${userId}`
+    );
+    return data || { online: false, lastSeen: null };
+    {% else %}
+    return this.presence.get(userId) || { online: false, lastSeen: null };
+    {% endif %}
+  }
+
+  /**
+   * Get presence for multiple users
+   */
+  async getStatusBulk(userIds: string[]): Promise<Map<string, { online: boolean; lastSeen: Date | null }>> {
+    const result = new Map();
+    for (const userId of userIds) {
+      result.set(userId, await this.getStatus(userId));
+    }
+    return result;
+  }
+
+  /**
+   * Check if user is online
+   */
+  async isOnline(userId: string): Promise<boolean> {
+    const status = await this.getStatus(userId);
+    return status.online;
+  }
+
+  /**
+   * Heartbeat - update last seen timestamp
+   */
+  async heartbeat(userId: string): Promise<void> {
+    await this.setOnline(userId);
+  }
+}

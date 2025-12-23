@@ -1,0 +1,225 @@
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  ConnectedSocket,
+  MessageBody,
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+import { Logger, UseGuards } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { PresenceService } from './presence.service';
+
+/**
+ * WebSocket Events Gateway
+ * 
+ * Handles real-time communication via Socket.io.
+ * 
+ * ## Events:
+ * - `notification` - Send notifications to users
+ * - `model:created` - Broadcast when any model is created
+ * - `model:updated` - Broadcast when any model is updated
+ * - `model:deleted` - Broadcast when any model is deleted
+ * - `presence` - User online/offline status
+ * 
+ * ## Usage from Services:
+ * ```typescript
+ * constructor(private eventsGateway: EventsGateway) {}
+ * 
+ * async createItem(data: CreateItemDto, userId: string) {
+ *   const item = await this.repository.create(data);
+ *   
+ *   // Broadcast to all connected clients
+ *   this.eventsGateway.broadcastModelEvent('item', 'created', item);
+ *   
+ *   // Send notification to specific user
+ *   this.eventsGateway.sendToUser(userId, 'notification', {
+ *     type: 'success',
+ *     message: 'Item created successfully',
+ *   });
+ *   
+ *   return item;
+ * }
+ * ```
+ */
+@WebSocketGateway({
+  cors: {
+    origin: process.env.CORS_ORIGINS?.split(',') || '*',
+    credentials: true,
+  },
+  namespace: '/events',
+})
+export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer()
+  server: Server;
+
+  private readonly logger = new Logger(EventsGateway.name);
+  private userSockets = new Map<string, Set<string>>(); // userId -> socketIds
+
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly presenceService: PresenceService,
+  ) {}
+
+  /**
+   * Handle new WebSocket connection
+   */
+  async handleConnection(client: Socket) {
+    try {
+      // Authenticate via token in auth header or query
+      const token = client.handshake.auth?.token || client.handshake.query?.token;
+      
+      if (!token) {
+        this.logger.warn(`Client ${client.id} connected without token`);
+        client.disconnect();
+        return;
+      }
+
+      const payload = this.jwtService.verify(token as string, {
+        secret: this.configService.get('JWT_SECRET'),
+      });
+
+      const userId = payload.sub;
+      (client as any).userId = userId;
+
+      // Track user socket
+      if (!this.userSockets.has(userId)) {
+        this.userSockets.set(userId, new Set());
+      }
+      this.userSockets.get(userId)!.add(client.id);
+
+      // Join user-specific room
+      client.join(`user:${userId}`);
+
+      // Update presence
+      await this.presenceService.setOnline(userId);
+
+      this.logger.log(`User ${userId} connected (socket: ${client.id})`);
+
+      // Broadcast presence to other users
+      this.server.emit('presence', {
+        userId,
+        status: 'online',
+        timestamp: new Date().toISOString(),
+      });
+
+    } catch (error) {
+      this.logger.error(`Connection error: ${error.message}`);
+      client.disconnect();
+    }
+  }
+
+  /**
+   * Handle WebSocket disconnection
+   */
+  async handleDisconnect(client: Socket) {
+    const userId = (client as any).userId;
+    
+    if (userId) {
+      // Remove socket from tracking
+      this.userSockets.get(userId)?.delete(client.id);
+      
+      // If no more sockets for user, set offline
+      if (this.userSockets.get(userId)?.size === 0) {
+        this.userSockets.delete(userId);
+        await this.presenceService.setOffline(userId);
+
+        this.server.emit('presence', {
+          userId,
+          status: 'offline',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      this.logger.log(`User ${userId} disconnected (socket: ${client.id})`);
+    }
+  }
+
+  /**
+   * Handle ping from client (keep-alive)
+   */
+  @SubscribeMessage('ping')
+  handlePing(@ConnectedSocket() client: Socket): { event: string; data: string } {
+    return { event: 'pong', data: new Date().toISOString() };
+  }
+
+  /**
+   * Subscribe to a room/channel
+   */
+  @SubscribeMessage('subscribe')
+  handleSubscribe(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() room: string,
+  ): void {
+    client.join(room);
+    this.logger.debug(`Client ${client.id} subscribed to ${room}`);
+  }
+
+  /**
+   * Unsubscribe from a room/channel
+   */
+  @SubscribeMessage('unsubscribe')
+  handleUnsubscribe(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() room: string,
+  ): void {
+    client.leave(room);
+    this.logger.debug(`Client ${client.id} unsubscribed from ${room}`);
+  }
+
+  // ===== Public Methods for Services =====
+
+  /**
+   * Send event to specific user
+   */
+  sendToUser(userId: string, event: string, data: any): void {
+    this.server.to(`user:${userId}`).emit(event, data);
+  }
+
+  /**
+   * Broadcast to all connected clients
+   */
+  broadcast(event: string, data: any): void {
+    this.server.emit(event, data);
+  }
+
+  /**
+   * Send to specific room/channel
+   */
+  sendToRoom(room: string, event: string, data: any): void {
+    this.server.to(room).emit(event, data);
+  }
+
+  /**
+   * Broadcast model CRUD events
+   */
+  broadcastModelEvent(
+    modelName: string,
+    action: 'created' | 'updated' | 'deleted',
+    data: any,
+  ): void {
+    this.server.emit(`${modelName}:${action}`, {
+      action,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Get online user IDs
+   */
+  getOnlineUsers(): string[] {
+    return Array.from(this.userSockets.keys());
+  }
+
+  /**
+   * Check if user is online
+   */
+  isUserOnline(userId: string): boolean {
+    return this.userSockets.has(userId);
+  }
+}

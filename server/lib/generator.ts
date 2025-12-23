@@ -333,6 +333,10 @@ export async function generateProject(
   if (ir.auth?.enabled) {
     const dartSdkFiles = await generateDartSdk(ir);
     files.push(...dartSdkFiles);
+
+    // Generate TypeScript SDK for React/Next.js
+    const tsSdkFiles = await generateTypescriptSdk(ir);
+    files.push(...tsSdkFiles);
   }
 
   return files;
@@ -1382,6 +1386,40 @@ async function generateDartSdk(ir: ProjectIR): Promise<GeneratedFile[]> {
       files.push({ path: output, content: rendered });
     } catch (error) {
       console.error(`Error generating Dart SDK file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate TypeScript SDK for React/Next.js
+ * Only generated when Authentication is enabled
+ */
+async function generateTypescriptSdk(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const tsSdkTemplates = [
+    // Core files
+    { template: "sdk/typescript/src/index.ts.njk", output: "sdk/typescript/src/index.ts" },
+    { template: "sdk/typescript/src/api-client.ts.njk", output: "sdk/typescript/src/api-client.ts" },
+    { template: "sdk/typescript/src/types.ts.njk", output: "sdk/typescript/src/types.ts" },
+    { template: "sdk/typescript/src/auth-types.ts.njk", output: "sdk/typescript/src/auth-types.ts" },
+    { template: "sdk/typescript/src/errors.ts.njk", output: "sdk/typescript/src/errors.ts" },
+    // React hooks
+    { template: "sdk/typescript/src/hooks/use-auth.tsx.njk", output: "sdk/typescript/src/hooks/use-auth.tsx" },
+    { template: "sdk/typescript/src/hooks/use-query.tsx.njk", output: "sdk/typescript/src/hooks/use-query.tsx" },
+    // Package files
+    { template: "sdk/typescript/package.json.njk", output: "sdk/typescript/package.json" },
+    { template: "sdk/typescript/README.md.njk", output: "sdk/typescript/README.md" },
+  ];
+
+  for (const { template, output } of tsSdkTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      files.push({ path: output, content: rendered });
+    } catch (error) {
+      console.error(`Error generating TypeScript SDK file ${output}:`, error);
     }
   }
 

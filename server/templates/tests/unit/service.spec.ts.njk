@@ -1,0 +1,150 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { {{ model.name }}Service } from './{{ model.fileName }}.service';
+import { {{ model.name }}Repository } from './{{ model.fileName }}.repository';
+import { NotFoundException, ConflictException } from '@nestjs/common';
+
+/**
+ * Unit tests for {{ model.name }}Service
+ * 
+ * Run with: npm run test -- --testPathPattern={{ model.fileName }}.service.spec
+ */
+describe('{{ model.name }}Service', () => {
+  let service: {{ model.name }}Service;
+  let repository: jest.Mocked<{{ model.name }}Repository>;
+
+  // Mock data
+  const mock{{ model.name }} = {
+    _id: '507f1f77bcf86cd799439011',
+    {% for field in model.fields %}
+    {{ field.name }}: {{ field.example | safe }},
+    {% endfor %}
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mock{{ model.name }}List = [mock{{ model.name }}];
+
+  beforeEach(async () => {
+    // Create mock repository
+    const mockRepository = {
+      findAll: jest.fn(),
+      findById: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      count: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        {{ model.name }}Service,
+        { provide: {{ model.name }}Repository, useValue: mockRepository },
+      ],
+    }).compile();
+
+    service = module.get<{{ model.name }}Service>({{ model.name }}Service);
+    repository = module.get({{ model.name }}Repository);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('findAll', () => {
+    it('should return paginated {{ model.namePlural }}', async () => {
+      repository.findAll.mockResolvedValue(mock{{ model.name }}List);
+      repository.count.mockResolvedValue(1);
+
+      const result = await service.findAll({ page: 1, limit: 10 });
+
+      expect(result.items).toEqual(mock{{ model.name }}List);
+      expect(result.meta.total).toBe(1);
+      expect(repository.findAll).toHaveBeenCalledWith({}, { skip: 0, limit: 10 });
+    });
+
+    it('should handle empty results', async () => {
+      repository.findAll.mockResolvedValue([]);
+      repository.count.mockResolvedValue(0);
+
+      const result = await service.findAll({ page: 1, limit: 10 });
+
+      expect(result.items).toEqual([]);
+      expect(result.meta.total).toBe(0);
+    });
+  });
+
+  describe('findById', () => {
+    it('should return {{ model.nameCamel }} when found', async () => {
+      repository.findById.mockResolvedValue(mock{{ model.name }});
+
+      const result = await service.findById(mock{{ model.name }}._id);
+
+      expect(result).toEqual(mock{{ model.name }});
+      expect(repository.findById).toHaveBeenCalledWith(mock{{ model.name }}._id);
+    });
+
+    it('should throw NotFoundException when not found', async () => {
+      repository.findById.mockResolvedValue(null);
+
+      await expect(service.findById('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('create', () => {
+    const createDto = {
+      {% for field in model.fields %}{% if field.required %}
+      {{ field.name }}: {{ field.example | safe }},
+      {% endif %}{% endfor %}
+    };
+
+    it('should create and return new {{ model.nameCamel }}', async () => {
+      repository.create.mockResolvedValue(mock{{ model.name }});
+
+      const result = await service.create(createDto);
+
+      expect(result).toEqual(mock{{ model.name }});
+      expect(repository.create).toHaveBeenCalledWith(createDto);
+    });
+  });
+
+  describe('update', () => {
+    const updateDto = {
+      {% for field in model.fields %}{% if not field.required %}
+      {{ field.name }}: {{ field.example | safe }},
+      {% endif %}{% endfor %}
+    };
+
+    it('should update and return {{ model.nameCamel }}', async () => {
+      repository.findById.mockResolvedValue(mock{{ model.name }});
+      repository.update.mockResolvedValue({ ...mock{{ model.name }}, ...updateDto });
+
+      const result = await service.update(mock{{ model.name }}._id, updateDto);
+
+      expect(repository.update).toHaveBeenCalledWith(mock{{ model.name }}._id, updateDto);
+    });
+
+    it('should throw NotFoundException if {{ model.nameCamel }} not found', async () => {
+      repository.findById.mockResolvedValue(null);
+
+      await expect(service.update('nonexistent', updateDto)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('delete', () => {
+    it('should delete {{ model.nameCamel }} by id', async () => {
+      repository.findById.mockResolvedValue(mock{{ model.name }});
+      repository.delete.mockResolvedValue(true);
+
+      await service.delete(mock{{ model.name }}._id);
+
+      expect(repository.delete).toHaveBeenCalledWith(mock{{ model.name }}._id);
+    });
+
+    it('should throw NotFoundException if {{ model.nameCamel }} not found', async () => {
+      repository.findById.mockResolvedValue(null);
+
+      await expect(service.delete('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+});

@@ -1,0 +1,85 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  Logger,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { Request, Response } from 'express';
+import { redactSensitiveData } from './pii-redactor.util';
+
+/**
+ * Request/Response Logger Interceptor
+ * 
+ * Logs HTTP requests and responses with:
+ * - Request method, URL, headers
+ * - Request body (with PII redaction)
+ * - Response status, timing
+ * - Correlation ID for tracing
+ * 
+ * Enable detailed logging via DETAILED_LOGGING=true
+ */
+@Injectable()
+export class RequestLoggerInterceptor implements NestInterceptor {
+  private readonly logger = new Logger('HTTP');
+  private readonly detailedLogging = process.env.DETAILED_LOGGING === 'true';
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse<Response>();
+    const startTime = Date.now();
+
+    const { method, url, ip, headers } = request;
+    const correlationId = headers['x-correlation-id'] || headers['x-request-id'] || '-';
+    const userAgent = headers['user-agent'] || '-';
+    const userId = (request as any).user?.userId || 'anonymous';
+
+    // Log request
+    this.logger.log(
+      `→ ${method} ${url} [${correlationId}] from ${ip} - User: ${userId}`,
+    );
+
+    // Log request body in detailed mode (with redaction)
+    if (this.detailedLogging && request.body && Object.keys(request.body).length > 0) {
+      const redactedBody = redactSensitiveData(request.body);
+      this.logger.debug(`Request body: ${JSON.stringify(redactedBody)}`);
+    }
+
+    return next.handle().pipe(
+      tap({
+        next: (data) => {
+          const duration = Date.now() - startTime;
+          const statusCode = response.statusCode;
+
+          // Log response
+          this.logger.log(
+            `← ${method} ${url} ${statusCode} [${correlationId}] - ${duration}ms`,
+          );
+
+          // Log response body in detailed mode (with redaction)
+          if (this.detailedLogging && data) {
+            const redactedResponse = redactSensitiveData(data);
+            this.logger.debug(`Response: ${JSON.stringify(redactedResponse).slice(0, 500)}...`);
+          }
+
+          // Warn on slow requests
+          if (duration > 3000) {
+            this.logger.warn(
+              `⚠️ Slow request: ${method} ${url} took ${duration}ms [${correlationId}]`,
+            );
+          }
+        },
+        error: (err) => {
+          const duration = Date.now() - startTime;
+          const statusCode = err.status || 500;
+
+          this.logger.error(
+            `✖ ${method} ${url} ${statusCode} [${correlationId}] - ${duration}ms - ${err.message}`,
+          );
+        },
+      }),
+    );
+  }
+}

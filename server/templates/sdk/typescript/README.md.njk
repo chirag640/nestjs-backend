@@ -1,0 +1,112 @@
+# {{ project.name }} TypeScript SDK
+
+Auto-generated TypeScript SDK for React/Next.js.
+
+## Installation
+
+```bash
+cd sdk/typescript
+npm install
+npm run build
+```
+
+Or add as a local dependency in your React project:
+
+```json
+{
+  "dependencies": {
+    "{{ project.name | lower | replace(' ', '-') }}-sdk": "file:../path/to/sdk/typescript"
+  }
+}
+```
+
+## Usage
+
+### Basic Setup
+
+```typescript
+import { ApiClient } from '{{ project.name | lower | replace(' ', '-') }}-sdk';
+
+const api = new ApiClient({ baseUrl: 'http://localhost:3000' });
+```
+
+### Authentication with React Context
+
+```tsx
+import { AuthProvider, useAuthContext } from '{{ project.name | lower | replace(' ', '-') }}-sdk';
+
+// Wrap your app
+function App() {
+  return (
+    <AuthProvider api={api}>
+      <MyApp />
+    </AuthProvider>
+  );
+}
+
+// Use in components
+function LoginForm() {
+  const { login, isLoading, error } = useAuthContext();
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    await login({ email, password });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {error && <div className="error">{error}</div>}
+      <input type="email" value={email} onChange={...} />
+      <input type="password" value={password} onChange={...} />
+      <button disabled={isLoading}>Login</button>
+    </form>
+  );
+}
+```
+
+### Data Fetching
+
+```tsx
+import { useApiQuery, useApiMutation } from '{{ project.name | lower | replace(' ', '-') }}-sdk';
+
+function UserList() {
+  const { data: users, isLoading, error, refetch } = useApiQuery<User[]>(api, '/users');
+
+  if (isLoading) return <Spinner />;
+  if (error) return <Error message={getErrorMessage(error)} />;
+
+  return (
+    <ul>
+      {users?.map(user => <li key={user.id}>{user.email}</li>)}
+    </ul>
+  );
+}
+
+function CreateUser() {
+  const { mutate, isLoading } = useApiMutation<User, CreateUserDto>(api, '/users', 'POST');
+
+  const handleCreate = async (data: CreateUserDto) => {
+    const newUser = await mutate(data);
+    console.log('Created:', newUser);
+  };
+
+  return <button onClick={() => handleCreate(formData)} disabled={isLoading}>Create</button>;
+}
+```
+
+### Error Handling
+
+```typescript
+import { isApiError, getErrorMessage, ErrorCodes } from '{{ project.name | lower | replace(' ', '-') }}-sdk';
+
+try {
+  await api.get('/protected');
+} catch (error) {
+  if (isApiError(error)) {
+    if (error.code === ErrorCodes.TOKEN_EXPIRED) {
+      // Redirect to login
+    }
+    alert(getErrorMessage(error)); // User-friendly message
+  }
+}
+```

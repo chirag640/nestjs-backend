@@ -1,0 +1,116 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+
+/**
+ * Test utilities and helpers for {{ project.name }}
+ */
+
+// Mock user data
+export const mockUser = {
+  _id: '507f1f77bcf86cd799439011',
+  id: '507f1f77bcf86cd799439011',
+  email: 'test@example.com',
+  firstName: 'Test',
+  lastName: 'User',
+  roles: ['User'],
+  password: '$2a$10$hashedpassword', // bcrypt hash
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+export const mockAdmin = {
+  ...mockUser,
+  _id: '507f1f77bcf86cd799439012',
+  id: '507f1f77bcf86cd799439012',
+  email: 'admin@example.com',
+  roles: ['Admin', 'User'],
+};
+
+/**
+ * Generate a valid JWT token for testing
+ */
+export function generateTestToken(
+  jwtService: JwtService,
+  configService: ConfigService,
+  user: typeof mockUser = mockUser,
+): string {
+  return jwtService.sign(
+    { sub: user.id, roles: user.roles },
+    { secret: configService.get('JWT_SECRET'), expiresIn: '1h' }
+  );
+}
+
+/**
+ * Create a test application instance
+ */
+export async function createTestApp(module: TestingModule): Promise<INestApplication> {
+  const app = module.createNestApplication();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    })
+  );
+  await app.init();
+  return app;
+}
+
+/**
+ * Mock repository factory
+ */
+export function createMockRepository<T>() {
+  return {
+    findAll: jest.fn(),
+    findById: jest.fn(),
+    findOne: jest.fn(),
+    findByEmail: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+    softDelete: jest.fn(),
+    restore: jest.fn(),
+  };
+}
+
+/**
+ * Mock auth guard that always allows access
+ */
+export const MockJwtAuthGuard = {
+  canActivate: jest.fn().mockReturnValue(true),
+};
+
+/**
+ * Mock roles guard that always allows access
+ */
+export const MockRolesGuard = {
+  canActivate: jest.fn().mockReturnValue(true),
+};
+
+/**
+ * Create mock request with user
+ */
+export function createMockRequest(user = mockUser) {
+  return {
+    user: { userId: user.id, roles: user.roles },
+    headers: { 'x-request-id': 'test-request-id' },
+  };
+}
+
+/**
+ * Wait for async operations
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Clean test database
+ */
+export async function cleanDatabase(app: INestApplication): Promise<void> {
+  // This should be implemented based on your database setup
+  // For MongoDB: await app.get(Connection).dropDatabase();
+}

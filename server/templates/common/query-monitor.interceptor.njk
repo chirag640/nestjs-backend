@@ -1,0 +1,190 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  Logger,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+
+/**
+ * Query Performance Monitor Interceptor
+ * 
+ * Detects potential N+1 query issues and slow queries.
+ * Logs warnings for optimization opportunities.
+ * 
+ * Enable with: QUERY_MONITOR=true
+ */
+@Injectable()
+export class QueryMonitorInterceptor implements NestInterceptor {
+  private readonly logger = new Logger('QueryMonitor');
+  private readonly enabled = process.env.QUERY_MONITOR === 'true';
+  private readonly slowQueryThreshold = parseInt(process.env.SLOW_QUERY_MS || '1000', 10);
+
+  // Track queries per request
+  private queryCountMap = new Map<string, number>();
+  private queryTimeMap = new Map<string, number[]>();
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    if (!this.enabled) {
+      return next.handle();
+    }
+
+    const request = context.switchToHttp().getRequest();
+    const requestId = request.headers['x-request-id'] || 'unknown';
+    const startTime = Date.now();
+
+    // Reset counters for this request
+    this.queryCountMap.set(requestId, 0);
+    this.queryTimeMap.set(requestId, []);
+
+    return next.handle().pipe(
+      tap({
+        next: () => {
+          this.analyzeRequest(requestId, request.url, startTime);
+        },
+        error: () => {
+          this.cleanup(requestId);
+        },
+      }),
+    );
+  }
+
+  /**
+   * Increment query count (called by repository)
+   */
+  incrementQueryCount(requestId: string, queryTimeMs: number): void {
+    if (!this.enabled) return;
+
+    const count = (this.queryCountMap.get(requestId) || 0) + 1;
+    this.queryCountMap.set(requestId, count);
+
+    const times = this.queryTimeMap.get(requestId) || [];
+    times.push(queryTimeMs);
+    this.queryTimeMap.set(requestId, times);
+  }
+
+  private analyzeRequest(requestId: string, url: string, startTime: number): void {
+    const queryCount = this.queryCountMap.get(requestId) || 0;
+    const queryTimes = this.queryTimeMap.get(requestId) || [];
+    const totalTime = Date.now() - startTime;
+
+    // Detect potential N+1
+    if (queryCount > 10) {
+      this.logger.warn(
+        `⚠️ Potential N+1 detected: ${url} executed ${queryCount} queries [${requestId}]`,
+      );
+      this.logger.warn(
+        `   Consider using aggregation, population, or batch loading`,
+      );
+    }
+
+    // Detect slow queries
+    const slowQueries = queryTimes.filter((t) => t > this.slowQueryThreshold);
+    if (slowQueries.length > 0) {
+      this.logger.warn(
+        `⚠️ Slow queries detected: ${slowQueries.length} queries > ${this.slowQueryThreshold}ms [${requestId}]`,
+      );
+    }
+
+    // Log summary for slow endpoints
+    if (totalTime > 3000) {
+      this.logger.warn(
+        `⏱️ Slow endpoint: ${url} took ${totalTime}ms with ${queryCount} queries [${requestId}]`,
+      );
+    }
+
+    this.cleanup(requestId);
+  }
+
+  private cleanup(requestId: string): void {
+    this.queryCountMap.delete(requestId);
+    this.queryTimeMap.delete(requestId);
+  }
+}
+
+/**
+ * Decorator for tracking query execution
+ * 
+ * Usage in repository:
+ * ```typescript
+ * @TrackQuery()
+ * async findAll() { ... }
+ * ```
+ */
+export function TrackQuery(): MethodDecorator {
+  return function (
+    target: any,
+    propertyKey: string | symbol,
+    descriptor: PropertyDescriptor,
+  ) {
+    const originalMethod = descriptor.value;
+
+    descriptor.value = async function (...args: any[]) {
+      const startTime = Date.now();
+      const result = await originalMethod.apply(this, args);
+      const queryTime = Date.now() - startTime;
+
+      // Log slow individual queries
+      if (queryTime > 500 && process.env.NODE_ENV !== 'production') {
+        console.warn(
+          `⚠️ Slow query: ${target.constructor.name}.${String(propertyKey)} took ${queryTime}ms`,
+        );
+      }
+
+      return result;
+    };
+
+    return descriptor;
+  };
+}
+
+/**
+ * Index recommendations based on common patterns
+ */
+export const indexRecommendations = {
+  // Common fields that should always be indexed
+  alwaysIndex: [
+    'createdAt',
+    'updatedAt',
+    'deletedAt', // For soft deletes
+  ],
+
+  // Fields likely to be used in filters
+  suggestIndex: [
+    'status',
+    'type',
+    'category',
+    'isActive',
+    'isDeleted',
+  ],
+
+  // Compound indexes for common patterns
+  compoundIndexes: [
+    { fields: ['userId', 'createdAt'], reason: 'User activity queries' },
+    { fields: ['status', 'createdAt'], reason: 'Status timeline queries' },
+  ],
+};
+
+/**
+ * Generate index recommendations for a model
+ */
+export function generateIndexRecommendations(modelName: string, fieldNames: string[]): string[] {
+  const recommendations: string[] = [];
+
+  // Check for commonly indexed fields
+  for (const field of fieldNames) {
+    if (indexRecommendations.suggestIndex.includes(field)) {
+      recommendations.push(`Consider adding index on ${modelName}.${field}`);
+    }
+  }
+
+  // Check for missing timestamp indexes
+  const hasCreatedAt = fieldNames.some((f) => f === 'createdAt');
+  if (hasCreatedAt) {
+    recommendations.push(`Ensure index exists on ${modelName}.createdAt for sorting`);
+  }
+
+  return recommendations;
+}

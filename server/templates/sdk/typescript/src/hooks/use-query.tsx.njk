@@ -1,0 +1,206 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { ApiClient } from '../api-client';
+import type { ApiResponse, PaginatedResponse, ApiError } from '../types';
+import { isApiError } from '../errors';
+
+interface UseApiQueryOptions<T> {
+  enabled?: boolean;
+  refetchInterval?: number;
+  onSuccess?: (data: T) => void;
+  onError?: (error: ApiError) => void;
+}
+
+interface UseApiQueryResult<T> {
+  data: T | null;
+  isLoading: boolean;
+  error: ApiError | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * React hook for API queries (GET requests)
+ *
+ * @example
+ * ```tsx
+ * const api = new ApiClient({ baseUrl: 'http://localhost:3000' });
+ *
+ * function UserList() {
+ *   const { data, isLoading, error } = useApiQuery<User[]>(api, '/users');
+ *
+ *   if (isLoading) return <Spinner />;
+ *   if (error) return <Error message={error.message} />;
+ *
+ *   return (
+ *     <ul>
+ *       {data?.map(user => <li key={user.id}>{user.email}</li>)}
+ *     </ul>
+ *   );
+ * }
+ * ```
+ */
+export function useApiQuery<T>(
+  api: ApiClient,
+  url: string,
+  options: UseApiQueryOptions<T> = {}
+): UseApiQueryResult<T> {
+  const { enabled = true, refetchInterval, onSuccess, onError } = options;
+
+  const [data, setData] = useState<T | null>(null);
+  const [isLoading, setIsLoading] = useState(enabled);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!enabled) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.get<T>(url);
+      if (response.status === 'success' && response.data !== undefined) {
+        setData(response.data);
+        onSuccess?.(response.data);
+      }
+    } catch (err) {
+      const apiError = isApiError(err) ? err : { code: 'UNKNOWN', message: 'Unknown error', statusCode: 500 };
+      setError(apiError);
+      onError?.(apiError);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api, url, enabled, onSuccess, onError]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (!refetchInterval || !enabled) return;
+
+    const interval = setInterval(fetchData, refetchInterval);
+    return () => clearInterval(interval);
+  }, [fetchData, refetchInterval, enabled]);
+
+  return { data, isLoading, error, refetch: fetchData };
+}
+
+interface UseApiMutationOptions<TData, TVariables> {
+  onSuccess?: (data: TData, variables: TVariables) => void;
+  onError?: (error: ApiError, variables: TVariables) => void;
+}
+
+interface UseApiMutationResult<TData, TVariables> {
+  mutate: (variables: TVariables) => Promise<TData>;
+  data: TData | null;
+  isLoading: boolean;
+  error: ApiError | null;
+  reset: () => void;
+}
+
+/**
+ * React hook for API mutations (POST, PUT, PATCH, DELETE)
+ *
+ * @example
+ * ```tsx
+ * const api = new ApiClient({ baseUrl: 'http://localhost:3000' });
+ *
+ * function CreateUser() {
+ *   const { mutate, isLoading } = useApiMutation<User, CreateUserDto>(
+ *     api,
+ *     '/users',
+ *     'POST'
+ *   );
+ *
+ *   const handleSubmit = async (data: CreateUserDto) => {
+ *     const user = await mutate(data);
+ *     console.log('Created:', user);
+ *   };
+ *
+ *   return <form onSubmit={handleSubmit}>...</form>;
+ * }
+ * ```
+ */
+export function useApiMutation<TData, TVariables = unknown>(
+  api: ApiClient,
+  url: string,
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE' = 'POST',
+  options: UseApiMutationOptions<TData, TVariables> = {}
+): UseApiMutationResult<TData, TVariables> {
+  const { onSuccess, onError } = options;
+
+  const [data, setData] = useState<TData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const mutate = useCallback(async (variables: TVariables): Promise<TData> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      let response: ApiResponse<TData>;
+
+      switch (method) {
+        case 'POST':
+          response = await api.post<TData>(url, variables);
+          break;
+        case 'PUT':
+          response = await api.put<TData>(url, variables);
+          break;
+        case 'PATCH':
+          response = await api.patch<TData>(url, variables);
+          break;
+        case 'DELETE':
+          response = await api.delete<TData>(url);
+          break;
+      }
+
+      if (response.status === 'success' && response.data !== undefined) {
+        setData(response.data);
+        onSuccess?.(response.data, variables);
+        return response.data;
+      }
+
+      throw { code: 'UNKNOWN', message: 'Mutation failed', statusCode: 500 };
+    } catch (err) {
+      const apiError = isApiError(err) ? err : { code: 'UNKNOWN', message: 'Unknown error', statusCode: 500 };
+      setError(apiError);
+      onError?.(apiError, variables);
+      throw apiError;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [api, url, method, onSuccess, onError]);
+
+  const reset = useCallback(() => {
+    setData(null);
+    setError(null);
+    setIsLoading(false);
+  }, []);
+
+  return { mutate, data, isLoading, error, reset };
+}
+
+/**
+ * Hook for paginated queries
+ */
+export function usePaginatedQuery<T>(
+  api: ApiClient,
+  url: string,
+  page = 1,
+  limit = 10
+) {
+  const [currentPage, setCurrentPage] = useState(page);
+  const queryUrl = `${url}?page=${currentPage}&limit=${limit}`;
+
+  const result = useApiQuery<T[]>(api, queryUrl);
+
+  return {
+    ...result,
+    page: currentPage,
+    setPage: setCurrentPage,
+    nextPage: () => setCurrentPage((p) => p + 1),
+    prevPage: () => setCurrentPage((p) => Math.max(1, p - 1)),
+  };
+}

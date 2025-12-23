@@ -1,0 +1,39 @@
+import { Module } from '@nestjs/common';
+import { EventsGateway } from './events.gateway';
+import { PresenceService } from './presence.service';
+
+/**
+ * Real-time Events Module
+ * 
+ * Provides WebSocket support using Socket.io for:
+ * - Real-time notifications
+ * - Live data updates
+ * - User presence tracking
+ * 
+ * ## Client Setup (React)
+ * ```typescript
+ * import { io } from 'socket.io-client';
+ * 
+ * const socket = io('http://localhost:3000', {
+ *   auth: { token: accessToken },
+ * });
+ * 
+ * socket.on('notification', (data) => {
+ *   console.log('New notification:', data);
+ * });
+ * ```
+ * 
+ * ## Client Setup (Flutter)
+ * ```dart
+ * final socket = IO.io('http://localhost:3000', {
+ *   'auth': {'token': accessToken},
+ * });
+ * 
+ * socket.on('notification', (data) => print(data));
+ * ```
+ */
+@Module({
+  providers: [EventsGateway, PresenceService],
+  exports: [EventsGateway, PresenceService],
+})
+export class EventsModule {}

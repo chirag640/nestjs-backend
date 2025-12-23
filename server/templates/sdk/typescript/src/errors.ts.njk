@@ -1,0 +1,78 @@
+import type { ApiError } from './types';
+
+/**
+ * Error code constants matching backend
+ */
+export const ErrorCodes = {
+  // Authentication (1xxx)
+  INVALID_CREDENTIALS: 'AUTH_1001',
+  TOKEN_EXPIRED: 'AUTH_1002',
+  TOKEN_INVALID: 'AUTH_1003',
+  TOKEN_MISSING: 'AUTH_1004',
+  REFRESH_TOKEN_EXPIRED: 'AUTH_1005',
+  UNAUTHORIZED: 'AUTH_1008',
+
+  // User (2xxx)
+  USER_NOT_FOUND: 'USER_2001',
+  USER_EMAIL_DUPLICATE: 'USER_2002',
+
+  // Authorization (3xxx)
+  FORBIDDEN: 'AUTHZ_3001',
+  INSUFFICIENT_PERMISSIONS: 'AUTHZ_3002',
+
+  // Validation (4xxx)
+  VALIDATION_FAILED: 'VAL_4001',
+  INVALID_INPUT: 'VAL_4002',
+
+  // Resource (5xxx)
+  RESOURCE_NOT_FOUND: 'RES_5001',
+  RESOURCE_CONFLICT: 'RES_5003',
+
+  // Rate Limiting (8xxx)
+  RATE_LIMIT_EXCEEDED: 'RATE_8001',
+} as const;
+
+/**
+ * Type guard to check if an error is an ApiError
+ */
+export function isApiError(error: unknown): error is ApiError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    'message' in error &&
+    'statusCode' in error
+  );
+}
+
+/**
+ * Get user-friendly error message
+ */
+export function getErrorMessage(error: ApiError): string {
+  const messages: Record<string, string> = {
+    [ErrorCodes.INVALID_CREDENTIALS]: 'Invalid email or password',
+    [ErrorCodes.TOKEN_EXPIRED]: 'Your session has expired. Please login again.',
+    [ErrorCodes.TOKEN_MISSING]: 'Please login to continue',
+    [ErrorCodes.USER_EMAIL_DUPLICATE]: 'This email is already registered',
+    [ErrorCodes.FORBIDDEN]: 'You do not have permission to perform this action',
+    [ErrorCodes.VALIDATION_FAILED]: 'Please check your input and try again',
+    [ErrorCodes.RESOURCE_NOT_FOUND]: 'The requested item was not found',
+    [ErrorCodes.RATE_LIMIT_EXCEEDED]: 'Too many requests. Please wait a moment.',
+  };
+
+  return messages[error.code] ?? (Array.isArray(error.message) ? error.message[0] : error.message);
+}
+
+/**
+ * Check if error is retryable
+ */
+export function isRetryable(error: ApiError): boolean {
+  return ['SRV_7002', 'SRV_7003', 'RATE_8001'].includes(error.code);
+}
+
+/**
+ * Check if error requires re-authentication
+ */
+export function requiresAuth(error: ApiError): boolean {
+  return error.code === ErrorCodes.TOKEN_EXPIRED || error.code === ErrorCodes.TOKEN_INVALID;
+}
