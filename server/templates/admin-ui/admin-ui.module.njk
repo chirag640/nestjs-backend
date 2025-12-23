@@ -1,0 +1,20 @@
+import { Module } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
+
+/**
+ * Admin UI Module
+ * 
+ * Serves the static Admin UI for field-level access control management.
+ * The admin UI is accessible at /admin/* routes.
+ */
+@Module({
+  imports: [
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'admin'),
+      serveRoot: '/admin',
+      exclude: ['/api*', '/field-access*'],
+    }),
+  ],
+})
+export class AdminUiModule {}

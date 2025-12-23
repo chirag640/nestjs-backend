@@ -1,0 +1,156 @@
+/**
+ * Admin API Service
+ * Handles all API calls to the field-access endpoints
+ */
+
+const API_BASE = '/field-access';
+
+// Types
+interface FieldAccessRule {
+  _id: string;
+  role: string;
+  entityName?: string;
+  allowSelfOnly?: boolean;
+  allow?: string[];
+  deny?: string[];
+  allowRead?: boolean;
+  allowWrite?: boolean;
+  allowDelete?: boolean;
+  priority?: number;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CreateRuleDto {
+  role: string;
+  entityName?: string;
+  allowSelfOnly?: boolean;
+  allow?: string[];
+  deny?: string[];
+  allowRead?: boolean;
+  allowWrite?: boolean;
+  allowDelete?: boolean;
+  priority?: number;
+  description?: string;
+}
+
+interface AccessLog {
+  _id: string;
+  userId: string;
+  role: string;
+  entityName: string;
+  resourceId?: string;
+  action: 'read' | 'write' | 'delete';
+  deniedFields?: string[];
+  granted: boolean;
+  denialReason?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+}
+
+interface AccessStats {
+  total: number;
+  granted: number;
+  denied: number;
+  denialRate: string;
+  byAction: Array<{ _id: string; count: number }>;
+  byRole: Array<{ _id: string; count: number }>;
+}
+
+// Helper function for API calls
+async function apiCall<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = localStorage.getItem('admin_token');
+  
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Request failed' }));
+    throw new Error(error.message || `HTTP ${response.status}`);
+  }
+
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json();
+}
+
+// Rules API
+export const rulesApi = {
+  getAll: (): Promise<FieldAccessRule[]> => 
+    apiCall('/rules'),
+  
+  getByRole: (role: string): Promise<FieldAccessRule[]> => 
+    apiCall(`/rules/role/${encodeURIComponent(role)}`),
+  
+  getByEntity: (entity: string): Promise<FieldAccessRule[]> => 
+    apiCall(`/rules/entity/${encodeURIComponent(entity)}`),
+  
+  getEffectivePolicy: (role: string, entity?: string): Promise<any> => 
+    apiCall(`/policy/${encodeURIComponent(role)}${entity ? `?entity=${entity}` : ''}`),
+  
+  create: (data: CreateRuleDto): Promise<FieldAccessRule> => 
+    apiCall('/rules', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  
+  update: (id: string, data: Partial<CreateRuleDto>): Promise<FieldAccessRule> => 
+    apiCall(`/rules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  
+  delete: (id: string): Promise<void> => 
+    apiCall(`/rules/${id}`, { method: 'DELETE' }),
+  
+  activate: (id: string): Promise<FieldAccessRule> => 
+    apiCall(`/rules/${id}/activate`, { method: 'PUT' }),
+  
+  deactivate: (id: string): Promise<FieldAccessRule> => 
+    apiCall(`/rules/${id}/deactivate`, { method: 'PUT' }),
+  
+  export: (): Promise<any[]> => 
+    apiCall('/export'),
+  
+  import: (rules: CreateRuleDto[]): Promise<{ message: string }> => 
+    apiCall('/import', {
+      method: 'POST',
+      body: JSON.stringify(rules),
+    }),
+};
+
+// Logs API
+export const logsApi = {
+  getAll: (limit = 100, offset = 0): Promise<AccessLog[]> => 
+    apiCall(`/logs?limit=${limit}&offset=${offset}`),
+  
+  getByUser: (userId: string, limit = 100, offset = 0): Promise<AccessLog[]> => 
+    apiCall(`/logs?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`),
+  
+  getDenied: (limit = 100, offset = 0): Promise<AccessLog[]> => 
+    apiCall(`/logs/denied?limit=${limit}&offset=${offset}`),
+};
+
+// Stats API
+export const statsApi = {
+  get: (userId?: string): Promise<AccessStats> => 
+    apiCall(`/stats${userId ? `?userId=${userId}` : ''}`),
+};
+
+// Export types
+export type { FieldAccessRule, CreateRuleDto, AccessLog, AccessStats };

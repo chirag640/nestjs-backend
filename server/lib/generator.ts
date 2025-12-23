@@ -859,6 +859,13 @@ async function generateFeatureFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
   const flacFiles = await generateFieldAccessFiles(ir);
   files.push(...flacFiles);
 
+  // Admin UI for FLAC (when FLAC is enabled)
+  // Visual permission management dashboard
+  if (ir.flac) {
+    const adminUIFiles = await generateAdminUIFiles(ir);
+    files.push(...adminUIFiles);
+  }
+
   // Database Seeding Script (always generated)
   const seedFiles = await generateSeedScript(ir);
   files.push(...seedFiles);
@@ -1230,6 +1237,65 @@ async function generateFieldAccessFiles(
       });
     } catch (error) {
       console.error(`Error generating ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Admin UI files for permission management
+ * Only generated when Field-Level Access Control (FLAC) is enabled
+ */
+async function generateAdminUIFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const adminUITemplates = [
+    // Base HTML
+    {
+      template: "admin-ui/index.html.njk",
+      output: "admin/index.html",
+      parser: "html",
+    },
+    // Styles
+    {
+      template: "admin-ui/styles.css.njk",
+      output: "admin/styles.css",
+      parser: "css",
+    },
+    // Main application
+    {
+      template: "admin-ui/main.ts.njk",
+      output: "admin/src/main.ts",
+      parser: "typescript",
+    },
+    // API service
+    {
+      template: "admin-ui/api.ts.njk",
+      output: "admin/src/api.ts",
+      parser: "typescript",
+    },
+    // Admin UI NestJS module
+    {
+      template: "admin-ui/admin-ui.module.njk",
+      output: "src/admin-ui/admin-ui.module.ts",
+      parser: "typescript",
+    },
+    // TypeScript config for admin
+    {
+      template: "admin-ui/tsconfig.json.njk",
+      output: "admin/tsconfig.json",
+      parser: "json",
+    },
+  ];
+
+  for (const { template, output, parser } of adminUITemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser as any) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating admin UI file ${output}:`, error);
     }
   }
 

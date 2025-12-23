@@ -210,6 +210,7 @@ export interface ProjectIR {
   oauth?: OAuthIR; // Optional OAuth2 configuration
   relationships: RelationshipIR[]; // Model relationships
   features: FeaturesIR; // Feature toggles
+  flac: boolean; // Field-Level Access Control enabled
   docker?: DockerIR; // Docker configuration
   cicd?: CICDIR; // CI/CD configuration
   metadata: {
@@ -256,6 +257,7 @@ export function buildIR(config: WizardConfig): ProjectIR {
     models: models.map((model) => buildModelIR(model)),
     relationships: buildRelationshipsIR(config),
     features: buildFeaturesIR(config),
+    flac: config.featureSelection?.fieldLevelAccessControl ?? false,
     metadata: {
       generatorVersion: "1.0.0",
       timestamp: new Date().toISOString(),
