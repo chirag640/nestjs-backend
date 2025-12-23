@@ -1,0 +1,181 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { FirebasePushService, PushNotificationPayload } from './firebase-push.service';
+import { TwilioSmsService, SmsPayload } from './twilio-sms.service';
+{% if features.email %}
+import { EmailService } from '../email/email.service';
+{% endif %}
+
+export type NotificationChannel = 'push' | 'sms' | 'email';
+
+export interface NotificationData {
+  userId?: string;
+  email?: string;
+  phone?: string;
+  deviceTokens?: string[];
+}
+
+export interface NotificationOptions {
+  title: string;
+  body: string;
+  channels?: NotificationChannel[];
+  data?: Record<string, any>;
+  email?: {
+    template: string;
+    context?: Record<string, any>;
+  };
+}
+
+/**
+ * Unified Notification Service
+ * 
+ * Facade for multi-channel notifications.
+ * Automatically selects appropriate channel based on available user data.
+ * 
+ * @example
+ * ```typescript
+ * // Send to all available channels
+ * await notificationService.notify(
+ *   { userId: 'xxx', email: 'user@example.com', phone: '+1555...', deviceTokens: [...] },
+ *   {
+ *     title: 'Order Shipped',
+ *     body: 'Your order #123 has been shipped!',
+ *     channels: ['push', 'email'],
+ *     data: { orderId: '123' },
+ *     email: { template: 'order-shipped' },
+ *   }
+ * );
+ * 
+ * // Send to specific channel
+ * await notificationService.sendPush(tokens, { title, body });
+ * await notificationService.sendSms(phone, message);
+ * ```
+ */
+@Injectable()
+export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
+  constructor(
+    private readonly pushService: FirebasePushService,
+    private readonly smsService: TwilioSmsService,
+    {% if features.email %}
+    private readonly emailService: EmailService,
+    {% endif %}
+  ) {}
+
+  /**
+   * Send notification through multiple channels
+   */
+  async notify(
+    recipient: NotificationData,
+    options: NotificationOptions,
+  ): Promise<{
+    push?: { success: boolean; error?: string };
+    sms?: { success: boolean; error?: string };
+    email?: { success: boolean; error?: string };
+  }> {
+    const results: any = {};
+    const channels = options.channels || ['push']; // Default to push
+
+    // Push notification
+    if (channels.includes('push') && recipient.deviceTokens?.length) {
+      try {
+        const result = await this.pushService.sendToDevices(recipient.deviceTokens, {
+          title: options.title,
+          body: options.body,
+          data: options.data as Record<string, string>,
+        });
+        results.push = {
+          success: result.successCount > 0,
+          error: result.failureCount > 0 ? `${result.failureCount} failed` : undefined,
+        };
+      } catch (error) {
+        results.push = { success: false, error: error.message };
+      }
+    }
+
+    // SMS notification
+    if (channels.includes('sms') && recipient.phone) {
+      try {
+        const result = await this.smsService.send({
+          to: recipient.phone,
+          body: `${options.title}: ${options.body}`,
+        });
+        results.sms = result;
+      } catch (error) {
+        results.sms = { success: false, error: error.message };
+      }
+    }
+
+    // Email notification
+    {% if features.email %}
+    if (channels.includes('email') && recipient.email && options.email) {
+      try {
+        await this.emailService.sendTemplatedEmail(
+          recipient.email,
+          options.title,
+          options.email.template,
+          {
+            ...options.email.context,
+            title: options.title,
+            body: options.body,
+          },
+        );
+        results.email = { success: true };
+      } catch (error) {
+        results.email = { success: false, error: error.message };
+      }
+    }
+    {% endif %}
+
+    return results;
+  }
+
+  /**
+   * Send push notification to devices
+   */
+  async sendPush(tokens: string[], payload: PushNotificationPayload) {
+    return this.pushService.sendToDevices(tokens, payload);
+  }
+
+  /**
+   * Send push to topic
+   */
+  async sendPushToTopic(topic: string, payload: PushNotificationPayload) {
+    return this.pushService.sendToTopic(topic, payload);
+  }
+
+  /**
+   * Send SMS
+   */
+  async sendSms(to: string, body: string) {
+    return this.smsService.send({ to, body });
+  }
+
+  /**
+   * Send OTP via SMS
+   */
+  async sendOtp(phone: string, options?: { length?: number; expiresIn?: number }) {
+    return this.smsService.sendOtp(phone, options);
+  }
+
+  /**
+   * Verify OTP
+   */
+  async verifyOtp(phone: string, code: string) {
+    return this.smsService.verifyOtp(phone, code);
+  }
+
+  /**
+   * Subscribe user to push topic
+   */
+  async subscribeToTopic(tokens: string[], topic: string) {
+    return this.pushService.subscribeToTopic(tokens, topic);
+  }
+
+  /**
+   * Unsubscribe user from push topic
+   */
+  async unsubscribeFromTopic(tokens: string[], topic: string) {
+    return this.pushService.unsubscribeFromTopic(tokens, topic);
+  }
+}

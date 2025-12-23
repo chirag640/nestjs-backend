@@ -1,0 +1,34 @@
+import { Module, Global } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { FirebasePushService } from './firebase-push.service';
+import { TwilioSmsService } from './twilio-sms.service';
+import { NotificationService } from './notification.service';
+
+/**
+ * Notifications Module
+ * 
+ * Provides multi-channel notification support:
+ * - Push notifications (Firebase Cloud Messaging)
+ * - SMS notifications (Twilio)
+ * - Email notifications (via EmailModule)
+ * 
+ * ## Environment Variables
+ * ```env
+ * # Firebase
+ * FIREBASE_PROJECT_ID=your-project-id
+ * FIREBASE_CLIENT_EMAIL=firebase-adminsdk@xxx.iam.gserviceaccount.com
+ * FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
+ * 
+ * # Twilio
+ * TWILIO_ACCOUNT_SID=ACxxxxxxxxxx
+ * TWILIO_AUTH_TOKEN=your-auth-token
+ * TWILIO_PHONE_NUMBER=+15551234567
+ * ```
+ */
+@Global()
+@Module({
+  imports: [ConfigModule],
+  providers: [FirebasePushService, TwilioSmsService, NotificationService],
+  exports: [FirebasePushService, TwilioSmsService, NotificationService],
+})
+export class NotificationsModule {}

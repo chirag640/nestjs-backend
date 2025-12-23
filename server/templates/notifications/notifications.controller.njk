@@ -1,0 +1,144 @@
+import { Controller, Post, Body, Delete, Get, Param, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { NotificationService } from './notification.service';
+
+class RegisterDeviceDto {
+  token: string;
+  platform: 'ios' | 'android' | 'web';
+  deviceId?: string;
+}
+
+class SendOtpDto {
+  phone: string;
+}
+
+class VerifyOtpDto {
+  phone: string;
+  code: string;
+}
+
+class SubscribeTopicDto {
+  topic: string;
+  tokens: string[];
+}
+
+/**
+ * Notifications Controller
+ * 
+ * Endpoints for device registration, OTP, and topic subscriptions.
+ */
+@ApiTags('Notifications')
+@Controller('notifications')
+export class NotificationsController {
+  // In production, store device tokens in database
+  private deviceTokens = new Map<string, RegisterDeviceDto[]>();
+
+  constructor(private readonly notificationService: NotificationService) {}
+
+  /**
+   * Register device for push notifications
+   */
+  @Post('devices')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Register device for push notifications' })
+  @ApiBody({ type: RegisterDeviceDto })
+  async registerDevice(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: RegisterDeviceDto,
+  ) {
+    const devices = this.deviceTokens.get(userId) || [];
+    
+    // Avoid duplicates
+    const exists = devices.some((d) => d.token === dto.token);
+    if (!exists) {
+      devices.push(dto);
+      this.deviceTokens.set(userId, devices);
+    }
+
+    return { success: true, message: 'Device registered' };
+  }
+
+  /**
+   * Unregister device
+   */
+  @Delete('devices/:token')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unregister device' })
+  async unregisterDevice(
+    @CurrentUser('userId') userId: string,
+    @Param('token') token: string,
+  ) {
+    const devices = this.deviceTokens.get(userId) || [];
+    const filtered = devices.filter((d) => d.token !== token);
+    this.deviceTokens.set(userId, filtered);
+
+    return { success: true, message: 'Device unregistered' };
+  }
+
+  /**
+   * Get user's registered devices
+   */
+  @Get('devices')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get registered devices' })
+  async getDevices(@CurrentUser('userId') userId: string) {
+    const devices = this.deviceTokens.get(userId) || [];
+    return { devices };
+  }
+
+  /**
+   * Send OTP via SMS
+   */
+  @Post('otp/send')
+  @ApiOperation({ summary: 'Send OTP code via SMS' })
+  @ApiBody({ type: SendOtpDto })
+  async sendOtp(@Body() dto: SendOtpDto) {
+    const result = await this.notificationService.sendOtp(dto.phone);
+    
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    
+    return { success: true, message: 'OTP sent successfully' };
+  }
+
+  /**
+   * Verify OTP
+   */
+  @Post('otp/verify')
+  @ApiOperation({ summary: 'Verify OTP code' })
+  @ApiBody({ type: VerifyOtpDto })
+  async verifyOtp(@Body() dto: VerifyOtpDto) {
+    const valid = await this.notificationService.verifyOtp(dto.phone, dto.code);
+    return { valid };
+  }
+
+  /**
+   * Subscribe to topic (admin)
+   */
+  @Post('topics/subscribe')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Subscribe devices to topic' })
+  async subscribeToTopic(@Body() dto: SubscribeTopicDto) {
+    await this.notificationService.subscribeToTopic(dto.tokens, dto.topic);
+    return { success: true };
+  }
+
+  /**
+   * Unsubscribe from topic
+   */
+  @Post('topics/unsubscribe')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unsubscribe devices from topic' })
+  async unsubscribeFromTopic(@Body() dto: SubscribeTopicDto) {
+    await this.notificationService.unsubscribeFromTopic(dto.tokens, dto.topic);
+    return { success: true };
+  }
+}

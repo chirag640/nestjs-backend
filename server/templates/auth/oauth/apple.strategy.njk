@@ -1,0 +1,70 @@
+import { PassportStrategy } from '@nestjs/passport';
+import { Strategy } from 'passport-apple';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+/**
+ * Apple OAuth Strategy
+ * 
+ * Sign in with Apple for iOS apps.
+ * 
+ * ## Setup
+ * 1. Create App ID in Apple Developer Console
+ * 2. Configure Sign in with Apple capability
+ * 3. Create Services ID and configure redirect URIs
+ * 4. Generate private key
+ * 
+ * ## Environment Variables
+ * ```env
+ * APPLE_CLIENT_ID=com.yourapp.service
+ * APPLE_TEAM_ID=XXXXXXXXXX
+ * APPLE_KEY_ID=XXXXXXXX
+ * APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
+ * APPLE_CALLBACK_URL=https://api.example.com/auth/oauth/apple/callback
+ * ```
+ */
+@Injectable()
+export class AppleStrategy extends PassportStrategy(Strategy, 'apple') {
+  constructor(private configService: ConfigService) {
+    const clientID = configService.get<string>('APPLE_CLIENT_ID');
+    const teamID = configService.get<string>('APPLE_TEAM_ID');
+    const keyID = configService.get<string>('APPLE_KEY_ID');
+    const privateKey = configService.get<string>('APPLE_PRIVATE_KEY');
+
+    if (!clientID || !teamID || !keyID || !privateKey) {
+      throw new Error('Apple OAuth credentials are not configured');
+    }
+
+    super({
+      clientID,
+      teamID,
+      keyID,
+      privateKeyString: privateKey.replace(/\\n/g, '\n'),
+      callbackURL: configService.get<string>('APPLE_CALLBACK_URL'),
+      scope: ['name', 'email'],
+    });
+  }
+
+  async validate(
+    accessToken: string,
+    refreshToken: string,
+    idToken: any,
+    profile: any,
+    done: Function,
+  ): Promise<any> {
+    // Apple only sends user info on first sign-in
+    // After that, you only get the user ID
+    const user = {
+      oauthId: idToken.sub,
+      email: idToken.email,
+      firstName: profile?.name?.firstName || '',
+      lastName: profile?.name?.lastName || '',
+      name: profile?.name
+        ? `${profile.name.firstName || ''} ${profile.name.lastName || ''}`.trim()
+        : '',
+      provider: 'apple',
+      accessToken,
+    };
+    done(null, user);
+  }
+}

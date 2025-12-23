@@ -1,0 +1,61 @@
+import { PassportStrategy } from '@nestjs/passport';
+import { Strategy, VerifyCallback } from 'passport-facebook';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+/**
+ * Facebook OAuth Strategy
+ * 
+ * Sign in with Facebook.
+ * 
+ * ## Setup
+ * 1. Create app at https://developers.facebook.com
+ * 2. Configure OAuth settings
+ * 3. Add redirect URIs
+ * 
+ * ## Environment Variables
+ * ```env
+ * FACEBOOK_APP_ID=your-app-id
+ * FACEBOOK_APP_SECRET=your-app-secret
+ * FACEBOOK_CALLBACK_URL=https://api.example.com/auth/oauth/facebook/callback
+ * ```
+ */
+@Injectable()
+export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
+  constructor(private configService: ConfigService) {
+    const clientID = configService.get<string>('FACEBOOK_APP_ID');
+    const clientSecret = configService.get<string>('FACEBOOK_APP_SECRET');
+
+    if (!clientID || !clientSecret) {
+      throw new Error('Facebook OAuth credentials are not configured');
+    }
+
+    super({
+      clientID,
+      clientSecret,
+      callbackURL: configService.get<string>('FACEBOOK_CALLBACK_URL'),
+      scope: ['email', 'public_profile'],
+      profileFields: ['id', 'email', 'name', 'picture.type(large)'],
+    });
+  }
+
+  async validate(
+    accessToken: string,
+    refreshToken: string,
+    profile: any,
+    done: VerifyCallback,
+  ): Promise<any> {
+    const { id, name, emails, photos } = profile;
+    const user = {
+      oauthId: id,
+      email: emails?.[0]?.value,
+      firstName: name?.givenName || '',
+      lastName: name?.familyName || '',
+      name: profile.displayName,
+      photo: photos?.[0]?.value,
+      provider: 'facebook',
+      accessToken,
+    };
+    done(null, user);
+  }
+}
