@@ -1,0 +1,89 @@
+/**
+ * Mongoose Migration Script Template
+ * 
+ * For MongoDB schema changes that require data migration.
+ * 
+ * Run: npx ts-node src/migrations/{{ timestamp }}-{{ name }}.ts
+ */
+
+import { connect, disconnect, model, Schema } from 'mongoose';
+import { config } from 'dotenv';
+
+config(); // Load .env
+
+interface MigrationLog {
+  name: string;
+  version: string;
+  appliedAt: Date;
+  duration: number;
+}
+
+const MigrationLogSchema = new Schema<MigrationLog>({
+  name: { type: String, required: true, unique: true },
+  version: { type: String, required: true },
+  appliedAt: { type: Date, default: Date.now },
+  duration: { type: Number },
+});
+
+async function runMigration() {
+  const startTime = Date.now();
+  const migrationName = '{{ timestamp }}-{{ name }}';
+  const version = '{{ version || "1.0.0" }}';
+
+  console.log(`🔧 Running migration: ${migrationName}`);
+
+  try {
+    // Connect to MongoDB
+    await connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/{{ project.name | lower }}');
+    console.log('📡 Connected to MongoDB');
+
+    const MigrationLog = model('MigrationLog', MigrationLogSchema);
+
+    // Check if already applied
+    const existing = await MigrationLog.findOne({ name: migrationName });
+    if (existing) {
+      console.log(`⏭️ Migration ${migrationName} already applied, skipping`);
+      return;
+    }
+
+    // ===== YOUR MIGRATION LOGIC HERE =====
+    
+    // Example: Add field to all documents
+    // const User = model('User', new Schema({ firstName: String, email: String }));
+    // await User.updateMany(
+    //   { newField: { $exists: false } },
+    //   { $set: { newField: 'defaultValue' } }
+    // );
+    
+    // Example: Rename field
+    // await User.updateMany({}, { $rename: { 'oldName': 'newName' } });
+    
+    // Example: Migrate data structure
+    // const docs = await User.find({ oldFormat: true });
+    // for (const doc of docs) {
+    //   doc.newFormat = transformData(doc.oldData);
+    //   doc.oldFormat = undefined;
+    //   await doc.save();
+    // }
+
+    // ===== END MIGRATION LOGIC =====
+
+    // Log successful migration
+    const duration = Date.now() - startTime;
+    await MigrationLog.create({ name: migrationName, version, duration });
+
+    console.log(`✅ Migration completed in ${duration}ms`);
+  } catch (error) {
+    console.error('❌ Migration failed:', error);
+    process.exit(1);
+  } finally {
+    await disconnect();
+  }
+}
+
+// Run if called directly
+if (require.main === module) {
+  runMigration();
+}
+
+export { runMigration };

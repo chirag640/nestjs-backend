@@ -1,0 +1,38 @@
+import { Module } from '@nestjs/common';
+import { TerminusModule } from '@nestjs/terminus';
+import { HttpModule } from '@nestjs/axios';
+import { HealthController } from './health.controller';
+import { MetricsService } from './metrics.service';
+
+/**
+ * Health Module
+ * 
+ * Provides health checks and metrics for production monitoring.
+ * 
+ * ## Kubernetes Integration
+ * ```yaml
+ * livenessProbe:
+ *   httpGet:
+ *     path: /health/live
+ *     port: 3000
+ *   initialDelaySeconds: 5
+ *   periodSeconds: 10
+ * 
+ * readinessProbe:
+ *   httpGet:
+ *     path: /health/ready
+ *     port: 3000
+ *   initialDelaySeconds: 10
+ *   periodSeconds: 5
+ * ```
+ */
+@Module({
+  imports: [
+    TerminusModule,
+    HttpModule,
+  ],
+  controllers: [HealthController],
+  providers: [MetricsService],
+  exports: [MetricsService],
+})
+export class HealthModule {}

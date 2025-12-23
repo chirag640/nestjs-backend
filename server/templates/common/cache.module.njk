@@ -1,0 +1,51 @@
+import { Module, Global } from '@nestjs/common';
+import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import * as redisStore from 'cache-manager-redis-store';
+import { CacheAside } from './cache.decorators';
+
+/**
+ * Cache Module
+ * 
+ * Configures caching with Redis or in-memory fallback.
+ * 
+ * ## Environment Variables
+ * ```env
+ * CACHE_TYPE=redis    # 'redis' or 'memory'
+ * REDIS_HOST=localhost
+ * REDIS_PORT=6379
+ * CACHE_TTL=300       # Default TTL in seconds
+ * ```
+ */
+@Global()
+@Module({
+  imports: [
+    NestCacheModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const cacheType = configService.get('CACHE_TYPE', 'memory');
+        const ttl = configService.get('CACHE_TTL', 300);
+
+        if (cacheType === 'redis') {
+          return {
+            store: redisStore,
+            host: configService.get('REDIS_HOST', 'localhost'),
+            port: configService.get('REDIS_PORT', 6379),
+            password: configService.get('REDIS_PASSWORD'),
+            ttl: ttl * 1000, // Convert to ms
+          };
+        }
+
+        // Default: in-memory cache
+        return {
+          ttl: ttl * 1000,
+          max: 1000, // Max items in cache
+        };
+      },
+    }),
+  ],
+  providers: [CacheAside],
+  exports: [NestCacheModule, CacheAside],
+})
+export class CacheConfigModule {}

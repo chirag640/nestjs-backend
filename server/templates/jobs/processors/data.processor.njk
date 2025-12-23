@@ -1,0 +1,141 @@
+import { Process, Processor, OnQueueActive, OnQueueFailed } from '@nestjs/bull';
+import { Logger } from '@nestjs/common';
+import { Job } from 'bull';
+
+/**
+ * Data Processor
+ * 
+ * Processes data-related background jobs.
+ * Add custom job handlers for different data processing tasks.
+ */
+@Processor('data')
+export class DataProcessor {
+  private readonly logger = new Logger(DataProcessor.name);
+
+  /**
+   * Export data to CSV/Excel
+   */
+  @Process('export')
+  async handleExport(job: Job<{
+    type: string;
+    filters: Record<string, any>;
+    format: 'csv' | 'xlsx';
+  }>) {
+    this.logger.debug(`Processing data export job ${job.id}`);
+
+    const { type, filters, format } = job.data;
+
+    // Update progress
+    await job.progress(10);
+
+    // Fetch data (implement based on your needs)
+    // const data = await this.fetchData(type, filters);
+    await job.progress(50);
+
+    // Generate file
+    // const file = await this.generateFile(data, format);
+    await job.progress(90);
+
+    // Return result (e.g., file URL)
+    await job.progress(100);
+    
+    return {
+      success: true,
+      // fileUrl: file.url,
+      recordCount: 0,
+    };
+  }
+
+  /**
+   * Import data from file
+   */
+  @Process('import')
+  async handleImport(job: Job<{
+    fileUrl: string;
+    type: string;
+    options?: Record<string, any>;
+  }>) {
+    this.logger.debug(`Processing data import job ${job.id}`);
+
+    const { fileUrl, type, options } = job.data;
+    let processedCount = 0;
+    let errorCount = 0;
+
+    try {
+      // Download and parse file
+      await job.progress(10);
+
+      // Process records in batches
+      // for (const batch of batches) {
+      //   await this.processBatch(batch);
+      //   processedCount += batch.length;
+      //   await job.progress(Math.min(90, (processedCount / total) * 100));
+      // }
+
+      await job.progress(100);
+
+      return {
+        success: true,
+        processedCount,
+        errorCount,
+      };
+    } catch (error) {
+      this.logger.error(`Import job ${job.id} failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cleanup old data
+   */
+  @Process('cleanup')
+  async handleCleanup(job: Job<{
+    olderThanDays: number;
+    type: string;
+  }>) {
+    this.logger.debug(`Processing cleanup job ${job.id}`);
+
+    const { olderThanDays, type } = job.data;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+
+    // Implement cleanup logic
+    // const deletedCount = await this.repository.deleteOlderThan(cutoffDate);
+
+    return {
+      success: true,
+      deletedCount: 0,
+      cutoffDate: cutoffDate.toISOString(),
+    };
+  }
+
+  /**
+   * Sync data with external service
+   */
+  @Process('sync')
+  async handleSync(job: Job<{
+    source: string;
+    destination: string;
+  }>) {
+    this.logger.debug(`Processing sync job ${job.id}`);
+
+    // Implement sync logic
+    await job.progress(50);
+    await job.progress(100);
+
+    return {
+      success: true,
+      syncedAt: new Date().toISOString(),
+    };
+  }
+
+  @OnQueueActive()
+  onActive(job: Job) {
+    this.logger.debug(`Data job ${job.id} (${job.name}) started`);
+  }
+
+  @OnQueueFailed()
+  onFailed(job: Job, error: Error) {
+    this.logger.error(`Data job ${job.id} (${job.name}) failed: ${error.message}`);
+  }
+}

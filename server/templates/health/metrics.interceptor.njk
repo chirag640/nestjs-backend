@@ -1,0 +1,61 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { Request, Response } from 'express';
+import { MetricsService } from './metrics.service';
+
+/**
+ * Metrics Interceptor
+ * 
+ * Automatically records HTTP request metrics for Prometheus.
+ * Apply globally in main.ts or per-controller.
+ * 
+ * @example Global usage:
+ * ```typescript
+ * app.useGlobalInterceptors(new MetricsInterceptor(metricsService));
+ * ```
+ */
+@Injectable()
+export class MetricsInterceptor implements NestInterceptor {
+  constructor(private readonly metrics: MetricsService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse<Response>();
+    const startTime = Date.now();
+
+    // Track in-flight requests
+    this.metrics.httpRequestsInFlight.inc();
+
+    return next.handle().pipe(
+      tap({
+        next: () => {
+          this.recordMetrics(request, response.statusCode, startTime);
+        },
+        error: (error) => {
+          const status = error.status || 500;
+          this.recordMetrics(request, status, startTime);
+          this.metrics.recordError('http', error.response?.error?.code || 'UNKNOWN');
+        },
+        finalize: () => {
+          this.metrics.httpRequestsInFlight.dec();
+        },
+      }),
+    );
+  }
+
+  private recordMetrics(request: Request, statusCode: number, startTime: number): void {
+    const duration = Date.now() - startTime;
+    this.metrics.recordHttpRequest(
+      request.method,
+      request.route?.path || request.url,
+      statusCode,
+      duration,
+    );
+  }
+}

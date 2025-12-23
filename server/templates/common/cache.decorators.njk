@@ -1,0 +1,143 @@
+import { SetMetadata, applyDecorators, Inject, CACHE_MANAGER } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
+
+export const CACHE_KEY = 'cache_key';
+export const CACHE_TTL = 'cache_ttl';
+export const CACHE_INVALIDATE = 'cache_invalidate';
+
+/**
+ * Cache Result Decorator
+ * 
+ * Caches the result of a method. Use on service methods.
+ * 
+ * @param ttl Time to live in seconds
+ * @param key Custom cache key (optional, defaults to method + args)
+ * 
+ * @example
+ * ```typescript
+ * @CacheResult(300) // 5 minutes
+ * async getUser(id: string) {
+ *   return this.repository.findById(id);
+ * }
+ * 
+ * @CacheResult(60, 'user-list')
+ * async getAllUsers() { ... }
+ * ```
+ */
+export function CacheResult(ttl: number, key?: string) {
+  return applyDecorators(
+    SetMetadata(CACHE_KEY, key),
+    SetMetadata(CACHE_TTL, ttl),
+  );
+}
+
+/**
+ * Invalidate Cache Decorator
+ * 
+ * Invalidates cache entries when method is called.
+ * 
+ * @param patterns Cache key patterns to invalidate
+ * 
+ * @example
+ * ```typescript
+ * @InvalidateCache('user-*', 'user-list')
+ * async updateUser(id: string, data: UpdateUserDto) { ... }
+ * ```
+ */
+export function InvalidateCache(...patterns: string[]) {
+  return SetMetadata(CACHE_INVALIDATE, patterns);
+}
+
+/**
+ * Cache Aside Helper
+ * 
+ * Implements cache-aside pattern for manual caching.
+ * 
+ * @example
+ * ```typescript
+ * class UserService {
+ *   constructor(private cache: CacheAside) {}
+ * 
+ *   async getUser(id: string) {
+ *     return this.cache.get(
+ *       `user:${id}`,
+ *       () => this.repository.findById(id),
+ *       300 // TTL
+ *     );
+ *   }
+ * }
+ * ```
+ */
+export class CacheAside {
+  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+
+  /**
+   * Get from cache or fetch and cache
+   */
+  async get<T>(
+    key: string,
+    fetcher: () => Promise<T>,
+    ttl: number = 300,
+  ): Promise<T> {
+    // Try cache first
+    const cached = await this.cacheManager.get<T>(key);
+    if (cached !== undefined && cached !== null) {
+      return cached;
+    }
+
+    // Fetch and cache
+    const result = await fetcher();
+    if (result !== undefined && result !== null) {
+      await this.cacheManager.set(key, result, ttl * 1000);
+    }
+
+    return result;
+  }
+
+  /**
+   * Set cache value
+   */
+  async set<T>(key: string, value: T, ttl: number = 300): Promise<void> {
+    await this.cacheManager.set(key, value, ttl * 1000);
+  }
+
+  /**
+   * Delete cache key
+   */
+  async del(key: string): Promise<void> {
+    await this.cacheManager.del(key);
+  }
+
+  /**
+   * Delete multiple keys by pattern
+   * Note: Requires Redis for pattern matching
+   */
+  async delByPattern(pattern: string): Promise<void> {
+    // This requires Redis scan, implementation depends on cache store
+    // For basic implementation, you'd need to track keys manually
+    console.warn('Pattern deletion requires Redis implementation');
+  }
+
+  /**
+   * Clear all cache
+   */
+  async reset(): Promise<void> {
+    await this.cacheManager.reset();
+  }
+}
+
+/**
+ * Cache key generator helper
+ */
+export function generateCacheKey(prefix: string, ...args: any[]): string {
+  const argsKey = args
+    .map((arg) => {
+      if (typeof arg === 'object') {
+        return JSON.stringify(arg);
+      }
+      return String(arg);
+    })
+    .join(':');
+
+  return `${prefix}:${argsKey}`;
+}

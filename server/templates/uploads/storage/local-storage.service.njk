@@ -1,0 +1,94 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+
+export interface StorageResult {
+  filename: string;
+  path: string;
+  url: string;
+}
+
+/**
+ * Local File Storage Service
+ * 
+ * Stores files on the local filesystem.
+ */
+@Injectable()
+export class LocalStorageService {
+  private readonly logger = new Logger(LocalStorageService.name);
+  private readonly uploadDir: string;
+  private readonly baseUrl: string;
+
+  constructor(private readonly configService: ConfigService) {
+    this.uploadDir = configService.get('UPLOAD_DIR', './uploads');
+    this.baseUrl = configService.get('BASE_URL', 'http://localhost:3000');
+    
+    // Ensure upload directory exists
+    this.ensureUploadDir();
+  }
+
+  private async ensureUploadDir(): Promise<void> {
+    try {
+      await fs.mkdir(this.uploadDir, { recursive: true });
+    } catch (error) {
+      this.logger.error('Failed to create upload directory:', error);
+    }
+  }
+
+  /**
+   * Upload file to local storage
+   */
+  async upload(file: Express.Multer.File): Promise<StorageResult> {
+    // If using memory storage, write buffer to disk
+    if (file.buffer) {
+      const filePath = join(this.uploadDir, file.filename || file.originalname);
+      await fs.writeFile(filePath, file.buffer);
+      
+      return {
+        filename: file.filename || file.originalname,
+        path: filePath,
+        url: `${this.baseUrl}/uploads/${file.filename || file.originalname}`,
+      };
+    }
+
+    // If using disk storage, file is already saved
+    return {
+      filename: file.filename,
+      path: file.path,
+      url: `${this.baseUrl}/uploads/${file.filename}`,
+    };
+  }
+
+  /**
+   * Delete file from local storage
+   */
+  async delete(path: string): Promise<void> {
+    try {
+      await fs.unlink(path);
+      this.logger.debug(`Deleted file: ${path}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete file ${path}:`, error);
+    }
+  }
+
+  /**
+   * Get public URL for file
+   */
+  getUrl(path: string): string {
+    const filename = path.split('/').pop();
+    return `${this.baseUrl}/uploads/${filename}`;
+  }
+
+  /**
+   * Check if file exists
+   */
+  async exists(path: string): Promise<boolean> {
+    try {
+      await fs.access(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}

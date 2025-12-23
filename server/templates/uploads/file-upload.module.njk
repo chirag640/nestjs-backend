@@ -1,0 +1,36 @@
+import { Module } from '@nestjs/common';
+import { MulterModule } from '@nestjs/platform-express';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { FileUploadController } from './file-upload.controller';
+import { FileUploadService } from './file-upload.service';
+import { LocalStorageService } from './storage/local-storage.service';
+import { S3StorageService } from './storage/s3-storage.service';
+import { multerConfig } from './multer.config';
+
+/**
+ * File Upload Module
+ * 
+ * Provides file upload capabilities with:
+ * - Multer for multipart/form-data parsing
+ * - Local or S3 storage options
+ * - Image processing (resize, optimize)
+ * - File validation (size, type)
+ * 
+ * ## Storage Options
+ * Set `STORAGE_TYPE` in .env:
+ * - `local` - Store files in ./uploads folder
+ * - `s3` - Store files in AWS S3
+ */
+@Module({
+  imports: [
+    MulterModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: multerConfig,
+    }),
+  ],
+  controllers: [FileUploadController],
+  providers: [FileUploadService, LocalStorageService, S3StorageService],
+  exports: [FileUploadService],
+})
+export class FileUploadModule {}

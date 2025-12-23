@@ -1,0 +1,86 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
+import { ApiProperty } from '@nestjs/swagger';
+
+export type AuditLogDocument = AuditLog & Document;
+
+export enum AuditAction {
+  CREATE = 'CREATE',
+  UPDATE = 'UPDATE',
+  DELETE = 'DELETE',
+  LOGIN = 'LOGIN',
+  LOGOUT = 'LOGOUT',
+  ACCESS = 'ACCESS',
+}
+
+/**
+ * Audit Log Schema (MongoDB)
+ * 
+ * Stores audit trail for all data modifications.
+ */
+@Schema({
+  timestamps: true,
+  collection: 'audit_logs',
+})
+export class AuditLog {
+  @ApiProperty({ description: 'Action type' })
+  @Prop({ type: String, enum: AuditAction, required: true, index: true })
+  action: AuditAction;
+
+  @ApiProperty({ description: 'Entity/model name (e.g., User, Order)' })
+  @Prop({ type: String, required: true, index: true })
+  entityType: string;
+
+  @ApiProperty({ description: 'Entity ID that was modified' })
+  @Prop({ type: String, required: true, index: true })
+  entityId: string;
+
+  @ApiProperty({ description: 'User who performed the action' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', index: true })
+  userId?: string;
+
+  @ApiProperty({ description: 'User email for quick reference' })
+  @Prop({ type: String })
+  userEmail?: string;
+
+  @ApiProperty({ description: 'IP address of the request' })
+  @Prop({ type: String })
+  ipAddress?: string;
+
+  @ApiProperty({ description: 'User agent string' })
+  @Prop({ type: String })
+  userAgent?: string;
+
+  @ApiProperty({ description: 'Request ID for correlation' })
+  @Prop({ type: String })
+  requestId?: string;
+
+  @ApiProperty({ description: 'State before the change' })
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  oldValue?: Record<string, any>;
+
+  @ApiProperty({ description: 'State after the change' })
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  newValue?: Record<string, any>;
+
+  @ApiProperty({ description: 'Changed fields (for updates)' })
+  @Prop({ type: [String] })
+  changedFields?: string[];
+
+  @ApiProperty({ description: 'Additional metadata' })
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  metadata?: Record<string, any>;
+
+  @ApiProperty()
+  createdAt?: Date;
+}
+
+export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
+
+// Indexes for common queries
+AuditLogSchema.index({ createdAt: -1 });
+AuditLogSchema.index({ entityType: 1, entityId: 1 });
+AuditLogSchema.index({ userId: 1, createdAt: -1 });
+
+// TTL index - automatically delete logs older than 1 year (optional)
+// AuditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 });

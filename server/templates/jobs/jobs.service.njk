@@ -1,0 +1,195 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue, Job } from 'bull';
+
+export interface JobResult {
+  jobId: string;
+  status: 'pending' | 'active' | 'completed' | 'failed' | 'delayed';
+  progress?: number;
+  result?: any;
+  error?: string;
+}
+
+/**
+ * Jobs Service
+ * 
+ * Central service for adding and managing background jobs.
+ * 
+ * @example
+ * ```typescript
+ * // Add email job
+ * const job = await jobsService.sendEmail({
+ *   to: 'user@example.com',
+ *   subject: 'Welcome!',
+ *   template: 'welcome',
+ * });
+ * 
+ * // Add scheduled job
+ * await jobsService.scheduleJob('cleanup', {}, { delay: 60000 });
+ * 
+ * // Check job status
+ * const status = await jobsService.getJobStatus('email', job.id);
+ * ```
+ */
+@Injectable()
+export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
+  constructor(
+    @InjectQueue('email') private emailQueue: Queue,
+    @InjectQueue('data') private dataQueue: Queue,
+    @InjectQueue('scheduled') private scheduledQueue: Queue,
+  ) {}
+
+  // ===== Email Jobs =====
+
+  /**
+   * Send email in background
+   */
+  async sendEmail(data: {
+    to: string;
+    subject: string;
+    template: string;
+    context?: Record<string, any>;
+  }): Promise<Job> {
+    this.logger.debug(`Queueing email to ${data.to}`);
+    return this.emailQueue.add('send', data, {
+      priority: 1,
+    });
+  }
+
+  /**
+   * Send bulk emails
+   */
+  async sendBulkEmails(
+    emails: Array<{ to: string; subject: string; template: string; context?: Record<string, any> }>,
+  ): Promise<Job[]> {
+    this.logger.debug(`Queueing ${emails.length} bulk emails`);
+    return Promise.all(
+      emails.map((email) =>
+        this.emailQueue.add('send', email, { priority: 5 }),
+      ),
+    );
+  }
+
+  // ===== Data Processing Jobs =====
+
+  /**
+   * Process data in background
+   */
+  async processData(data: {
+    type: string;
+    payload: any;
+  }): Promise<Job> {
+    this.logger.debug(`Queueing data processing: ${data.type}`);
+    return this.dataQueue.add(data.type, data.payload);
+  }
+
+  /**
+   * Schedule a job for later execution
+   */
+  async scheduleJob(
+    name: string,
+    data: any,
+    options: { delay?: number; cron?: string } = {},
+  ): Promise<Job> {
+    const jobOptions: any = {};
+
+    if (options.delay) {
+      jobOptions.delay = options.delay;
+    }
+
+    if (options.cron) {
+      jobOptions.repeat = { cron: options.cron };
+    }
+
+    return this.scheduledQueue.add(name, data, jobOptions);
+  }
+
+  // ===== Job Status =====
+
+  /**
+   * Get job status by ID
+   */
+  async getJobStatus(queueName: string, jobId: string): Promise<JobResult | null> {
+    const queue = this.getQueue(queueName);
+    if (!queue) return null;
+
+    const job = await queue.getJob(jobId);
+    if (!job) return null;
+
+    const state = await job.getState();
+    const progress = job.progress();
+
+    return {
+      jobId: String(job.id),
+      status: state as JobResult['status'],
+      progress: typeof progress === 'number' ? progress : undefined,
+      result: job.returnvalue,
+      error: job.failedReason,
+    };
+  }
+
+  /**
+   * Get queue statistics
+   */
+  async getQueueStats(queueName: string): Promise<{
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+  } | null> {
+    const queue = this.getQueue(queueName);
+    if (!queue) return null;
+
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      queue.getWaitingCount(),
+      queue.getActiveCount(),
+      queue.getCompletedCount(),
+      queue.getFailedCount(),
+      queue.getDelayedCount(),
+    ]);
+
+    return { waiting, active, completed, failed, delayed };
+  }
+
+  /**
+   * Retry failed job
+   */
+  async retryJob(queueName: string, jobId: string): Promise<void> {
+    const queue = this.getQueue(queueName);
+    if (!queue) return;
+
+    const job = await queue.getJob(jobId);
+    if (job) {
+      await job.retry();
+    }
+  }
+
+  /**
+   * Remove a job
+   */
+  async removeJob(queueName: string, jobId: string): Promise<void> {
+    const queue = this.getQueue(queueName);
+    if (!queue) return;
+
+    const job = await queue.getJob(jobId);
+    if (job) {
+      await job.remove();
+    }
+  }
+
+  private getQueue(name: string): Queue | null {
+    switch (name) {
+      case 'email':
+        return this.emailQueue;
+      case 'data':
+        return this.dataQueue;
+      case 'scheduled':
+        return this.scheduledQueue;
+      default:
+        return null;
+    }
+  }
+}

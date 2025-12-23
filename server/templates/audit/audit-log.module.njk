@@ -1,0 +1,36 @@
+import { Module } from '@nestjs/common';
+{% if database.type === 'MongoDB' %}
+import { MongooseModule } from '@nestjs/mongoose';
+import { AuditLog, AuditLogSchema } from './audit-log.schema';
+{% else %}
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuditLog } from './audit-log.entity';
+{% endif %}
+import { AuditLogService } from './audit-log.service';
+import { AuditLogController } from './audit-log.controller';
+import { AuditLogInterceptor } from './audit-log.interceptor';
+
+/**
+ * Audit Logging Module
+ * 
+ * Tracks all data modifications for compliance and debugging.
+ * 
+ * ## Features:
+ * - Automatic logging of create/update/delete
+ * - User tracking (who made the change)
+ * - Before/after snapshots
+ * - Query by entity, user, or date range
+ */
+@Module({
+  imports: [
+    {% if database.type === 'MongoDB' %}
+    MongooseModule.forFeature([{ name: AuditLog.name, schema: AuditLogSchema }]),
+    {% else %}
+    TypeOrmModule.forFeature([AuditLog]),
+    {% endif %}
+  ],
+  providers: [AuditLogService, AuditLogInterceptor],
+  controllers: [AuditLogController],
+  exports: [AuditLogService, AuditLogInterceptor],
+})
+export class AuditLogModule {}

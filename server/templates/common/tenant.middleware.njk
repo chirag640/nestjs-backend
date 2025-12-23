@@ -1,0 +1,91 @@
+import { Injectable, NestMiddleware, BadRequestException } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+import { ConfigService } from '@nestjs/config';
+
+export const TENANT_HEADER = 'x-tenant-id';
+export const TENANT_KEY = 'tenantId';
+
+/**
+ * Tenant Middleware
+ * 
+ * Extracts tenant ID from request and attaches to request context.
+ * 
+ * ## Tenant ID Sources (in order of precedence):
+ * 1. Header: X-Tenant-ID
+ * 2. Subdomain: {tenant}.example.com
+ * 3. Query param: ?tenantId=xxx
+ * 
+ * ## Usage
+ * All subsequent middleware and handlers can access:
+ * ```typescript
+ * const tenantId = req.tenantId;
+ * ```
+ */
+@Injectable()
+export class TenantMiddleware implements NestMiddleware {
+  constructor(private readonly configService: ConfigService) {}
+
+  use(req: Request, res: Response, next: NextFunction): void {
+    // 1. Check header
+    let tenantId = req.headers[TENANT_HEADER] as string;
+
+    // 2. Check subdomain
+    if (!tenantId) {
+      const host = req.headers.host || '';
+      const baseDomain = this.configService.get('BASE_DOMAIN', 'example.com');
+      
+      if (host.endsWith(`.${baseDomain}`)) {
+        tenantId = host.replace(`.${baseDomain}`, '');
+      }
+    }
+
+    // 3. Check query param
+    if (!tenantId && req.query.tenantId) {
+      tenantId = req.query.tenantId as string;
+    }
+
+    // Validate tenant ID
+    if (tenantId && !this.isValidTenantId(tenantId)) {
+      throw new BadRequestException('Invalid tenant ID format');
+    }
+
+    // Attach to request
+    (req as any).tenantId = tenantId;
+
+    // Add to response headers for debugging
+    if (tenantId) {
+      res.setHeader('X-Tenant-ID', tenantId);
+    }
+
+    next();
+  }
+
+  private isValidTenantId(tenantId: string): boolean {
+    // Alphanumeric, hyphens, underscores, 3-50 chars
+    return /^[a-zA-Z0-9_-]{3,50}$/.test(tenantId);
+  }
+}
+
+/**
+ * Get tenant ID from request
+ */
+export function getTenantId(req: Request): string | undefined {
+  return (req as any).tenantId;
+}
+
+/**
+ * Require tenant middleware
+ * Use on routes that require a tenant context
+ */
+@Injectable()
+export class RequireTenantMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction): void {
+    const tenantId = getTenantId(req);
+    
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    next();
+  }
+}

@@ -1,0 +1,213 @@
+import { Injectable, Logger } from '@nestjs/common';
+{% if database.type === 'MongoDB' %}
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { AuditLog, AuditLogDocument, AuditAction } from './audit-log.schema';
+{% else %}
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Between, LessThan, MoreThan } from 'typeorm';
+import { AuditLog, AuditAction } from './audit-log.entity';
+{% endif %}
+
+export interface CreateAuditLogDto {
+  action: AuditAction;
+  entityType: string;
+  entityId: string;
+  userId?: string;
+  userEmail?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  requestId?: string;
+  oldValue?: Record<string, any>;
+  newValue?: Record<string, any>;
+  metadata?: Record<string, any>;
+}
+
+export interface AuditQueryOptions {
+  entityType?: string;
+  entityId?: string;
+  userId?: string;
+  action?: AuditAction;
+  startDate?: Date;
+  endDate?: Date;
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * Audit Log Service
+ * 
+ * @example
+ * ```typescript
+ * // Log a create action
+ * await auditLogService.log({
+ *   action: AuditAction.CREATE,
+ *   entityType: 'User',
+ *   entityId: user.id,
+ *   newValue: user,
+ *   userId: currentUser.id,
+ * });
+ * 
+ * // Query audit logs
+ * const logs = await auditLogService.query({
+ *   entityType: 'User',
+ *   entityId: userId,
+ *   startDate: new Date('2024-01-01'),
+ * });
+ * ```
+ */
+@Injectable()
+export class AuditLogService {
+  private readonly logger = new Logger(AuditLogService.name);
+
+  constructor(
+    {% if database.type === 'MongoDB' %}
+    @InjectModel(AuditLog.name) private auditLogModel: Model<AuditLogDocument>,
+    {% else %}
+    @InjectRepository(AuditLog) private auditLogRepository: Repository<AuditLog>,
+    {% endif %}
+  ) {}
+
+  /**
+   * Create audit log entry
+   */
+  async log(dto: CreateAuditLogDto): Promise<AuditLog> {
+    try {
+      // Calculate changed fields for updates
+      let changedFields: string[] | undefined;
+      if (dto.action === AuditAction.UPDATE && dto.oldValue && dto.newValue) {
+        changedFields = this.getChangedFields(dto.oldValue, dto.newValue);
+      }
+
+      {% if database.type === 'MongoDB' %}
+      const auditLog = new this.auditLogModel({
+        ...dto,
+        changedFields,
+      });
+      return auditLog.save();
+      {% else %}
+      const auditLog = this.auditLogRepository.create({
+        ...dto,
+        changedFields,
+      });
+      return this.auditLogRepository.save(auditLog);
+      {% endif %}
+    } catch (error) {
+      this.logger.error('Failed to create audit log:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Query audit logs
+   */
+  async query(options: AuditQueryOptions): Promise<{
+    items: AuditLog[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = options.page || 1;
+    const limit = options.limit || 20;
+    const skip = (page - 1) * limit;
+
+    {% if database.type === 'MongoDB' %}
+    const query: any = {};
+    
+    if (options.entityType) query.entityType = options.entityType;
+    if (options.entityId) query.entityId = options.entityId;
+    if (options.userId) query.userId = options.userId;
+    if (options.action) query.action = options.action;
+    if (options.startDate || options.endDate) {
+      query.createdAt = {};
+      if (options.startDate) query.createdAt.$gte = options.startDate;
+      if (options.endDate) query.createdAt.$lte = options.endDate;
+    }
+
+    const [items, total] = await Promise.all([
+      this.auditLogModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.auditLogModel.countDocuments(query).exec(),
+    ]);
+    {% else %}
+    const where: any = {};
+    
+    if (options.entityType) where.entityType = options.entityType;
+    if (options.entityId) where.entityId = options.entityId;
+    if (options.userId) where.userId = options.userId;
+    if (options.action) where.action = options.action;
+    if (options.startDate && options.endDate) {
+      where.createdAt = Between(options.startDate, options.endDate);
+    } else if (options.startDate) {
+      where.createdAt = MoreThan(options.startDate);
+    } else if (options.endDate) {
+      where.createdAt = LessThan(options.endDate);
+    }
+
+    const [items, total] = await this.auditLogRepository.findAndCount({
+      where,
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+    {% endif %}
+
+    return { items, total, page, limit };
+  }
+
+  /**
+   * Get audit trail for a specific entity
+   */
+  async getEntityHistory(entityType: string, entityId: string): Promise<AuditLog[]> {
+    {% if database.type === 'MongoDB' %}
+    return this.auditLogModel
+      .find({ entityType, entityId })
+      .sort({ createdAt: -1 })
+      .exec();
+    {% else %}
+    return this.auditLogRepository.find({
+      where: { entityType, entityId },
+      order: { createdAt: 'DESC' },
+    });
+    {% endif %}
+  }
+
+  /**
+   * Get user activity
+   */
+  async getUserActivity(userId: string, limit: number = 50): Promise<AuditLog[]> {
+    {% if database.type === 'MongoDB' %}
+    return this.auditLogModel
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .exec();
+    {% else %}
+    return this.auditLogRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+    {% endif %}
+  }
+
+  /**
+   * Calculate changed fields between old and new values
+   */
+  private getChangedFields(oldValue: Record<string, any>, newValue: Record<string, any>): string[] {
+    const changedFields: string[] = [];
+    const allKeys = new Set([...Object.keys(oldValue), ...Object.keys(newValue)]);
+
+    for (const key of allKeys) {
+      if (JSON.stringify(oldValue[key]) !== JSON.stringify(newValue[key])) {
+        changedFields.push(key);
+      }
+    }
+
+    return changedFields;
+  }
+}

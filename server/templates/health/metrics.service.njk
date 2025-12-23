@@ -1,0 +1,155 @@
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { collectDefaultMetrics, Counter, Histogram, Gauge, Registry } from 'prom-client';
+
+/**
+ * Prometheus Metrics Service
+ * 
+ * Provides application metrics for monitoring with:
+ * - Request counts and latencies
+ * - Error rates
+ * - Active connections
+ * - Custom business metrics
+ * 
+ * ## Prometheus Scrape Config
+ * ```yaml
+ * scrape_configs:
+ *   - job_name: '{{ project.name | lower }}'
+ *     static_configs:
+ *       - targets: ['localhost:3000']
+ *     metrics_path: /metrics
+ * ```
+ * 
+ * ## Grafana Dashboard
+ * Import dashboard ID: 11159 for NestJS metrics
+ */
+@Injectable()
+export class MetricsService implements OnModuleInit {
+  private readonly logger = new Logger(MetricsService.name);
+  private readonly registry: Registry;
+
+  // HTTP Metrics
+  public readonly httpRequestsTotal: Counter<string>;
+  public readonly httpRequestDuration: Histogram<string>;
+  public readonly httpRequestsInFlight: Gauge<string>;
+
+  // Error Metrics
+  public readonly errorsTotal: Counter<string>;
+
+  // Business Metrics
+  public readonly activeUsers: Gauge<string>;
+  public readonly dbQueryDuration: Histogram<string>;
+
+  constructor() {
+    this.registry = new Registry();
+
+    // HTTP request counter
+    this.httpRequestsTotal = new Counter({
+      name: 'http_requests_total',
+      help: 'Total number of HTTP requests',
+      labelNames: ['method', 'path', 'status'],
+      registers: [this.registry],
+    });
+
+    // HTTP request duration histogram
+    this.httpRequestDuration = new Histogram({
+      name: 'http_request_duration_seconds',
+      help: 'Duration of HTTP requests in seconds',
+      labelNames: ['method', 'path', 'status'],
+      buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10],
+      registers: [this.registry],
+    });
+
+    // Active HTTP requests gauge
+    this.httpRequestsInFlight = new Gauge({
+      name: 'http_requests_in_flight',
+      help: 'Number of HTTP requests currently being processed',
+      registers: [this.registry],
+    });
+
+    // Error counter
+    this.errorsTotal = new Counter({
+      name: 'errors_total',
+      help: 'Total number of errors',
+      labelNames: ['type', 'code'],
+      registers: [this.registry],
+    });
+
+    // Active users gauge
+    this.activeUsers = new Gauge({
+      name: 'active_users_total',
+      help: 'Number of active users (logged in)',
+      registers: [this.registry],
+    });
+
+    // Database query duration
+    this.dbQueryDuration = new Histogram({
+      name: 'db_query_duration_seconds',
+      help: 'Duration of database queries in seconds',
+      labelNames: ['operation', 'collection'],
+      buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1],
+      registers: [this.registry],
+    });
+  }
+
+  onModuleInit() {
+    // Collect default Node.js metrics (CPU, memory, etc.)
+    collectDefaultMetrics({
+      register: this.registry,
+      prefix: '{{ project.name | lower | replace(" ", "_") }}_',
+    });
+
+    this.logger.log('Prometheus metrics initialized');
+  }
+
+  /**
+   * Get all metrics in Prometheus format
+   */
+  async getMetrics(): Promise<string> {
+    return this.registry.metrics();
+  }
+
+  /**
+   * Get content type for metrics endpoint
+   */
+  getContentType(): string {
+    return this.registry.contentType;
+  }
+
+  /**
+   * Record HTTP request metrics
+   */
+  recordHttpRequest(method: string, path: string, status: number, durationMs: number): void {
+    const normalizedPath = this.normalizePath(path);
+    
+    this.httpRequestsTotal.inc({ method, path: normalizedPath, status: String(status) });
+    this.httpRequestDuration.observe(
+      { method, path: normalizedPath, status: String(status) },
+      durationMs / 1000
+    );
+  }
+
+  /**
+   * Record error
+   */
+  recordError(type: string, code: string): void {
+    this.errorsTotal.inc({ type, code });
+  }
+
+  /**
+   * Record database query
+   */
+  recordDbQuery(operation: string, collection: string, durationMs: number): void {
+    this.dbQueryDuration.observe({ operation, collection }, durationMs / 1000);
+  }
+
+  /**
+   * Normalize path to avoid high cardinality
+   */
+  private normalizePath(path: string): string {
+    // Replace UUIDs
+    return path
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id')
+      .replace(/[0-9a-f]{24}/gi, ':id') // MongoDB ObjectIds
+      .replace(/\/\d+/g, '/:id'); // Numeric IDs
+  }
+}

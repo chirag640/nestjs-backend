@@ -1,0 +1,136 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { Request } from 'express';
+import { AuditLogService, CreateAuditLogDto } from './audit-log.service';
+import { AuditAction } from './audit-log.schema';
+
+/**
+ * Audit Log Interceptor
+ * 
+ * Automatically logs data modifications to the audit log.
+ * Apply to controllers or specific routes.
+ * 
+ * @example
+ * ```typescript
+ * @UseInterceptors(AuditLogInterceptor)
+ * @Post()
+ * createUser(@Body() dto: CreateUserDto) { ... }
+ * ```
+ */
+@Injectable()
+export class AuditLogInterceptor implements NestInterceptor {
+  constructor(private readonly auditLogService: AuditLogService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const method = request.method;
+    const user = (request as any).user;
+
+    // Determine action based on HTTP method
+    let action: AuditAction;
+    switch (method) {
+      case 'POST':
+        action = AuditAction.CREATE;
+        break;
+      case 'PUT':
+      case 'PATCH':
+        action = AuditAction.UPDATE;
+        break;
+      case 'DELETE':
+        action = AuditAction.DELETE;
+        break;
+      default:
+        // GET and other methods don't need audit logging
+        return next.handle();
+    }
+
+    // Extract entity info from URL
+    const urlParts = request.url.split('/').filter(Boolean);
+    const entityType = this.extractEntityType(urlParts);
+    const entityId = this.extractEntityId(urlParts, request.params);
+
+    const baseLog: Partial<CreateAuditLogDto> = {
+      action,
+      entityType,
+      userId: user?.userId,
+      userEmail: user?.email,
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent'],
+      requestId: request.headers['x-request-id'] as string,
+    };
+
+    return next.handle().pipe(
+      tap({
+        next: async (result) => {
+          try {
+            const log: CreateAuditLogDto = {
+              ...baseLog,
+              entityId: entityId || result?.id || result?._id || 'unknown',
+              newValue: action === AuditAction.DELETE ? undefined : this.sanitizeData(result),
+            } as CreateAuditLogDto;
+
+            await this.auditLogService.log(log);
+          } catch (error) {
+            console.error('Failed to create audit log:', error);
+          }
+        },
+      }),
+    );
+  }
+
+  private extractEntityType(urlParts: string[]): string {
+    // Find the main resource from URL (e.g., /api/users/123 -> User)
+    for (const part of urlParts) {
+      if (!['api', 'v1', 'v2', 'admin'].includes(part) && !/^[a-f0-9-]{24,36}$/i.test(part)) {
+        return this.toSingularPascalCase(part);
+      }
+    }
+    return 'Unknown';
+  }
+
+  private extractEntityId(urlParts: string[], params: Record<string, any>): string | undefined {
+    // Check params first
+    if (params.id) return params.id;
+
+    // Check URL for ID patterns
+    for (const part of urlParts) {
+      if (/^[a-f0-9-]{24,36}$/i.test(part)) {
+        return part;
+      }
+    }
+
+    return undefined;
+  }
+
+  private toSingularPascalCase(str: string): string {
+    // users -> User, orders -> Order
+    let singular = str.endsWith('ies') 
+      ? str.slice(0, -3) + 'y'
+      : str.endsWith('s') 
+        ? str.slice(0, -1) 
+        : str;
+    
+    return singular.charAt(0).toUpperCase() + singular.slice(1);
+  }
+
+  private sanitizeData(data: any): any {
+    if (!data) return data;
+
+    const sanitized = { ...data };
+    const sensitiveFields = ['password', 'token', 'secret', 'apiKey'];
+
+    for (const field of sensitiveFields) {
+      if (sanitized[field]) {
+        sanitized[field] = '[REDACTED]';
+      }
+    }
+
+    return sanitized;
+  }
+}

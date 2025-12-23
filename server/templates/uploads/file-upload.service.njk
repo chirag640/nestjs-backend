@@ -1,0 +1,168 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { LocalStorageService } from './storage/local-storage.service';
+import { S3StorageService } from './storage/s3-storage.service';
+import * as sharp from 'sharp';
+import { extname } from 'path';
+
+export interface UploadedFile {
+  originalName: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  path: string;
+}
+
+export interface ImageResizeOptions {
+  width?: number;
+  height?: number;
+  fit?: 'cover' | 'contain' | 'fill' | 'inside' | 'outside';
+  quality?: number;
+}
+
+/**
+ * File Upload Service
+ * 
+ * Handles file storage and image processing.
+ * 
+ * @example
+ * ```typescript
+ * // Upload file
+ * const result = await fileUploadService.uploadFile(file);
+ * console.log(result.url);
+ * 
+ * // Upload and resize image
+ * const image = await fileUploadService.uploadImage(file, {
+ *   width: 800,
+ *   height: 600,
+ *   fit: 'cover',
+ *   quality: 80,
+ * });
+ * ```
+ */
+@Injectable()
+export class FileUploadService {
+  private readonly logger = new Logger(FileUploadService.name);
+  private readonly storageType: 'local' | 's3';
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly localStorage: LocalStorageService,
+    private readonly s3Storage: S3StorageService,
+  ) {
+    this.storageType = configService.get('STORAGE_TYPE', 'local') as 'local' | 's3';
+  }
+
+  /**
+   * Upload a file to storage
+   */
+  async uploadFile(file: Express.Multer.File): Promise<UploadedFile> {
+    this.logger.debug(`Uploading file: ${file.originalname}`);
+
+    const storage = this.getStorage();
+    const result = await storage.upload(file);
+
+    return {
+      originalName: file.originalname,
+      filename: result.filename,
+      mimeType: file.mimetype,
+      size: file.size,
+      url: result.url,
+      path: result.path,
+    };
+  }
+
+  /**
+   * Upload multiple files
+   */
+  async uploadFiles(files: Express.Multer.File[]): Promise<UploadedFile[]> {
+    return Promise.all(files.map((file) => this.uploadFile(file)));
+  }
+
+  /**
+   * Upload and process image
+   */
+  async uploadImage(
+    file: Express.Multer.File,
+    options: ImageResizeOptions = {},
+  ): Promise<UploadedFile> {
+    this.logger.debug(`Processing image: ${file.originalname}`);
+
+    // Process image with sharp
+    let imageBuffer = file.buffer;
+
+    if (!imageBuffer) {
+      // If using disk storage, read from disk
+      const fs = await import('fs/promises');
+      imageBuffer = await fs.readFile(file.path);
+    }
+
+    let sharpInstance = sharp(imageBuffer);
+
+    // Resize if dimensions specified
+    if (options.width || options.height) {
+      sharpInstance = sharpInstance.resize(options.width, options.height, {
+        fit: options.fit || 'cover',
+        withoutEnlargement: true,
+      });
+    }
+
+    // Set quality and format
+    const ext = extname(file.originalname).toLowerCase();
+    if (ext === '.jpg' || ext === '.jpeg') {
+      sharpInstance = sharpInstance.jpeg({ quality: options.quality || 80 });
+    } else if (ext === '.png') {
+      sharpInstance = sharpInstance.png({ quality: options.quality || 80 });
+    } else if (ext === '.webp') {
+      sharpInstance = sharpInstance.webp({ quality: options.quality || 80 });
+    }
+
+    const processedBuffer = await sharpInstance.toBuffer();
+    const metadata = await sharp(processedBuffer).metadata();
+
+    // Create modified file object
+    const processedFile: Express.Multer.File = {
+      ...file,
+      buffer: processedBuffer,
+      size: processedBuffer.length,
+    };
+
+    return this.uploadFile(processedFile);
+  }
+
+  /**
+   * Delete a file from storage
+   */
+  async deleteFile(path: string): Promise<void> {
+    const storage = this.getStorage();
+    await storage.delete(path);
+  }
+
+  /**
+   * Get file URL
+   */
+  getFileUrl(path: string): string {
+    const storage = this.getStorage();
+    return storage.getUrl(path);
+  }
+
+  /**
+   * Generate thumbnail
+   */
+  async generateThumbnail(
+    file: Express.Multer.File,
+    size: number = 150,
+  ): Promise<UploadedFile> {
+    return this.uploadImage(file, {
+      width: size,
+      height: size,
+      fit: 'cover',
+      quality: 70,
+    });
+  }
+
+  private getStorage(): LocalStorageService | S3StorageService {
+    return this.storageType === 's3' ? this.s3Storage : this.localStorage;
+  }
+}

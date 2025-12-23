@@ -1,0 +1,68 @@
+import { Process, Processor, OnQueueActive, OnQueueCompleted, OnQueueFailed } from '@nestjs/bull';
+import { Logger } from '@nestjs/common';
+import { Job } from 'bull';
+{% if features.email %}
+import { EmailService } from '../../email/email.service';
+{% endif %}
+
+/**
+ * Email Processor
+ * 
+ * Processes email jobs from the 'email' queue.
+ */
+@Processor('email')
+export class EmailProcessor {
+  private readonly logger = new Logger(EmailProcessor.name);
+
+  {% if features.email %}
+  constructor(private readonly emailService: EmailService) {}
+  {% else %}
+  constructor() {}
+  {% endif %}
+
+  @Process('send')
+  async handleSend(job: Job<{
+    to: string;
+    subject: string;
+    template: string;
+    context?: Record<string, any>;
+  }>) {
+    this.logger.debug(`Processing email job ${job.id} to ${job.data.to}`);
+
+    try {
+      {% if features.email %}
+      await this.emailService.sendTemplatedEmail(
+        job.data.to,
+        job.data.subject,
+        job.data.template,
+        job.data.context || {},
+      );
+      {% else %}
+      // Placeholder - implement email sending
+      this.logger.log(`Would send email to ${job.data.to}: ${job.data.subject}`);
+      // Simulate email sending
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      {% endif %}
+
+      return { sent: true, to: job.data.to };
+    } catch (error) {
+      this.logger.error(`Failed to send email to ${job.data.to}:`, error);
+      throw error;
+    }
+  }
+
+  @OnQueueActive()
+  onActive(job: Job) {
+    this.logger.debug(`Email job ${job.id} started`);
+  }
+
+  @OnQueueCompleted()
+  onCompleted(job: Job) {
+    this.logger.debug(`Email job ${job.id} completed`);
+  }
+
+  @OnQueueFailed()
+  onFailed(job: Job, error: Error) {
+    this.logger.error(`Email job ${job.id} failed: ${error.message}`);
+  }
+}

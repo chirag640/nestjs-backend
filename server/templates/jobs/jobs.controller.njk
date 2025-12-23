@@ -1,0 +1,99 @@
+import { Controller, Get, Post, Param, Query, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { JobsService, JobResult } from './jobs.service';
+import { Roles } from '../auth/rbac/roles.decorator';
+
+/**
+ * Jobs Controller
+ * 
+ * API endpoints for managing background jobs.
+ * Admin-only access.
+ */
+@ApiTags('Jobs')
+@ApiBearerAuth()
+@Controller('admin/jobs')
+export class JobsController {
+  constructor(private readonly jobsService: JobsService) {}
+
+  /**
+   * Get queue statistics
+   */
+  @Get('stats/:queue')
+  @Roles('Admin')
+  @ApiOperation({ summary: 'Get queue statistics' })
+  @ApiResponse({ status: 200, description: 'Queue statistics' })
+  async getQueueStats(@Param('queue') queueName: string) {
+    const stats = await this.jobsService.getQueueStats(queueName);
+    return { queue: queueName, stats };
+  }
+
+  /**
+   * Get job status
+   */
+  @Get(':queue/:jobId')
+  @Roles('Admin')
+  @ApiOperation({ summary: 'Get job status' })
+  @ApiResponse({ status: 200, description: 'Job status' })
+  async getJobStatus(
+    @Param('queue') queueName: string,
+    @Param('jobId') jobId: string,
+  ): Promise<JobResult | null> {
+    return this.jobsService.getJobStatus(queueName, jobId);
+  }
+
+  /**
+   * Retry failed job
+   */
+  @Post(':queue/:jobId/retry')
+  @Roles('Admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retry failed job' })
+  @ApiResponse({ status: 200, description: 'Job retried' })
+  async retryJob(
+    @Param('queue') queueName: string,
+    @Param('jobId') jobId: string,
+  ) {
+    await this.jobsService.retryJob(queueName, jobId);
+    return { success: true, message: 'Job retry initiated' };
+  }
+
+  /**
+   * Remove a job
+   */
+  @Post(':queue/:jobId/remove')
+  @Roles('Admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove job from queue' })
+  @ApiResponse({ status: 200, description: 'Job removed' })
+  async removeJob(
+    @Param('queue') queueName: string,
+    @Param('jobId') jobId: string,
+  ) {
+    await this.jobsService.removeJob(queueName, jobId);
+    return { success: true, message: 'Job removed' };
+  }
+
+  /**
+   * Trigger manual data export
+   */
+  @Post('trigger/export')
+  @Roles('Admin')
+  @ApiOperation({ summary: 'Trigger data export job' })
+  async triggerExport(
+    @Body() body: { type: string; filters?: Record<string, any>; format?: 'csv' | 'xlsx' },
+  ) {
+    const job = await this.jobsService.processData({
+      type: 'export',
+      payload: {
+        type: body.type,
+        filters: body.filters || {},
+        format: body.format || 'csv',
+      },
+    });
+
+    return {
+      jobId: String(job.id),
+      message: 'Export job queued',
+    };
+  }
+}

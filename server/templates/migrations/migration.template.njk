@@ -1,0 +1,66 @@
+/**
+ * Database Migration Template
+ * 
+ * Used for generating migration scripts.
+ * 
+ * ## Usage with TypeORM
+ * ```bash
+ * npm run migration:generate -- -n MigrationName
+ * npm run migration:run
+ * npm run migration:revert
+ * ```
+ * 
+ * ## Usage with Mongoose (manual)
+ * Run migration scripts directly:
+ * ```bash
+ * npx ts-node src/migrations/001-add-user-fields.ts
+ * ```
+ */
+
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+export class {{ migrationName }}{{ timestamp }} implements MigrationInterface {
+  name = '{{ migrationName }}{{ timestamp }}';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // Add your migration logic here
+    // Examples:
+    
+    // Create table
+    // await queryRunner.query(`
+    //   CREATE TABLE "example" (
+    //     "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    //     "name" varchar NOT NULL,
+    //     "created_at" timestamp DEFAULT now()
+    //   )
+    // `);
+    
+    // Add column
+    // await queryRunner.query(`
+    //   ALTER TABLE "users"
+    //   ADD COLUMN "phone" varchar(20)
+    // `);
+    
+    // Add index
+    // await queryRunner.query(`
+    //   CREATE INDEX "IDX_users_email" ON "users" ("email")
+    // `);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    // Revert migration logic here
+    // Examples:
+    
+    // Drop table
+    // await queryRunner.query(`DROP TABLE "example"`);
+    
+    // Drop column
+    // await queryRunner.query(`
+    //   ALTER TABLE "users"
+    //   DROP COLUMN "phone"
+    // `);
+    
+    // Drop index
+    // await queryRunner.query(`DROP INDEX "IDX_users_email"`);
+  }
+}
