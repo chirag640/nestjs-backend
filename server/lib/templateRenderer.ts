@@ -13,6 +13,7 @@ const env = nunjucks.configure(templatesPath, {
   throwOnUndefined: true,
   trimBlocks: true,
   lstripBlocks: true,
+  noCache: true, // Disable template caching for development
 });
 
 // Add custom filters

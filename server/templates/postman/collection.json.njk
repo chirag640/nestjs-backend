@@ -4,6 +4,16 @@
     "description": "{{ project.description }}",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{% raw %}{{accessToken}}{% endraw %}",
+        "type": "string"
+      }
+    ]
+  },
   "variable": [
     {
       "key": "baseUrl",
@@ -11,11 +21,13 @@
     }{% if auth and auth.enabled %},
     {
       "key": "accessToken",
-      "value": ""
+      "value": "",
+      "type": "string"
     },
     {
       "key": "refreshToken",
-      "value": ""
+      "value": "",
+      "type": "string"
     }{% endif %}
   ],
   "item": [
@@ -30,27 +42,79 @@
       "name": "Auth",
       "item": [
         {
-          "name": "Register",
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', response.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', response.refreshToken);",
+                  "    console.log('🔐 Tokens saved to collection variables');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\\n  \\"email\\": \\"user@example.com\\",\\n  \\"password\\": \\"SecurePass123!\\"\\n}"
+              "raw": "{\\n  \"email\": \"admin@{{ project.name | lower }}.com\",\\n  \"password\": \"Admin@123456\"\\n}"
             },
-            "url": "{% raw %}{{baseUrl}}{% endraw %}/auth/register"
+            "url": "{% raw %}{{baseUrl}}{% endraw %}/api/auth/login"
           }
         },
         {
-          "name": "Login",
+          "name": "Register",
           "request": {
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{\\n  \\"email\\": \\"user@example.com\\",\\n  \\"password\\": \\"SecurePass123!\\"\\n}"
+              "raw": "{\\n  \"email\": \"user@example.com\",\\n  \"password\": \"SecurePass123!\"\\n}"
             },
-            "url": "{% raw %}{{baseUrl}}{% endraw %}/auth/login"
+            "url": "{% raw %}{{baseUrl}}{% endraw %}/api/auth/register"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', response.accessToken);",
+                  "    console.log('🔄 Access token refreshed');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \"refreshToken\": \"{% raw %}{{refreshToken}}{% endraw %}\"\\n}"
+            },
+            "url": "{% raw %}{{baseUrl}}{% endraw %}/api/auth/refresh"
           }
         }
       ]
@@ -59,45 +123,61 @@
       "name": "{{ model.namePlural }}",
       "item": [
         {
-          "name": "Create",
+          "name": "Create {{ model.name }}",
           "request": {
             "method": "POST",
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n{% for field in model.fields %}{% if field.name != 'id' and field.name != 'createdAt' and field.name != 'updatedAt' and field.name != '_id' %}  \"{{ field.name }}\": {% if field.type == 'string' %}{% if field.enum %}\"{{ field.enum[0] }}\"{% elif 'email' in (field.name | lower) %}\"user@example.com\"{% elif 'name' in (field.name | lower) or 'title' in (field.name | lower) %}\"Sample {{ field.name }}\"{% else %}\"{{ field.name }} value\"{% endif %}{% elif field.type == 'number' %}{% if 'age' in (field.name | lower) %}25{% elif 'price' in (field.name | lower) or 'amount' in (field.name | lower) %}99.99{% else %}42{% endif %}{% elif field.type == 'boolean' %}true{% elif field.type == 'date' or field.type == 'datetime' %}\"2024-01-01T00:00:00.000Z\"{% elif field.type == 'string[]' %}[\"item1\", \"item2\"]{% elif field.type == 'json' %}{}{% else %}null{% endif %}{% if not loop.last %},{% endif %}\n{% endif %}{% endfor %}}"
             },
             "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}"
           }
         },
         {
-          "name": "Get All",
+          "name": "Get All {{ model.namePlural }}",
           "request": {
             "method": "GET",
-            "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}"
+            "url": {
+              "raw": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}?page=1&limit=10",
+              "host": ["{% raw %}{{baseUrl}}{% endraw %}"],
+              "path": ["{{ model.route | replace('/', '') }}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page"
+                }
+              ]
+            }
           }
         },
         {
-          "name": "Get By ID",
+          "name": "Get {{ model.name }} by ID",
           "request": {
             "method": "GET",
             "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}/:id"
           }
         },
         {
-          "name": "Update",
+          "name": "Update {{ model.name }}",
           "request": {
             "method": "PATCH",
             "header": [{"key": "Content-Type", "value": "application/json"}],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\\n  \"name\": \"Updated value\"\\n}"
             },
             "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}/:id"
           }
         },
         {
-          "name": "Delete",
+          "name": "Delete {{ model.name }}",
           "request": {
             "method": "DELETE",
             "url": "{% raw %}{{baseUrl}}{% endraw %}{{ model.route }}/:id"

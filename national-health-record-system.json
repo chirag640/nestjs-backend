@@ -1,0 +1,360 @@
+{
+  "projectSetup": {
+    "projectName": "national-health-record-system",
+    "description": "Patient-centric EHR platform for patients, doctors, and government hospitals with consent control, secure document storage, offline sync, and audit logging.",
+    "author": "Your Organization",
+    "license": "MIT",
+    "nodeVersion": "20",
+    "packageManager": "npm"
+  },
+  "databaseConfig": {
+    "databaseType": "MongoDB",
+    "provider": "Atlas",
+    "connectionString": "mongodb+srv://user:password@cluster.mongodb.net/dbname",
+    "autoMigration": "push"
+  },
+  "modelDefinition": {
+    "models": [
+      {
+        "name": "Patient",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "guid",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true
+          },
+          {
+            "name": "fullName",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "required": true,
+            "pattern": "^[6-9]\\d{9}$",
+            "indexed": true
+          },
+          {
+            "name": "gender",
+            "type": "enum",
+            "required": true,
+            "values": ["Male", "Female", "Other"]
+          },
+          {
+            "name": "dateOfBirth",
+            "type": "date",
+            "required": false
+          },
+          {
+            "name": "address",
+            "type": "json",
+            "required": false
+          },
+          {
+            "name": "allergies",
+            "type": "string[]",
+            "required": false
+          },
+          {
+            "name": "chronicDiseases",
+            "type": "string[]",
+            "required": false
+          },
+          {
+            "name": "bloodGroup",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "emergencyContact",
+            "type": "json",
+            "required": false
+          },
+          {
+            "name": "hasSmartphone",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "idCardIssued",
+            "type": "boolean",
+            "default": false
+          }
+        ]
+      },
+      {
+        "name": "Hospital",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "state",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "district",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "hospitalType",
+            "type": "enum",
+            "values": ["Government", "Private"],
+            "required": true,
+            "default": "Government"
+          },
+          {
+            "name": "isActive",
+            "type": "boolean",
+            "default": true
+          }
+        ]
+      },
+      {
+        "name": "Doctor",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "fullName",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "required": true,
+            "pattern": "^[6-9]\\d{9}$"
+          },
+          {
+            "name": "specialization",
+            "type": "string",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "Encounter",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "visitReason",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "diagnosis",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "prescriptions",
+            "type": "json",
+            "required": false
+          },
+          {
+            "name": "vitals",
+            "type": "json",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "Document",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "docType",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "fileUrl",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "metadata",
+            "type": "json",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "Consent",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "scope",
+            "type": "string[]",
+            "required": true
+          },
+          {
+            "name": "expiresAt",
+            "type": "datetime",
+            "required": true
+          }
+        ]
+      },
+      {
+        "name": "AuditLog",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "userId",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "action",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "resource",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "resourceId",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "ipAddress",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "details",
+            "type": "json",
+            "required": false
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "type": "one-to-many",
+        "sourceModel": "Patient",
+        "targetModel": "Encounter",
+        "fieldName": "patient",
+        "inverseFieldName": "encounters"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Doctor",
+        "targetModel": "Encounter",
+        "fieldName": "doctor",
+        "inverseFieldName": "encounters"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Hospital",
+        "targetModel": "Encounter",
+        "fieldName": "hospital",
+        "inverseFieldName": "encounters"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Patient",
+        "targetModel": "Document",
+        "fieldName": "patient",
+        "inverseFieldName": "documents"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Hospital",
+        "targetModel": "Document",
+        "fieldName": "hospital",
+        "inverseFieldName": "documents"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Hospital",
+        "targetModel": "Doctor",
+        "fieldName": "hospital",
+        "inverseFieldName": "doctors"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Patient",
+        "targetModel": "Consent",
+        "fieldName": "patient",
+        "inverseFieldName": "consents"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Doctor",
+        "targetModel": "Consent",
+        "fieldName": "doctor",
+        "inverseFieldName": "consents"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Hospital",
+        "targetModel": "Consent",
+        "fieldName": "hospital",
+        "inverseFieldName": "consents"
+      }
+    ]
+  },
+  "authConfig": {
+    "enabled": true,
+    "method": "jwt",
+    "jwt": {
+      "accessTTL": "15m",
+      "refreshTTL": "7d",
+      "rotation": true,
+      "blacklist": true
+    },
+    "roles": ["Patient", "Doctor", "HospitalAdmin", "SuperAdmin"]
+  },
+  "oauthConfig": {
+    "enabled": false,
+    "providers": []
+  },
+  "featureSelection": {
+    "cors": true,
+    "helmet": true,
+    "compression": true,
+    "validation": true,
+    "logging": true,
+    "caching": true,
+    "swagger": true,
+    "health": true,
+    "rateLimit": true,
+    "versioning": true,
+    "queues": true,
+    "s3Upload": true,
+    "encryptionStrategy": "aws_kms",
+    "fieldLevelAccessControl": true,
+    "gitHooks": true,
+    "sonarQube": false
+  },
+  "dockerConfig": {
+    "enabled": true,
+    "includeCompose": true,
+    "includeProd": true,
+    "healthCheck": true,
+    "nonRootUser": true,
+    "multiStage": true
+  },
+  "cicdConfig": {
+    "enabled": true,
+    "githubActions": true,
+    "gitlabCI": false,
+    "includeTests": true,
+    "includeE2E": true,
+    "includeSecurity": true,
+    "autoDockerBuild": true
+  }
+}

@@ -1,0 +1,1077 @@
+{
+  "// STEP 1: PROJECT SETUP": "Basic project configuration",
+  "projectSetup": {
+    "projectName": "e-commerce-platform",
+    "description": "Full-featured e-commerce platform with advanced security, payment processing, and real-time features",
+    "author": "Your Company Name",
+    "license": "MIT",
+    "// License Options": "MIT, Apache-2.0, GPL-3.0, BSD-3-Clause, ISC",
+    "nodeVersion": "20",
+    "// Node Versions": "18, 20, 22",
+    "packageManager": "npm",
+    "// Package Managers": "npm, yarn, pnpm"
+  },
+
+  "// STEP 2: DATABASE CONFIGURATION": "Choose your database provider",
+  "databaseConfig": {
+    "databaseType": "PostgreSQL",
+    "// Database Types": "MongoDB, PostgreSQL, MySQL",
+    "provider": "Neon",
+    "// Providers": "Neon (PostgreSQL), Supabase (PostgreSQL), Atlas (MongoDB), PlanetScale (MySQL), Railway (All)",
+    "connectionString": "postgresql://user:password@host:5432/dbname",
+    "autoMigration": "push",
+    "// Auto Migration Options": "push (auto-apply migrations), manual (generate only)"
+  },
+
+  "// STEP 3: MODEL DEFINITION": "Define your data models with fields, relationships, and access control",
+  "modelDefinition": {
+    "models": [
+      {
+        "name": "User",
+        "timestamps": true,
+        "// timestamps": "Automatically adds createdAt and updatedAt fields",
+        "fields": [
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true,
+            "// indexed": "Creates database index for faster queries"
+          },
+          {
+            "name": "username",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "minLength": 3,
+            "maxLength": 30,
+            "pattern": "^[a-zA-Z0-9_]+$",
+            "// pattern": "Regex pattern for validation"
+          },
+          {
+            "name": "firstName",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "lastName",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "age",
+            "type": "number",
+            "required": false,
+            "min": 13,
+            "max": 120,
+            "// min/max": "Validation for numeric fields"
+          },
+          {
+            "name": "avatar",
+            "type": "string",
+            "required": false,
+            "// avatar": "Can store URL or S3 key if s3Upload feature enabled"
+          },
+          {
+            "name": "phoneNumber",
+            "type": "string",
+            "required": false,
+            "pattern": "^\\+?[1-9]\\d{1,14}$"
+          },
+          {
+            "name": "dateOfBirth",
+            "type": "date",
+            "required": false,
+            "// date vs datetime": "date stores YYYY-MM-DD, datetime stores full timestamp"
+          },
+          {
+            "name": "registeredAt",
+            "type": "datetime",
+            "required": true,
+            "default": "now",
+            "// default: now": "Automatically sets current timestamp"
+          },
+          {
+            "name": "preferences",
+            "type": "json",
+            "required": false,
+            "// json type": "Stores any JSON object - useful for flexible schemas"
+          },
+          {
+            "name": "roles",
+            "type": "string[]",
+            "required": false,
+            "default": "['Customer']",
+            "// string[]": "Array of strings"
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "values": ["Active", "Inactive", "Suspended", "Banned"],
+            "required": true,
+            "default": "Active",
+            "// enum": "Restricts values to predefined list"
+          },
+          {
+            "name": "isVerified",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "lastLoginAt",
+            "type": "datetime",
+            "required": false
+          },
+          {
+            "name": "metadata",
+            "type": "json",
+            "required": false,
+            "// Use case": "Store dynamic data like user settings, preferences, etc."
+          }
+        ],
+        "// Field-Level Access Control (FLAC)": "Control which roles can see/edit which fields",
+        "accessControl": {
+          "Customer": {
+            "allowSelfOnly": true,
+            "// allowSelfOnly": "User can only access their own record",
+            "allow": [
+              "firstName",
+              "lastName",
+              "avatar",
+              "phoneNumber",
+              "preferences"
+            ],
+            "deny": ["roles", "status", "metadata"],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "// allow: *": "Wildcard grants access to all fields",
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          },
+          "Moderator": {
+            "allow": ["*"],
+            "deny": ["roles"],
+            "// deny": "Even with allow:*, deny takes precedence",
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          }
+        }
+      },
+      {
+        "name": "Product",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "minLength": 3,
+            "maxLength": 200
+          },
+          {
+            "name": "slug",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true,
+            "pattern": "^[a-z0-9-]+$"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "required": true,
+            "maxLength": 5000
+          },
+          {
+            "name": "price",
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          {
+            "name": "compareAtPrice",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "// compareAtPrice": "Original price for showing discounts"
+          },
+          {
+            "name": "costPerItem",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "// costPerItem": "Your cost - for profit calculation"
+          },
+          {
+            "name": "sku",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "// sku": "Stock Keeping Unit - unique product identifier"
+          },
+          {
+            "name": "barcode",
+            "type": "string",
+            "required": false,
+            "unique": true
+          },
+          {
+            "name": "stockQuantity",
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "default": 0
+          },
+          {
+            "name": "lowStockThreshold",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "default": 5
+          },
+          {
+            "name": "weight",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "// weight": "In grams - for shipping calculation"
+          },
+          {
+            "name": "dimensions",
+            "type": "json",
+            "required": false,
+            "// dimensions example": "{ length: 10, width: 5, height: 3, unit: 'cm' }"
+          },
+          {
+            "name": "images",
+            "type": "string[]",
+            "required": false,
+            "// images": "Array of image URLs or S3 keys"
+          },
+          {
+            "name": "tags",
+            "type": "string[]",
+            "required": false,
+            "// tags": "For search and filtering"
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "values": ["Draft", "Active", "Archived", "Out of Stock"],
+            "required": true,
+            "default": "Draft"
+          },
+          {
+            "name": "isPublished",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "publishedAt",
+            "type": "datetime",
+            "required": false
+          },
+          {
+            "name": "seoTitle",
+            "type": "string",
+            "required": false,
+            "maxLength": 60
+          },
+          {
+            "name": "seoDescription",
+            "type": "string",
+            "required": false,
+            "maxLength": 160
+          },
+          {
+            "name": "specifications",
+            "type": "json",
+            "required": false,
+            "// specifications": "Product details like color, size, material, etc."
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allow": [
+              "name",
+              "slug",
+              "description",
+              "price",
+              "compareAtPrice",
+              "images",
+              "tags",
+              "specifications"
+            ],
+            "deny": ["costPerItem", "stockQuantity", "sku", "barcode"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Vendor": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "Category",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "unique": true
+          },
+          {
+            "name": "slug",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "required": false,
+            "maxLength": 1000
+          },
+          {
+            "name": "image",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "isActive",
+            "type": "boolean",
+            "default": true
+          },
+          {
+            "name": "sortOrder",
+            "type": "number",
+            "required": false,
+            "default": 0
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "Order",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "orderNumber",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true,
+            "// orderNumber": "e.g., ORD-2024-001234"
+          },
+          {
+            "name": "orderDate",
+            "type": "datetime",
+            "required": true,
+            "default": "now"
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "values": [
+              "Pending",
+              "Processing",
+              "Paid",
+              "Shipped",
+              "Delivered",
+              "Cancelled",
+              "Refunded"
+            ],
+            "required": true,
+            "default": "Pending"
+          },
+          {
+            "name": "subtotal",
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          {
+            "name": "taxAmount",
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "default": 0
+          },
+          {
+            "name": "shippingAmount",
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "default": 0
+          },
+          {
+            "name": "discountAmount",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "default": 0
+          },
+          {
+            "name": "totalAmount",
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          {
+            "name": "currency",
+            "type": "string",
+            "required": true,
+            "default": "USD"
+          },
+          {
+            "name": "paymentMethod",
+            "type": "enum",
+            "values": [
+              "Credit Card",
+              "Debit Card",
+              "PayPal",
+              "Stripe",
+              "Cash on Delivery"
+            ],
+            "required": false
+          },
+          {
+            "name": "paymentStatus",
+            "type": "enum",
+            "values": ["Pending", "Authorized", "Paid", "Failed", "Refunded"],
+            "required": true,
+            "default": "Pending"
+          },
+          {
+            "name": "shippingAddress",
+            "type": "json",
+            "required": true,
+            "// shippingAddress": "{ street, city, state, country, postalCode }"
+          },
+          {
+            "name": "billingAddress",
+            "type": "json",
+            "required": true
+          },
+          {
+            "name": "trackingNumber",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "maxLength": 2000
+          },
+          {
+            "name": "internalNotes",
+            "type": "string",
+            "required": false,
+            "maxLength": 2000,
+            "// internalNotes": "Staff notes - not visible to customers"
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": ["internalNotes"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Staff": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "OrderItem",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "productName",
+            "type": "string",
+            "required": true,
+            "// productName": "Snapshot of product name at time of order"
+          },
+          {
+            "name": "productSku",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "quantity",
+            "type": "number",
+            "required": true,
+            "min": 1
+          },
+          {
+            "name": "unitPrice",
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "// unitPrice": "Price per unit at time of order"
+          },
+          {
+            "name": "totalPrice",
+            "type": "number",
+            "required": true,
+            "min": 0
+          },
+          {
+            "name": "discountAmount",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "default": 0
+          },
+          {
+            "name": "taxAmount",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "default": 0
+          },
+          {
+            "name": "productSnapshot",
+            "type": "json",
+            "required": false,
+            "// productSnapshot": "Store product details at time of order in case product changes/deleted"
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "Review",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "rating",
+            "type": "number",
+            "required": true,
+            "min": 1,
+            "max": 5
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "required": false,
+            "maxLength": 100
+          },
+          {
+            "name": "comment",
+            "type": "string",
+            "required": true,
+            "maxLength": 2000
+          },
+          {
+            "name": "isVerifiedPurchase",
+            "type": "boolean",
+            "default": false,
+            "// isVerifiedPurchase": "User actually bought this product"
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "values": ["Pending", "Approved", "Rejected"],
+            "required": true,
+            "default": "Pending"
+          },
+          {
+            "name": "helpfulCount",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "default": 0,
+            "// helpfulCount": "Number of users who found this review helpful"
+          },
+          {
+            "name": "images",
+            "type": "string[]",
+            "required": false,
+            "// images": "Customer uploaded photos with review"
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          },
+          "Moderator": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "Cart",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "items",
+            "type": "json[]",
+            "required": false,
+            "default": "[]",
+            "// items": "Array of { productId, quantity, price }"
+          },
+          {
+            "name": "subtotal",
+            "type": "number",
+            "required": false,
+            "min": 0,
+            "default": 0
+          },
+          {
+            "name": "expiresAt",
+            "type": "datetime",
+            "required": false,
+            "// expiresAt": "Auto-delete abandoned carts after X days"
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "Wishlist",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": false,
+            "default": "My Wishlist"
+          },
+          {
+            "name": "isPublic",
+            "type": "boolean",
+            "default": false,
+            "// isPublic": "Can others view this wishlist?"
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "Address",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "type",
+            "type": "enum",
+            "values": ["Shipping", "Billing", "Both"],
+            "required": true
+          },
+          {
+            "name": "firstName",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "lastName",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "company",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "street1",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "street2",
+            "type": "string",
+            "required": false
+          },
+          {
+            "name": "city",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "state",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "country",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "postalCode",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "isDefault",
+            "type": "boolean",
+            "default": false
+          }
+        ],
+        "accessControl": {
+          "Customer": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      }
+    ],
+    "// RELATIONSHIPS": "Define how models are connected",
+    "relationships": [
+      {
+        "type": "one-to-many",
+        "// one-to-many": "One User has many Orders",
+        "sourceModel": "User",
+        "targetModel": "Order",
+        "fieldName": "customer",
+        "inverseFieldName": "orders",
+        "// inverseFieldName": "Optional - name of field on User model (default: 'orders')"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Order",
+        "targetModel": "OrderItem",
+        "fieldName": "order",
+        "inverseFieldName": "items"
+      },
+      {
+        "type": "many-to-one",
+        "// many-to-one": "Many OrderItems belong to one Product",
+        "sourceModel": "OrderItem",
+        "targetModel": "Product",
+        "fieldName": "product",
+        "foreignKeyName": "productId",
+        "// foreignKeyName": "Optional - custom foreign key name"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Product",
+        "targetModel": "Review",
+        "fieldName": "product",
+        "inverseFieldName": "reviews"
+      },
+      {
+        "type": "many-to-one",
+        "sourceModel": "Review",
+        "targetModel": "User",
+        "fieldName": "author"
+      },
+      {
+        "type": "many-to-one",
+        "sourceModel": "Product",
+        "targetModel": "Category",
+        "fieldName": "category",
+        "inverseFieldName": "products"
+      },
+      {
+        "type": "one-to-one",
+        "// one-to-one": "One User has one Cart",
+        "sourceModel": "User",
+        "targetModel": "Cart",
+        "fieldName": "user",
+        "inverseFieldName": "cart"
+      },
+      {
+        "type": "many-to-many",
+        "// many-to-many": "Users can have many Products in Wishlist, Products can be in many Wishlists",
+        "sourceModel": "Wishlist",
+        "targetModel": "Product",
+        "fieldName": "products",
+        "inverseFieldName": "wishlists",
+        "through": "WishlistProduct",
+        "// through": "Junction table name for many-to-many",
+        "attributes": [
+          {
+            "name": "addedAt",
+            "type": "datetime",
+            "required": true,
+            "default": "now"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "maxLength": 500
+          }
+        ],
+        "// attributes": "Extra fields on the junction table"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "User",
+        "targetModel": "Wishlist",
+        "fieldName": "user",
+        "inverseFieldName": "wishlists"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "User",
+        "targetModel": "Address",
+        "fieldName": "user",
+        "inverseFieldName": "addresses"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Category",
+        "targetModel": "Category",
+        "fieldName": "parent",
+        "inverseFieldName": "subcategories",
+        "// Self-referencing": "Category can have parent category for nested categories"
+      }
+    ]
+  },
+
+  "// STEP 4: AUTHENTICATION": "JWT-based authentication with refresh tokens",
+  "authConfig": {
+    "enabled": true,
+    "method": "jwt",
+    "// method": "Currently only JWT is supported",
+    "jwt": {
+      "accessTTL": "15m",
+      "// accessTTL": "Access token expiration (15m recommended)",
+      "refreshTTL": "7d",
+      "// refreshTTL": "Refresh token expiration (7d recommended)",
+      "rotation": true,
+      "// rotation": "Rotate refresh tokens on each use for better security",
+      "blacklist": true,
+      "// blacklist": "Blacklist refresh tokens on logout"
+    },
+    "roles": ["Customer", "Vendor", "Staff", "Moderator", "Admin"],
+    "// roles": "Define all roles used in your access control",
+    "oauth": {
+      "enabled": true,
+      "providers": [
+        {
+          "name": "google",
+          "clientId": "${GOOGLE_CLIENT_ID}",
+          "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+          "callbackURL": "http://localhost:3000/auth/google/callback",
+          "// OAuth Setup": "Get credentials from Google Cloud Console"
+        },
+        {
+          "name": "github",
+          "clientId": "${GITHUB_CLIENT_ID}",
+          "clientSecret": "${GITHUB_CLIENT_SECRET}",
+          "callbackURL": "http://localhost:3000/auth/github/callback",
+          "// OAuth Setup": "Get credentials from GitHub Developer Settings"
+        }
+      ]
+    }
+  },
+
+  "// STEP 5: FEATURE SELECTION": "Toggle advanced features on/off",
+  "featureSelection": {
+    "// BASIC FEATURES": "Essential middleware",
+    "cors": true,
+    "// cors": "Cross-Origin Resource Sharing - required for frontend",
+    "helmet": true,
+    "// helmet": "Security headers (XSS, clickjacking protection, etc.)",
+    "compression": true,
+    "// compression": "Gzip response compression",
+    "validation": true,
+    "// validation": "Automatic DTO validation with class-validator",
+
+    "// ADVANCED FEATURES": "Production-grade capabilities",
+    "logging": true,
+    "// logging": "Pino structured JSON logging with request tracking",
+    "caching": true,
+    "// caching": "Redis caching for GET requests (requires Redis)",
+    "swagger": true,
+    "// swagger": "Auto-generated API documentation at /api/docs",
+    "health": true,
+    "// health": "Health check endpoints at /health",
+    "rateLimit": true,
+    "// rateLimit": "Throttler rate limiting (10 req/min default)",
+    "versioning": true,
+    "// versioning": "API versioning support (/v1/users, /v2/users)",
+
+    "// BACKGROUND JOBS": "Async task processing",
+    "queues": true,
+    "// queues": "BullMQ job queues with Redis (email, reports, etc.) - requires Redis",
+
+    "// FILE STORAGE": "Cloud file uploads",
+    "s3Upload": true,
+    "// s3Upload": "AWS S3 file uploads with presigned URLs and lifecycle policies",
+
+    "// SECURITY FEATURES": "Data protection",
+    "encryptionStrategy": "aws_kms",
+    "// encryptionStrategy": "disabled (FREE), local (FREE env key), aws_kms (PAID ~$7/mo)",
+    "fieldLevelAccessControl": true,
+    "// fieldLevelAccessControl": "Role-based field filtering from accessControl config",
+
+    "// DEVELOPER TOOLS": "Code quality",
+    "gitHooks": true,
+    "// gitHooks": "Husky + lint-staged (auto-format/lint on commit)",
+    "sonarQube": false,
+    "// sonarQube": "SonarQube code quality configuration"
+  },
+
+  "// STEP 6: DOCKER CONFIGURATION": "Containerization setup",
+  "dockerConfig": {
+    "enabled": true,
+    "includeCompose": true,
+    "// includeCompose": "docker-compose.yml with app, DB, Redis",
+    "includeProd": true,
+    "// includeProd": "Production-optimized Dockerfile",
+    "healthCheck": true,
+    "// healthCheck": "Docker health checks for orchestration",
+    "nonRootUser": true,
+    "// nonRootUser": "Run container as non-root for security",
+    "multiStage": true,
+    "// multiStage": "Multi-stage build for smaller images"
+  },
+
+  "// STEP 7: CI/CD CONFIGURATION": "Automated testing and deployment",
+  "cicdConfig": {
+    "enabled": true,
+    "githubActions": true,
+    "// githubActions": "GitHub Actions workflow for CI/CD",
+    "gitlabCI": false,
+    "// gitlabCI": "GitLab CI/CD pipeline",
+    "includeTests": true,
+    "// includeTests": "Run unit and integration tests",
+    "includeE2E": true,
+    "// includeE2E": "Run end-to-end tests",
+    "includeSecurity": true,
+    "// includeSecurity": "Security scanning with npm audit",
+    "autoDockerBuild": true,
+    "// autoDockerBuild": "Build and push Docker images on merge"
+  },
+
+  "// ENVIRONMENT VARIABLES": "Required in your .env file",
+  "// .env example": {
+    "DATABASE_URL": "postgresql://user:pass@host:5432/db",
+    "JWT_SECRET": "your-super-secret-jwt-key-change-in-production",
+    "JWT_REFRESH_SECRET": "your-refresh-secret-key",
+    "REDIS_URL": "redis://localhost:6379",
+    "AWS_REGION": "us-east-1",
+    "AWS_ACCESS_KEY_ID": "your-aws-key",
+    "AWS_SECRET_ACCESS_KEY": "your-aws-secret",
+    "AWS_S3_BUCKET": "your-bucket-name",
+    "AWS_KMS_KEY_ID": "your-kms-key-id",
+    "GOOGLE_CLIENT_ID": "your-google-client-id",
+    "GOOGLE_CLIENT_SECRET": "your-google-client-secret",
+    "GITHUB_CLIENT_ID": "your-github-client-id",
+    "GITHUB_CLIENT_SECRET": "your-github-client-secret",
+    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_PORT": "587",
+    "SMTP_USER": "your-email@gmail.com",
+    "SMTP_PASS": "your-app-password",
+    "FRONTEND_URL": "http://localhost:5173"
+  },
+
+  "// TIPS AND BEST PRACTICES": {
+    "1. Start Simple": "Enable only features you need - you can always regenerate with more features",
+    "2. Field Types": "Use appropriate types: date for birthdays, datetime for timestamps, json for flexible data",
+    "3. Indexing": "Add indexed:true to fields you'll query frequently (email, username, slug)",
+    "4. Validation": "Use minLength/maxLength/min/max/pattern for data integrity",
+    "5. Relationships": "Use one-to-many for most cases, many-to-many only when both sides can have multiple",
+    "6. Access Control": "Always define FLAC rules for models with sensitive data",
+    "7. OAuth": "Test with Google first (easier setup), then add GitHub",
+    "8. Caching": "Only enable if you have Redis - improves performance significantly",
+    "9. S3 Upload": "Configure lifecycle policies to auto-delete old temp files",
+    "10. Encryption": "Use aws_kms for production with sensitive data, local for development"
+  }
+}

@@ -1,0 +1,166 @@
+# Prometheus Metrics & Monitoring
+
+Your {{ project.name }} API comes with **production-ready Prometheus metrics** enabled by default.
+
+## 📊 Available Endpoints
+
+### `/metrics` - Prometheus Format
+Primary endpoint for Prometheus scraping:
+```bash
+curl http://localhost:3000/metrics
+```
+
+### `/metrics/json` - JSON Format  
+Human-readable format for debugging:
+```bash
+curl http://localhost:3000/metrics/json
+```
+
+---
+
+## 📈 Tracked Metrics
+
+### HTTP Metrics
+- **`http_requests_total`** - Request count by method, route, status code
+- **`http_request_duration_seconds`** - Request duration histogram (p50, p95, p99)
+- **`http_request_errors_total`** - Error count by type
+
+### Database Metrics
+- **`db_query_duration_seconds`** - Query duration histogram
+- **`db_connections_active`** - Active connection count
+
+### Authentication Metrics
+- **`auth_login_attempts_total`** - Login attempts
+- **`auth_login_successes_total`** - Successful logins
+- **`auth_login_failures_total`** - Failed logins by reason
+
+### Node.js Metrics (Auto-collected)
+- CPU usage
+- Memory (heap used/total)
+- Event loop lag
+- Garbage collection duration
+
+---
+
+## 🚀 Quick Setup
+
+### 1. Run Prometheus
+
+**Using Docker:**
+```bash
+docker run -d \
+  --name prometheus \
+  -p 9090:9090 \
+  -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml \
+  prom/prometheus
+```
+
+**prometheus.yml** (already generated in project root):
+```yaml
+scrape_configs:
+  - job_name: '{{ project.name }}-api'
+    targets: ['host.docker.internal:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+```
+
+### 2. Run Grafana
+
+```bash
+docker run -d \
+  --name grafana \
+  -p 3001:3000 \
+  grafana/grafana
+```
+
+**Access:** http://localhost:3001 (admin/admin)
+
+### 3. Import Dashboard
+
+1. Open Grafana → **Configuration** → **Data Sources**
+2. Add **Prometheus** data source: `http://prometheus:9090`
+3. Go to **Dashboards** → **Import**
+4. Upload `grafana-dashboard.json` (generated in project root)
+
+✅ **Done!** Your metrics dashboard is ready.
+
+---
+
+## 🎯 Dashboard Panels
+
+The pre-configured Grafana dashboard includes:
+
+| Panel | Metric | Description |
+|-------|--------|-------------|
+| **Request Rate** | `rate(http_requests_total[5m])` | Requests per second by endpoint |
+| **Response Time** | Percentiles (p50, p95, p99) | Response time distribution |
+| **Error Rate** | Errors / Total Requests | Error percentage gauge |
+| **Memory Usage** | Heap used vs total | Memory consumption |
+| **DB Connections** | Active connections | Database pool usage |
+| **DB Query Duration** | p95 query time | Slow query detection |
+
+---
+
+## ⚙️ Configuration
+
+### Disable Metrics (if needed)
+
+Comment out in `main.ts`:
+```typescript
+// app.useGlobalInterceptors(new MetricsInterceptor(app.get(MetricsService)));
+```
+
+### Add Custom Metrics
+
+In your service:
+```typescript
+import { MetricsService } from './features/metrics/metrics.service';
+
+constructor(private metricsService: MetricsService) {}
+
+async processOrder(order: Order) {
+  // Track custom business metric
+  this.metricsService.orderProcessed.inc();
+}
+```
+
+---
+
+## 🔒 Production Considerations
+
+### Secure `/metrics` Endpoint
+
+Add authentication:
+```typescript
+@UseGuards(JwtAuthGuard)
+@Get()
+async getMetrics() {
+  return this.metricsService.getMetrics();
+}
+```
+
+### External Monitoring
+
+Point Prometheus to your production API:
+```yaml
+scrape_configs:
+  - job_name: 'production-api'
+    static_configs:
+      - targets: ['api.example.com:443']
+    scheme: https
+    basic_auth:
+      username: 'metrics'
+      password: 'secret'
+```
+
+---
+
+## 📚 Resources
+
+- [Prometheus Docs](https://prometheus.io/docs/)
+- [Grafana Docs](https://grafana.com/docs/)
+- [prom-client (Node.js)](https://github.com/siimon/prom-client)
+
+---
+
+**Metrics are enabled by default.** No configuration needed!

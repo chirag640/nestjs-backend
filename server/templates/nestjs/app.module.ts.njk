@@ -28,6 +28,7 @@ import { QueueModule } from './modules/queue/queue.module';
 {% if features.s3Upload %}
 import { S3LifecycleModule } from './modules/s3-lifecycle/s3-lifecycle.module';
 {% endif %}
+import { MetricsModule } from './features/metrics/metrics.module';
 import { EncryptionModule } from './common/encryption.module';
 {% if features.fieldLevelAccessControl %}
 import { FieldAccessModule } from './access-control/field-access.module';
@@ -81,6 +82,7 @@ import { {{ model.name }}Module } from './modules/{{ model.nameKebab }}/{{ model
 {% if features.s3Upload %}
     S3LifecycleModule,
 {% endif %}
+    MetricsModule, // Prometheus metrics (/metrics endpoint)
     EncryptionModule, // Global encryption layer (KMS + AES-GCM)
 {% if features.fieldLevelAccessControl %}
     FieldAccessModule, // Role-based field filtering (FLAC)

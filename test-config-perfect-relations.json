@@ -1,8 +1,8 @@
 {
   "projectSetup": {
-    "projectName": "relationship-demo",
-    "description": "Demonstration of all relationship types with custom naming",
-    "author": "Foundation Wizard",
+    "projectName": "medical-hub",
+    "description": "Complete medical records management system with FLAC, RBAC, OAuth, and production features",
+    "author": "Healthcare Team",
     "license": "MIT",
     "nodeVersion": "20",
     "packageManager": "npm"
@@ -10,82 +10,517 @@
   "databaseConfig": {
     "databaseType": "MongoDB",
     "provider": "Atlas",
-    "connectionString": "mongodb://localhost:27017/relationship-demo",
+    "connectionString": "mongodb://localhost:27017/medicalhub",
     "autoMigration": "push"
   },
   "modelDefinition": {
     "models": [
       {
-        "name": "User",
+        "name": "Patient",
+        "timestamps": true,
         "fields": [
-          { "name": "email", "type": "string", "required": true, "unique": true },
-          { "name": "name", "type": "string", "required": true }
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true
+          },
+          {
+            "name": "firstName",
+            "type": "string",
+            "required": true,
+            "minLength": 2,
+            "maxLength": 50
+          },
+          {
+            "name": "lastName",
+            "type": "string",
+            "required": true,
+            "minLength": 2,
+            "maxLength": 50
+          },
+          { "name": "dateOfBirth", "type": "date", "required": true },
+          {
+            "name": "phone",
+            "type": "string",
+            "required": true,
+            "pattern": "^\\+?[1-9]\\d{1,14}$",
+            "indexed": true
+          },
+          {
+            "name": "address",
+            "type": "string",
+            "required": false,
+            "maxLength": 500
+          },
+          {
+            "name": "ssn",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "pattern": "^\\d{3}-\\d{2}-\\d{4}$"
+          },
+          { "name": "insuranceNumber", "type": "string", "required": false },
+          { "name": "emergencyContact", "type": "json", "required": false },
+          {
+            "name": "medicalHistory",
+            "type": "string",
+            "required": false,
+            "maxLength": 5000
+          },
+          { "name": "allergies", "type": "string[]", "required": false },
+          {
+            "name": "bloodType",
+            "type": "enum",
+            "values": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+            "required": false
+          },
+          { "name": "isActive", "type": "boolean", "default": true }
         ],
-        "timestamps": true
+        "accessControl": {
+          "Patient": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": ["ssn", "insuranceNumber", "medicalHistory"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Doctor": {
+            "allow": ["*"],
+            "deny": ["ssn"],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Nurse": {
+            "allow": [
+              "firstName",
+              "lastName",
+              "dateOfBirth",
+              "phone",
+              "allergies",
+              "bloodType"
+            ],
+            "deny": ["ssn", "insuranceNumber", "medicalHistory"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
       },
       {
-        "name": "Profile",
+        "name": "Doctor",
+        "timestamps": true,
         "fields": [
-          { "name": "bio", "type": "string", "required": false },
-          { "name": "avatarUrl", "type": "string", "required": false }
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true
+          },
+          { "name": "firstName", "type": "string", "required": true },
+          { "name": "lastName", "type": "string", "required": true },
+          { "name": "phone", "type": "string", "required": true },
+          {
+            "name": "specialization",
+            "type": "enum",
+            "values": [
+              "Cardiology",
+              "Neurology",
+              "Pediatrics",
+              "Oncology",
+              "Orthopedics",
+              "Dermatology",
+              "General Practice"
+            ],
+            "required": true
+          },
+          {
+            "name": "licenseNumber",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "indexed": true
+          },
+          {
+            "name": "yearsOfExperience",
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "max": 60
+          },
+          { "name": "salary", "type": "number", "required": true, "min": 0 },
+          { "name": "workSchedule", "type": "json", "required": false },
+          { "name": "isActive", "type": "boolean", "default": true }
         ],
-        "timestamps": true
+        "accessControl": {
+          "Doctor": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": ["salary"],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          },
+          "Patient": {
+            "allow": [
+              "firstName",
+              "lastName",
+              "specialization",
+              "yearsOfExperience"
+            ],
+            "deny": [
+              "email",
+              "phone",
+              "licenseNumber",
+              "salary",
+              "workSchedule"
+            ],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          }
+        }
       },
       {
-        "name": "Post",
+        "name": "Appointment",
+        "timestamps": true,
         "fields": [
-          { "name": "title", "type": "string", "required": true },
-          { "name": "content", "type": "string", "required": true },
-          { "name": "published", "type": "boolean", "default": false }
+          { "name": "appointmentDate", "type": "datetime", "required": true },
+          {
+            "name": "duration",
+            "type": "number",
+            "required": true,
+            "min": 15,
+            "max": 240
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "required": true,
+            "maxLength": 500
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "values": [
+              "Scheduled",
+              "Confirmed",
+              "In Progress",
+              "Completed",
+              "Cancelled",
+              "No Show"
+            ],
+            "required": true,
+            "default": "Scheduled"
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "required": false,
+            "maxLength": 2000
+          },
+          {
+            "name": "diagnosis",
+            "type": "string",
+            "required": false,
+            "maxLength": 5000
+          },
+          { "name": "prescription", "type": "json", "required": false },
+          { "name": "fee", "type": "number", "required": true, "min": 0 },
+          { "name": "isPaid", "type": "boolean", "default": false }
         ],
-        "timestamps": true
+        "accessControl": {
+          "Patient": {
+            "allowSelfOnly": true,
+            "allow": [
+              "appointmentDate",
+              "duration",
+              "reason",
+              "status",
+              "fee",
+              "isPaid"
+            ],
+            "deny": ["notes", "diagnosis", "prescription"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Doctor": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Receptionist": {
+            "allow": [
+              "appointmentDate",
+              "duration",
+              "reason",
+              "status",
+              "fee",
+              "isPaid"
+            ],
+            "deny": ["notes", "diagnosis", "prescription"],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
       },
       {
-        "name": "Category",
+        "name": "MedicalRecord",
+        "timestamps": true,
         "fields": [
-          { "name": "name", "type": "string", "required": true, "unique": true }
+          {
+            "name": "recordDate",
+            "type": "datetime",
+            "required": true,
+            "default": "now"
+          },
+          {
+            "name": "recordType",
+            "type": "enum",
+            "values": [
+              "Consultation",
+              "Lab Result",
+              "Imaging",
+              "Surgery",
+              "Vaccination",
+              "Prescription"
+            ],
+            "required": true
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "required": true,
+            "maxLength": 200
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "required": true,
+            "maxLength": 5000
+          },
+          { "name": "attachments", "type": "json[]", "required": false },
+          { "name": "isConfidential", "type": "boolean", "default": false },
+          { "name": "vitalSigns", "type": "json", "required": false }
         ],
-        "timestamps": true
+        "accessControl": {
+          "Patient": {
+            "allowSelfOnly": true,
+            "allow": [
+              "recordDate",
+              "recordType",
+              "title",
+              "description",
+              "vitalSigns"
+            ],
+            "deny": ["attachments"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Doctor": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Nurse": {
+            "allow": [
+              "recordDate",
+              "recordType",
+              "title",
+              "description",
+              "vitalSigns"
+            ],
+            "deny": ["attachments"],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
       },
       {
-        "name": "Tag",
+        "name": "Prescription",
+        "timestamps": true,
         "fields": [
-          { "name": "name", "type": "string", "required": true, "unique": true }
+          {
+            "name": "prescriptionDate",
+            "type": "datetime",
+            "required": true,
+            "default": "now"
+          },
+          { "name": "medications", "type": "json[]", "required": true },
+          {
+            "name": "instructions",
+            "type": "string",
+            "required": true,
+            "maxLength": 2000
+          },
+          { "name": "duration", "type": "string", "required": true },
+          {
+            "name": "refillsAllowed",
+            "type": "number",
+            "required": true,
+            "min": 0,
+            "max": 12
+          },
+          { "name": "isFilled", "type": "boolean", "default": false },
+          {
+            "name": "pharmacyNotes",
+            "type": "string",
+            "required": false,
+            "maxLength": 1000
+          }
         ],
-        "timestamps": true
+        "accessControl": {
+          "Patient": {
+            "allowSelfOnly": true,
+            "allow": ["*"],
+            "deny": ["pharmacyNotes"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          },
+          "Doctor": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": false
+          },
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          }
+        }
+      },
+      {
+        "name": "Department",
+        "timestamps": true,
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "unique": true
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "required": false,
+            "maxLength": 1000
+          },
+          { "name": "location", "type": "string", "required": true },
+          { "name": "phone", "type": "string", "required": true },
+          { "name": "budget", "type": "number", "required": true, "min": 0 },
+          { "name": "isActive", "type": "boolean", "default": true }
+        ],
+        "accessControl": {
+          "Admin": {
+            "allow": ["*"],
+            "deny": [],
+            "allowRead": true,
+            "allowWrite": true,
+            "allowDelete": true
+          },
+          "Doctor": {
+            "allow": ["name", "description", "location", "phone"],
+            "deny": ["budget"],
+            "allowRead": true,
+            "allowWrite": false,
+            "allowDelete": false
+          }
+        }
       }
     ],
     "relationships": [
       {
-        "type": "one-to-one",
-        "sourceModel": "User",
-        "targetModel": "Profile",
-        "fieldName": "profileId",
-        "foreignKeyName": "profileId",
-        "inverseFieldName": "user"
+        "type": "one-to-many",
+        "sourceModel": "Patient",
+        "targetModel": "Appointment",
+        "fieldName": "patient"
       },
       {
         "type": "one-to-many",
-        "sourceModel": "User",
-        "targetModel": "Post",
-        "fieldName": "posts",
-        "foreignKeyName": "authorId",
-        "inverseFieldName": "author"
+        "sourceModel": "Doctor",
+        "targetModel": "Appointment",
+        "fieldName": "doctor"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Patient",
+        "targetModel": "MedicalRecord",
+        "fieldName": "patient"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Doctor",
+        "targetModel": "MedicalRecord",
+        "fieldName": "treatingDoctor"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Appointment",
+        "targetModel": "Prescription",
+        "fieldName": "appointment"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Patient",
+        "targetModel": "Prescription",
+        "fieldName": "patient"
+      },
+      {
+        "type": "one-to-many",
+        "sourceModel": "Doctor",
+        "targetModel": "Prescription",
+        "fieldName": "prescribedBy"
       },
       {
         "type": "many-to-one",
-        "sourceModel": "Post",
-        "targetModel": "Category",
-        "fieldName": "categoryId",
-        "foreignKeyName": "categoryId",
-        "inverseFieldName": "posts"
-      },
-      {
-        "type": "many-to-many",
-        "sourceModel": "Post",
-        "targetModel": "Tag",
-        "fieldName": "tags",
-        "inverseFieldName": "posts"
+        "sourceModel": "Doctor",
+        "targetModel": "Department",
+        "fieldName": "department"
       }
     ]
   },
@@ -98,7 +533,24 @@
       "rotation": true,
       "blacklist": true
     },
-    "roles": ["Admin", "User"]
+    "roles": ["Patient", "Doctor", "Nurse", "Admin", "Receptionist"],
+    "oauth": {
+      "enabled": true,
+      "providers": [
+        {
+          "name": "google",
+          "clientId": "${GOOGLE_CLIENT_ID}",
+          "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+          "callbackURL": "http://localhost:3000/auth/google/callback"
+        },
+        {
+          "name": "github",
+          "clientId": "${GITHUB_CLIENT_ID}",
+          "clientSecret": "${GITHUB_CLIENT_SECRET}",
+          "callbackURL": "http://localhost:3000/auth/github/callback"
+        }
+      ]
+    }
   },
   "featureSelection": {
     "cors": true,
@@ -106,16 +558,28 @@
     "compression": true,
     "validation": true,
     "logging": true,
-    "caching": false,
+    "caching": true,
     "swagger": true,
     "health": true,
-    "rateLimit": false,
-    "versioning": false,
-    "queues": false,
-    "s3Upload": false,
-    "encryptionStrategy": "disabled",
-    "fieldLevelAccessControl": false,
-    "gitHooks": true,
-    "sonarQube": false
+    "rateLimit": true,
+    "versioning": true,
+    "fieldLevelAccessControl": true
+  },
+  "dockerConfig": {
+    "enabled": true,
+    "includeCompose": true,
+    "includeProd": true,
+    "healthCheck": true,
+    "nonRootUser": true,
+    "multiStage": true
+  },
+  "cicdConfig": {
+    "enabled": true,
+    "githubActions": true,
+    "gitlabCI": false,
+    "includeTests": true,
+    "includeE2E": true,
+    "includeSecurity": true,
+    "autoDockerBuild": true
   }
 }

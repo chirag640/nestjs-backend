@@ -128,6 +128,12 @@ async function bootstrap() {
   const { DeprecatedInterceptor } = await import('./common/deprecated.interceptor');
   app.useGlobalInterceptors(new DeprecatedInterceptor(app.get(Reflector)));
 
+  // Register metrics interceptor for Prometheus monitoring
+  // Metrics available at /metrics (Prometheus format) and /metrics/json (debugging)
+  const { MetricsInterceptor } = await import('./common/metrics.interceptor');
+  const { MetricsService } = await import('./features/metrics/metrics.service');
+  app.useGlobalInterceptors(new MetricsInterceptor(app.get(MetricsService)));
+
   {% if features.fieldLevelAccessControl %}
   // Register field-level access control interceptor for role-based field filtering
   const { FieldAccessInterceptor } = await import('./access-control/field-access.interceptor');

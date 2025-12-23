@@ -1,0 +1,144 @@
+# Postman Collection & Environment
+
+Auto-generated Postman collection and environment for {{ project.name }} API.
+
+## 📦 What's Included
+
+- **collection.json** - Complete API collection with all endpoints
+- **environment.json** - Development environment with credentials
+
+---
+
+## 🚀 Quick Start
+
+### 1. Import into Postman
+
+**Collection:**
+1. Open Postman
+2. Click **Import** → Select `postman/collection.json`
+3. Collection appears in sidebar
+
+**Environment:**
+1. Click **Import** → Select `postman/environment.json`
+2. Select "{{ project.name }} - Development" from environment dropdown
+
+### 2. Login to Get Token
+
+Run **"Auth > Login (Admin)"** request:
+- Automatically saves `accessToken` and `refreshToken` to collection variables
+- All subsequent requests use the token automatically
+
+### 3. Test Endpoints
+
+All CRUD endpoints are ready with realistic data:
+- Create → Pre-filled request bodies
+- Get All → Includes pagination params
+- Get by ID → Uses `:id` variable
+- Update → Sample update data
+- Delete → Ready to use
+
+---
+
+## 🔐 Authentication
+
+### Auto-Login Script
+
+The "Login (Admin)" request includes a test script that automatically saves tokens:
+
+```javascript
+if (pm.response.code === 200) {
+    const response = pm.response.json();
+    pm.collectionVariables.set('accessToken', response.accessToken);
+    pm.collectionVariables.set('refreshToken', response.refreshToken);
+}
+```
+
+### Default Credentials
+
+From environment:
+- **Email:** `admin@{{ project.name | lower }}.com`
+- **Password:** `Admin@123456`
+
+⚠️ **Change in production!**
+
+---
+
+## 📋 Collection Structure
+
+```
+{{ project.name }} API
+├── Health Check
+├── Auth
+│   ├── Login (Admin)     [Auto-saves tokens]
+│   ├── Register
+│   └── Refresh Token     [Auto-updates token]
+{% for model in models %}├── {{ model.namePlural }}
+│   ├── Create {{ model.name }}
+│   ├── Get All {{ model.namePlural }}
+│   ├── Get {{ model.name }} by ID
+│   ├── Update {{ model.name }}
+│   └── Delete {{ model.name }}
+{% endfor %}
+```
+
+---
+
+## 🎯 Features
+
+### ✅ Realistic Request Bodies
+
+Generated from your model schemas:
+```json
+{
+  "email": "user@example.com",
+  "name": "Sample name",
+  "age": 25,
+  "isActive": true
+}
+```
+
+### ✅ Bearer Auth (Inherited)
+
+Collection-level auth applies to all requests automatically.
+
+### ✅ Query Parameters
+
+"Get All" requests include:
+- `page=1`
+- `limit=10`
+
+### ✅ Test Scripts
+
+Auto-save tokens from login responses.
+
+---
+
+## 🔄 Environment Variables
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `baseUrl` | `http://localhost:3000` | API base URL |
+| `adminEmail` | `admin@{{project.name}}.com` | Admin email |
+| `adminPassword` | `Admin@123456` | Admin password (secret) |
+| `accessToken` | (auto-filled) | JWT access token |
+| `refreshToken` | (auto-filled) | JWT refresh token |
+
+---
+
+## 💡 Tips
+
+**Multiple Environments:**
+Duplicate environment for staging/production:
+1. Right-click environment → Duplicate
+2. Rename to "Production"
+3. Change `baseUrl` to production URL
+
+**Run Collection:**
+Use Collection Runner to test all endpoints sequentially.
+
+**Export Responses:**
+Use Postman Visualizer to create custom response displays.
+
+---
+
+**Ready to use!** Just import and start testing.
