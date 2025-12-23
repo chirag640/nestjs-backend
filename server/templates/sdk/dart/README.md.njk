@@ -1,0 +1,86 @@
+# {{ project.name }} SDK
+
+Auto-generated Dart/Flutter SDK for {{ project.name }} API.
+
+## Installation
+
+Add to your `pubspec.yaml`:
+
+```yaml
+dependencies:
+  {{ project.name | lower | replace(' ', '_') }}_sdk:
+    path: ./sdk/dart
+```
+
+Or copy the `sdk/dart` folder to your Flutter project's `packages/` directory.
+
+## Quick Start
+
+```dart
+import 'package:{{ project.name | lower | replace(' ', '_') }}_sdk/sdk.dart';
+
+// Initialize
+final api = ApiClient(baseUrl: 'http://localhost:3000');
+
+// Login
+try {
+  final result = await api.auth.login('user@example.com', 'password123');
+  print('Welcome, ${result.user.fullName}!');
+  print('Token: ${result.accessToken}');
+} on ApiError catch (e) {
+  if (e.isInvalidCredentials) {
+    print('Wrong email or password');
+  } else {
+    print('Error: ${e.toUserMessage()}');
+  }
+}
+
+// Make authenticated requests (token auto-attached)
+final response = await api.get('/users');
+for (final user in response.data) {
+  print(user['email']);
+}
+
+// Logout
+await api.auth.logout();
+```
+
+## Features
+
+- ✅ **Type-safe** - All responses are typed
+- ✅ **Auto token refresh** - 401 errors trigger automatic token refresh
+- ✅ **Error handling** - Structured errors with codes
+- ✅ **Pagination support** - Built-in pagination helpers
+
+## Error Handling
+
+```dart
+try {
+  await api.get('/some-endpoint');
+} on ApiError catch (e) {
+  // Check error type
+  if (e.isAuthError) {
+    // Redirect to login
+  } else if (e.isValidationError) {
+    // Show validation messages
+    for (final msg in e.validationErrors) {
+      showError(msg);
+    }
+  } else if (e.isRetryable) {
+    // Retry after delay
+  }
+  
+  // Or use user-friendly message
+  showSnackbar(e.toUserMessage());
+}
+```
+
+## Error Codes
+
+| Code | Meaning |
+|------|---------|
+| AUTH_1001 | Invalid credentials |
+| AUTH_1002 | Token expired |
+| VAL_4001 | Validation failed |
+| RES_5001 | Resource not found |
+| RATE_8001 | Rate limit exceeded |

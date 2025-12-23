@@ -9,20 +9,39 @@ import {
 import { Request, Response } from 'express';
 import { ErrorCode } from './error-codes.enum';
 
+/**
+ * Standardized Error Response Format
+ * 
+ * Matches the success response format for consistent frontend handling:
+ * 
+ * {
+ *   "status": "error",
+ *   "statusCode": 400,
+ *   "error": {
+ *     "code": "VAL_4001",
+ *     "message": "Validation failed",
+ *     "details": ["email must be valid"]
+ *   },
+ *   "meta": {
+ *     "timestamp": "...",
+ *     "requestId": "..."
+ *   }
+ * }
+ * 
+ * Frontend can check: if (response.status === 'error') { handleError(response.error) }
+ */
 export interface ErrorResponse {
-  success: false;
+  status: 'error';
+  statusCode: number;
   error: {
     code: ErrorCode | string;
     message: string | string[];
     details?: any;
-    timestamp: string;
-    path: string;
-    requestId?: string;
-    statusCode: number;
   };
   meta: {
     timestamp: string;
     requestId?: string;
+    path: string;
   };
 }
 
@@ -71,19 +90,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     const errorResponse: ErrorResponse = {
-      success: false,
+      status: 'error',
+      statusCode,
       error: {
         code: errorCode,
         message,
-        details,
-        timestamp,
-        path: request.url,
-        requestId,
-        statusCode,
+        ...(details && { details }),
       },
       meta: {
         timestamp,
         requestId,
+        path: request.url,
       },
     };
 
@@ -103,6 +120,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
   private getErrorCodeFromStatus(status: number): ErrorCode {
     switch (status) {
+      case HttpStatus.BAD_REQUEST:
+        return ErrorCode.VALIDATION_FAILED;
       case HttpStatus.UNAUTHORIZED:
         return ErrorCode.UNAUTHORIZED;
       case HttpStatus.FORBIDDEN:
@@ -124,3 +143,4 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
   }
 }
+

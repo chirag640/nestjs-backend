@@ -1,0 +1,34 @@
+/// {{ project.name }} API Client for Flutter
+/// 
+/// Auto-generated Dart SDK for seamless backend integration.
+/// 
+/// ## Setup
+/// 
+/// Add to `pubspec.yaml`:
+/// ```yaml
+/// dependencies:
+///   dio: ^5.4.0
+/// ```
+/// 
+/// ## Usage
+/// 
+/// ```dart
+/// import 'package:{{ project.name | lower | replace(' ', '_') }}_sdk/api_client.dart';
+/// 
+/// final api = ApiClient(baseUrl: 'http://localhost:3000');
+/// 
+/// try {
+///   final result = await api.login('user@example.com', 'password123');
+///   print('Token: ${result.accessToken}');
+/// } on ApiError catch (e) {
+///   print('Error: ${e.code} - ${e.message}');
+/// }
+/// ```
+
+library {{ project.name | lower | replace(' ', '_') }}_sdk;
+
+export 'src/api_client.dart';
+export 'src/models/api_response.dart';
+export 'src/models/api_error.dart';
+export 'src/models/auth_models.dart';
+export 'src/services/auth_service.dart';

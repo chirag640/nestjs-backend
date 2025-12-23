@@ -1,0 +1,203 @@
+import 'package:dio/dio.dart';
+import 'models/api_response.dart';
+import 'models/api_error.dart';
+import 'services/auth_service.dart';
+
+/// Main API Client for {{ project.name }}
+/// 
+/// Handles all HTTP communication with automatic token refresh.
+/// 
+/// ## Example
+/// ```dart
+/// final api = ApiClient(baseUrl: 'http://localhost:3000');
+/// 
+/// // Login
+/// final auth = await api.auth.login('email@example.com', 'password');
+/// print('Welcome, ${auth.user.firstName}!');
+/// 
+/// // Make authenticated requests
+/// final users = await api.get('/users');
+/// ```
+class ApiClient {
+  final Dio _dio;
+  final String baseUrl;
+  
+  String? _accessToken;
+  String? _refreshToken;
+  
+  late final AuthService auth;
+  
+  /// Creates an API client instance
+  /// 
+  /// [baseUrl] - The backend server URL (e.g., 'http://localhost:3000')
+  /// [timeout] - Request timeout in seconds (default: 30)
+  ApiClient({
+    required this.baseUrl,
+    int timeout = 30,
+  }) : _dio = Dio(BaseOptions(
+    baseUrl: baseUrl,
+    connectTimeout: Duration(seconds: timeout),
+    receiveTimeout: Duration(seconds: timeout),
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+  )) {
+    _setupInterceptors();
+    auth = AuthService(this);
+  }
+  
+  /// Get the current access token
+  String? get accessToken => _accessToken;
+  
+  /// Get the current refresh token
+  String? get refreshToken => _refreshToken;
+  
+  /// Check if user is authenticated
+  bool get isAuthenticated => _accessToken != null;
+  
+  /// Set authentication tokens
+  void setTokens({required String accessToken, required String refreshToken}) {
+    _accessToken = accessToken;
+    _refreshToken = refreshToken;
+  }
+  
+  /// Clear authentication tokens (logout)
+  void clearTokens() {
+    _accessToken = null;
+    _refreshToken = null;
+  }
+  
+  void _setupInterceptors() {
+    // Request interceptor - add auth header
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (_accessToken != null) {
+          options.headers['Authorization'] = 'Bearer $_accessToken';
+        }
+        return handler.next(options);
+      },
+      onError: (error, handler) async {
+        // Handle 401 - try to refresh token
+        if (error.response?.statusCode == 401 && _refreshToken != null) {
+          try {
+            final refreshed = await _refreshAccessToken();
+            if (refreshed) {
+              // Retry original request
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] = 'Bearer $_accessToken';
+              final response = await _dio.fetch(opts);
+              return handler.resolve(response);
+            }
+          } catch (_) {
+            // Refresh failed, clear tokens
+            clearTokens();
+          }
+        }
+        return handler.next(error);
+      },
+    ));
+  }
+  
+  Future<bool> _refreshAccessToken() async {
+    if (_refreshToken == null) return false;
+    
+    try {
+      final response = await _dio.post(
+        '/auth/refresh',
+        data: {'refreshToken': _refreshToken},
+        options: Options(headers: {
+          'Authorization': null, // Don't use expired access token
+        }),
+      );
+      
+      final data = ApiResponse.fromJson(response.data);
+      if (data.isSuccess && data.data != null) {
+        _accessToken = data.data['accessToken'];
+        if (data.data['refreshToken'] != null) {
+          _refreshToken = data.data['refreshToken'];
+        }
+        return true;
+      }
+    } catch (_) {}
+    
+    return false;
+  }
+  
+  /// Make a GET request
+  Future<ApiResponse<T>> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) async {
+    try {
+      final response = await _dio.get(path, queryParameters: queryParameters);
+      return ApiResponse.fromJson(response.data, fromJson: fromJson);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+  
+  /// Make a POST request
+  Future<ApiResponse<T>> post<T>(
+    String path, {
+    dynamic data,
+    T Function(dynamic)? fromJson,
+  }) async {
+    try {
+      final response = await _dio.post(path, data: data);
+      return ApiResponse.fromJson(response.data, fromJson: fromJson);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+  
+  /// Make a PATCH request
+  Future<ApiResponse<T>> patch<T>(
+    String path, {
+    dynamic data,
+    T Function(dynamic)? fromJson,
+  }) async {
+    try {
+      final response = await _dio.patch(path, data: data);
+      return ApiResponse.fromJson(response.data, fromJson: fromJson);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+  
+  /// Make a DELETE request
+  Future<ApiResponse<T>> delete<T>(
+    String path, {
+    T Function(dynamic)? fromJson,
+  }) async {
+    try {
+      final response = await _dio.delete(path);
+      return ApiResponse.fromJson(response.data, fromJson: fromJson);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+  
+  ApiError _handleError(DioException e) {
+    if (e.response?.data != null) {
+      try {
+        final data = e.response!.data;
+        if (data is Map<String, dynamic> && data['error'] != null) {
+          return ApiError(
+            code: data['error']['code'] ?? 'UNKNOWN_ERROR',
+            message: data['error']['message'] ?? 'An error occurred',
+            statusCode: e.response?.statusCode ?? 500,
+            details: data['error']['details'],
+          );
+        }
+      } catch (_) {}
+    }
+    
+    return ApiError(
+      code: 'NETWORK_ERROR',
+      message: e.message ?? 'Network error occurred',
+      statusCode: e.response?.statusCode ?? 0,
+    );
+  }
+}

@@ -325,6 +325,16 @@ export async function generateProject(
   const metadataFile = await generateMetadata(ir);
   files.push(metadataFile);
 
+  // Generate API Reference documentation for frontend developers
+  const apiReferenceFile = await generateApiReference(ir);
+  files.push(apiReferenceFile);
+
+  // Generate Dart/Flutter SDK when auth is enabled
+  if (ir.auth?.enabled) {
+    const dartSdkFiles = await generateDartSdk(ir);
+    files.push(...dartSdkFiles);
+  }
+
   return files;
 }
 
@@ -482,6 +492,11 @@ async function generateAuthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
     {
       template: "auth/dtos/reset-password.dto.njk",
       output: "src/modules/auth/dtos/reset-password.dto.ts",
+      parser: "typescript",
+    },
+    {
+      template: "auth/dtos/auth-response.dto.njk",
+      output: "src/modules/auth/dtos/auth-response.dto.ts",
       parser: "typescript",
     },
     {
@@ -1296,6 +1311,77 @@ async function generateAdminUIFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
       files.push({ path: output, content });
     } catch (error) {
       console.error(`Error generating admin UI file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate API Reference documentation for frontend developers
+ * Includes Flutter and React code examples
+ */
+async function generateApiReference(ir: ProjectIR): Promise<GeneratedFile> {
+  const rendered = renderTemplate("API_REFERENCE.md.njk", ir);
+  return {
+    path: "API_REFERENCE.md",
+    content: rendered,
+  };
+}
+
+/**
+ * Generate Dart/Flutter SDK for frontend developers
+ * Only generated when Authentication is enabled
+ */
+async function generateDartSdk(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  const dartSdkTemplates = [
+    // Main export file
+    {
+      template: "sdk/dart/lib/sdk.dart.njk",
+      output: "sdk/dart/lib/sdk.dart",
+    },
+    // API Client
+    {
+      template: "sdk/dart/lib/src/api_client.dart.njk",
+      output: "sdk/dart/lib/src/api_client.dart",
+    },
+    // Models
+    {
+      template: "sdk/dart/lib/src/models/api_response.dart.njk",
+      output: "sdk/dart/lib/src/models/api_response.dart",
+    },
+    {
+      template: "sdk/dart/lib/src/models/api_error.dart.njk",
+      output: "sdk/dart/lib/src/models/api_error.dart",
+    },
+    {
+      template: "sdk/dart/lib/src/models/auth_models.dart.njk",
+      output: "sdk/dart/lib/src/models/auth_models.dart",
+    },
+    // Services
+    {
+      template: "sdk/dart/lib/src/services/auth_service.dart.njk",
+      output: "sdk/dart/lib/src/services/auth_service.dart",
+    },
+    // Package files
+    {
+      template: "sdk/dart/pubspec.yaml.njk",
+      output: "sdk/dart/pubspec.yaml",
+    },
+    {
+      template: "sdk/dart/README.md.njk",
+      output: "sdk/dart/README.md",
+    },
+  ];
+
+  for (const { template, output } of dartSdkTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      files.push({ path: output, content: rendered });
+    } catch (error) {
+      console.error(`Error generating Dart SDK file ${output}:`, error);
     }
   }
 

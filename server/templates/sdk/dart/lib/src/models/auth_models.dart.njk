@@ -1,0 +1,116 @@
+/// Authentication models for {{ project.name }}
+
+/// User model returned from auth endpoints
+class User {
+  final String id;
+  final String email;
+  final String firstName;
+  final String lastName;
+  final List<String> roles;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  
+  User({
+    required this.id,
+    required this.email,
+    required this.firstName,
+    required this.lastName,
+    required this.roles,
+    this.createdAt,
+    this.updatedAt,
+  });
+  
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'] ?? '',
+      email: json['email'] ?? '',
+      firstName: json['firstName'] ?? '',
+      lastName: json['lastName'] ?? '',
+      roles: (json['roles'] as List<dynamic>?)?.cast<String>() ?? [],
+      createdAt: json['createdAt'] != null 
+          ? DateTime.tryParse(json['createdAt']) 
+          : null,
+      updatedAt: json['updatedAt'] != null 
+          ? DateTime.tryParse(json['updatedAt']) 
+          : null,
+    );
+  }
+  
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'email': email,
+    'firstName': firstName,
+    'lastName': lastName,
+    'roles': roles,
+    'createdAt': createdAt?.toIso8601String(),
+    'updatedAt': updatedAt?.toIso8601String(),
+  };
+  
+  /// Check if user has a specific role
+  bool hasRole(String role) => roles.contains(role);
+  
+  /// Check if user is an admin
+  bool get isAdmin => roles.contains('Admin');
+  
+  /// Get full name
+  String get fullName => '$firstName $lastName'.trim();
+}
+
+/// Authentication response from login/register
+class AuthResult {
+  final String accessToken;
+  final String refreshToken;
+  final User user;
+  
+  AuthResult({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.user,
+  });
+  
+  factory AuthResult.fromJson(Map<String, dynamic> json) {
+    return AuthResult(
+      accessToken: json['accessToken'] ?? '',
+      refreshToken: json['refreshToken'] ?? '',
+      user: User.fromJson(json['user'] ?? {}),
+    );
+  }
+}
+
+/// Login credentials
+class LoginCredentials {
+  final String email;
+  final String password;
+  
+  LoginCredentials({
+    required this.email,
+    required this.password,
+  });
+  
+  Map<String, dynamic> toJson() => {
+    'email': email,
+    'password': password,
+  };
+}
+
+/// Registration data
+class RegisterData {
+  final String email;
+  final String password;
+  final String firstName;
+  final String lastName;
+  
+  RegisterData({
+    required this.email,
+    required this.password,
+    required this.firstName,
+    required this.lastName,
+  });
+  
+  Map<String, dynamic> toJson() => {
+    'email': email,
+    'password': password,
+    'firstName': firstName,
+    'lastName': lastName,
+  };
+}

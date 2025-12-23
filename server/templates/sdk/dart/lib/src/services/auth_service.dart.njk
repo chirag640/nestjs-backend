@@ -1,0 +1,155 @@
+import '../api_client.dart';
+import '../models/auth_models.dart';
+import '../models/api_error.dart';
+
+/// Authentication service for {{ project.name }}
+/// 
+/// Handles login, registration, token refresh, and logout.
+/// 
+/// ## Usage
+/// ```dart
+/// final api = ApiClient(baseUrl: 'http://localhost:3000');
+/// 
+/// // Login
+/// try {
+///   final result = await api.auth.login('email@example.com', 'password123');
+///   print('Welcome, ${result.user.firstName}!');
+/// } on ApiError catch (e) {
+///   if (e.isInvalidCredentials) {
+///     showError('Wrong email or password');
+///   }
+/// }
+/// 
+/// // Register
+/// final result = await api.auth.register(
+///   email: 'new@example.com',
+///   password: 'SecurePass123!',
+///   firstName: 'John',
+///   lastName: 'Doe',
+/// );
+/// 
+/// // Get profile
+/// final user = await api.auth.getProfile();
+/// 
+/// // Logout
+/// await api.auth.logout();
+/// ```
+class AuthService {
+  final ApiClient _client;
+  
+  AuthService(this._client);
+  
+  /// Login with email and password
+  /// 
+  /// Returns [AuthResult] with access token, refresh token, and user data.
+  /// 
+  /// Throws [ApiError] with code:
+  /// - `AUTH_1001`: Invalid credentials
+  /// - `AUTH_1008`: Account locked (too many attempts)
+  Future<AuthResult> login(String email, String password) async {
+    final response = await _client.post(
+      '/auth/login',
+      data: {'email': email, 'password': password},
+      fromJson: (data) => AuthResult.fromJson(data),
+    );
+    
+    if (response.isSuccess && response.data != null) {
+      _client.setTokens(
+        accessToken: response.data!.accessToken,
+        refreshToken: response.data!.refreshToken,
+      );
+      return response.data!;
+    }
+    
+    throw ApiError(
+      code: 'AUTH_1001',
+      message: 'Login failed',
+      statusCode: 401,
+    );
+  }
+  
+  /// Register a new user
+  /// 
+  /// Returns [AuthResult] with tokens and user data.
+  /// 
+  /// Throws [ApiError] with code:
+  /// - `VAL_4001`: Validation failed
+  /// - `USER_2002`: Email already exists
+  Future<AuthResult> register({
+    required String email,
+    required String password,
+    required String firstName,
+    required String lastName,
+  }) async {
+    final response = await _client.post(
+      '/auth/register',
+      data: {
+        'email': email,
+        'password': password,
+        'firstName': firstName,
+        'lastName': lastName,
+      },
+      fromJson: (data) => AuthResult.fromJson(data),
+    );
+    
+    if (response.isSuccess && response.data != null) {
+      _client.setTokens(
+        accessToken: response.data!.accessToken,
+        refreshToken: response.data!.refreshToken,
+      );
+      return response.data!;
+    }
+    
+    throw ApiError(
+      code: 'AUTH_ERROR',
+      message: 'Registration failed',
+      statusCode: 400,
+    );
+  }
+  
+  /// Get current user's profile
+  /// 
+  /// Requires authentication.
+  /// 
+  /// Throws [ApiError] with code:
+  /// - `AUTH_1002`: Token expired (auto-refresh will be attempted)
+  /// - `AUTH_1004`: Not authenticated
+  Future<User> getProfile() async {
+    final response = await _client.get(
+      '/auth/profile',
+      fromJson: (data) => User.fromJson(data),
+    );
+    
+    if (response.isSuccess && response.data != null) {
+      return response.data!;
+    }
+    
+    throw ApiError(
+      code: 'USER_2001',
+      message: 'Failed to get profile',
+      statusCode: 404,
+    );
+  }
+  
+  /// Logout current user
+  /// 
+  /// Clears tokens and invalidates refresh token on server.
+  Future<void> logout() async {
+    if (_client.refreshToken == null) {
+      _client.clearTokens();
+      return;
+    }
+    
+    try {
+      await _client.post(
+        '/auth/logout',
+        data: {'refreshToken': _client.refreshToken},
+      );
+    } finally {
+      _client.clearTokens();
+    }
+  }
+  
+  /// Check if user is currently authenticated
+  bool get isAuthenticated => _client.isAuthenticated;
+}

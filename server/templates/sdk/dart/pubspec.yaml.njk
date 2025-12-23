@@ -1,0 +1,14 @@
+name: {{ project.name | lower | replace(' ', '_') }}_sdk
+description: Auto-generated Dart SDK for {{ project.name }} API
+version: 1.0.0
+homepage: https://github.com/your-org/{{ project.name | lower | replace(' ', '-') }}
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  dio: ^5.4.0
+
+dev_dependencies:
+  test: ^1.24.0
+  lints: ^3.0.0

@@ -1,0 +1,56 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { UserOutputDto } from '../../user/dtos/user-output.dto';
+
+/**
+ * Authentication Response DTO
+ * 
+ * Returned by login and register endpoints.
+ * Frontend developers: This is wrapped in the standard ApiResponse format:
+ * 
+ * {
+ *   "status": "success",
+ *   "statusCode": 200,
+ *   "data": {
+ *     "accessToken": "eyJ...",
+ *     "refreshToken": "eyJ...",
+ *     "user": { ... }
+ *   },
+ *   "meta": { ... }
+ * }
+ */
+export class AuthResponseDto {
+  @ApiProperty({
+    description: 'JWT access token for authenticating API requests',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  accessToken: string;
+
+  @ApiProperty({
+    description: 'JWT refresh token for obtaining new access tokens',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  refreshToken: string;
+
+  @ApiProperty({
+    description: 'Authenticated user details',
+    type: () => UserOutputDto,
+  })
+  user: UserOutputDto;
+}
+
+/**
+ * Token Refresh Response DTO
+ */
+export class TokenRefreshResponseDto {
+  @ApiProperty({
+    description: 'New JWT access token',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  accessToken: string;
+
+  @ApiProperty({
+    description: 'New JWT refresh token (if token rotation is enabled)',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  refreshToken: string;
+}

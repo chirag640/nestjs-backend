@@ -6,11 +6,38 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 
-export interface SuccessResponse<T> {
-  success: true;
-  data: T;
+/**
+ * Standardized API Response Format
+ * 
+ * This format is consistent for ALL endpoints, making frontend integration simple:
+ * 
+ * SUCCESS:
+ * {
+ *   "status": "success",
+ *   "statusCode": 200,
+ *   "data": { ... },
+ *   "meta": { "timestamp": "...", "requestId": "..." }
+ * }
+ * 
+ * ERRORS use the same structure (see GlobalExceptionFilter):
+ * {
+ *   "status": "error",
+ *   "statusCode": 400,
+ *   "error": { "code": "VAL_4001", "message": "..." },
+ *   "meta": { ... }
+ * }
+ */
+export interface ApiResponse<T> {
+  status: 'success' | 'error';
+  statusCode: number;
+  data?: T;
+  error?: {
+    code: string;
+    message: string | string[];
+    details?: any;
+  };
   meta: {
     timestamp: string;
     requestId?: string;
@@ -23,20 +50,25 @@ export interface SuccessResponse<T> {
   };
 }
 
+// Re-export for backward compatibility
+export type SuccessResponse<T> = ApiResponse<T>;
+
 @Injectable()
 export class SuccessResponseInterceptor<T>
-  implements NestInterceptor<T, SuccessResponse<T>>
+  implements NestInterceptor<T, ApiResponse<T>>
 {
   intercept(
     context: ExecutionContext,
     next: CallHandler,
-  ): Observable<SuccessResponse<T>> {
+  ): Observable<ApiResponse<T>> {
     const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse<Response>();
     const requestId = request.headers['x-request-id'] as string;
 
     return next.handle().pipe(
       map((data) => {
         const timestamp = new Date().toISOString();
+        const statusCode = response.statusCode;
 
         // Handle pagination metadata if present
         let pagination;
@@ -46,7 +78,8 @@ export class SuccessResponseInterceptor<T>
         }
 
         return {
-          success: true,
+          status: 'success' as const,
+          statusCode,
           data,
           meta: {
             timestamp,

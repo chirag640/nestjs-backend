@@ -1,0 +1,112 @@
+/// API Error model with standardized error codes
+/// 
+/// Error codes follow this pattern:
+/// - AUTH_1xxx: Authentication errors
+/// - USER_2xxx: User-related errors
+/// - AUTHZ_3xxx: Authorization errors
+/// - VAL_4xxx: Validation errors
+/// - RES_5xxx: Resource errors
+/// - DB_6xxx: Database errors
+/// - SRV_7xxx: Server errors
+/// - RATE_8xxx: Rate limiting errors
+class ApiError implements Exception {
+  final String code;
+  final String message;
+  final int statusCode;
+  final dynamic details;
+  
+  ApiError({
+    required this.code,
+    required this.message,
+    required this.statusCode,
+    this.details,
+  });
+  
+  /// Check if error is an authentication error
+  bool get isAuthError => code.startsWith('AUTH_');
+  
+  /// Check if error is a validation error
+  bool get isValidationError => code.startsWith('VAL_');
+  
+  /// Check if error is a resource not found error
+  bool get isNotFoundError => code == 'RES_5001';
+  
+  /// Check if error is a rate limit error
+  bool get isRateLimitError => code.startsWith('RATE_');
+  
+  /// Check if this error is retryable
+  bool get isRetryable => const [
+    'SRV_7002', // Service unavailable
+    'SRV_7003', // Request timeout
+    'RATE_8001', // Rate limit exceeded
+  ].contains(code);
+  
+  /// Check if token is expired (should trigger refresh)
+  bool get isTokenExpired => code == 'AUTH_1002';
+  
+  /// Check if credentials are invalid
+  bool get isInvalidCredentials => code == 'AUTH_1001';
+  
+  /// Get validation error messages as list
+  List<String> get validationErrors {
+    if (details == null) return [message];
+    if (details is List) {
+      return (details as List).map((e) => e.toString()).toList();
+    }
+    if (message is List) {
+      return (message as List).map((e) => e.toString()).toList();
+    }
+    return [message];
+  }
+  
+  @override
+  String toString() => 'ApiError($code): $message';
+  
+  /// Create a user-friendly error message
+  String toUserMessage() {
+    switch (code) {
+      case 'AUTH_1001':
+        return 'Invalid email or password. Please try again.';
+      case 'AUTH_1002':
+        return 'Your session has expired. Please login again.';
+      case 'AUTH_1003':
+      case 'AUTH_1004':
+        return 'Authentication required. Please login.';
+      case 'VAL_4001':
+        return 'Please check your input and try again.';
+      case 'RES_5001':
+        return 'The requested item was not found.';
+      case 'RATE_8001':
+        return 'Too many requests. Please wait a moment.';
+      case 'SRV_7002':
+        return 'Service is temporarily unavailable. Please try again later.';
+      default:
+        return message;
+    }
+  }
+}
+
+/// Common error codes enum for type-safe comparisons
+class ErrorCodes {
+  static const String invalidCredentials = 'AUTH_1001';
+  static const String tokenExpired = 'AUTH_1002';
+  static const String tokenInvalid = 'AUTH_1003';
+  static const String tokenMissing = 'AUTH_1004';
+  static const String refreshTokenExpired = 'AUTH_1005';
+  static const String unauthorized = 'AUTH_1008';
+  
+  static const String userNotFound = 'USER_2001';
+  static const String userEmailDuplicate = 'USER_2002';
+  
+  static const String forbidden = 'AUTHZ_3001';
+  static const String insufficientPermissions = 'AUTHZ_3002';
+  
+  static const String validationFailed = 'VAL_4001';
+  static const String invalidInput = 'VAL_4002';
+  static const String invalidId = 'VAL_4003';
+  
+  static const String resourceNotFound = 'RES_5001';
+  static const String resourceConflict = 'RES_5003';
+  
+  static const String rateLimitExceeded = 'RATE_8001';
+}

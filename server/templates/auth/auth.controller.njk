@@ -12,13 +12,24 @@ import {
 import { Throttle } from '@nestjs/throttler';
 {% endif %}
 {% if features.swagger %}
-import { ApiTags } from '@nestjs/swagger';
+import { 
+  ApiTags, 
+  ApiOperation, 
+  ApiResponse, 
+  ApiBearerAuth,
+  ApiBody,
+} from '@nestjs/swagger';
 {% endif %}
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dtos/register.dto';
 import { LoginDto } from './dtos/login.dto';
 import { RefreshDto } from './dtos/refresh.dto';
+import { AuthResponseDto, TokenRefreshResponseDto } from './dtos/auth-response.dto';
+import { UserOutputDto } from '../user/dtos/user-output.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+{% if features.swagger %}
+import { ErrorResponseDto } from '../common/error-response.dto';
+{% endif %}
 
 {% if features.swagger %}
 @ApiTags('Authentication')
@@ -27,11 +38,48 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  {% if features.swagger %}
+  @ApiOperation({ 
+    summary: 'Register a new user',
+    description: 'Creates a new user account and returns authentication tokens. An email verification link will be sent.',
+  })
+  @ApiBody({ type: RegisterDto })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'User registered successfully',
+    type: AuthResponseDto,
+    schema: {
+      example: {
+        status: 'success',
+        statusCode: 201,
+        data: {
+          accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+          refreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+          user: {
+            id: '507f1f77bcf86cd799439011',
+            email: 'user@example.com',
+            firstName: 'John',
+            lastName: 'Doe',
+            roles: ['User'],
+          },
+        },
+        meta: { timestamp: '2024-01-01T00:00:00.000Z' },
+      },
+    },
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Validation failed - invalid input data',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ 
+    status: 409, 
+    description: 'User with this email already exists',
+    type: ErrorResponseDto,
+  })
+  {% endif %}
   {% if features.rateLimit %}
   // Stricter rate limiting for registration (3 attempts per 5 minutes)
-  // NOTE: This syntax is for @nestjs/throttler v5+
-  // For v4: @Throttle([{ name: 'default', ttl: 300000, limit: 3 }])
-  // For v3: @Throttle(3, 300000)
   @Throttle({ default: { limit: 3, ttl: 300000 } })
   {% endif %}
   @Post('register')
@@ -40,6 +88,52 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ 
+    summary: 'Login with email and password',
+    description: 'Authenticates user credentials and returns JWT tokens. Account may be locked after 5 failed attempts.',
+  })
+  @ApiBody({ type: LoginDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Login successful',
+    type: AuthResponseDto,
+    schema: {
+      example: {
+        status: 'success',
+        statusCode: 200,
+        data: {
+          accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+          refreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+          user: {
+            id: '507f1f77bcf86cd799439011',
+            email: 'user@example.com',
+            firstName: 'John',
+            lastName: 'Doe',
+            roles: ['User'],
+          },
+        },
+        meta: { timestamp: '2024-01-01T00:00:00.000Z' },
+      },
+    },
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Invalid credentials or account locked',
+    type: ErrorResponseDto,
+    schema: {
+      example: {
+        status: 'error',
+        statusCode: 401,
+        error: {
+          code: 'AUTH_1001',
+          message: 'Invalid email or password',
+        },
+        meta: { timestamp: '2024-01-01T00:00:00.000Z', path: '/auth/login' },
+      },
+    },
+  })
+  {% endif %}
   {% if features.rateLimit %}
   // Stricter rate limiting for login (5 attempts per minute to prevent brute force)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
@@ -50,6 +144,23 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ 
+    summary: 'Refresh access token',
+    description: 'Exchange a valid refresh token for new access and refresh tokens.',
+  })
+  @ApiBody({ type: RefreshDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Tokens refreshed successfully',
+    type: TokenRefreshResponseDto,
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Invalid or expired refresh token',
+    type: ErrorResponseDto,
+  })
+  {% endif %}
   {% if features.rateLimit %}
   // Rate limit refresh token endpoint (5 attempts per minute)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
@@ -60,12 +171,39 @@ export class AuthController {
     return this.authService.refreshToken(dto.refreshToken);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ 
+    summary: 'Get current user profile',
+    description: 'Returns the authenticated user\'s profile information.',
+  })
+  @ApiBearerAuth()
+  @ApiResponse({ 
+    status: 200, 
+    description: 'User profile retrieved',
+    type: UserOutputDto,
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Missing or invalid authentication token',
+    type: ErrorResponseDto,
+  })
+  {% endif %}
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   async getProfile(@Request() req: any) {
     return this.authService.getProfile(req.user.userId);
   }
 
+  {% if features.swagger %}
+  @ApiOperation({ 
+    summary: 'Logout user',
+    description: 'Invalidates the refresh token. Access token remains valid until expiry unless caching is enabled.',
+  })
+  @ApiBearerAuth()
+  @ApiBody({ type: RefreshDto })
+  @ApiResponse({ status: 204, description: 'Logged out successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid authentication', type: ErrorResponseDto })
+  {% endif %}
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -73,3 +211,4 @@ export class AuthController {
     await this.authService.logout(req.user.userId, dto.refreshToken);
   }
 }
+

@@ -1,0 +1,302 @@
+# {{ project.name }} - API Reference
+
+> Auto-generated API documentation for frontend developers
+
+## Quick Start
+
+### Base URL
+```
+http://localhost:3000
+```
+
+### Response Format
+
+**All API responses follow this consistent format:**
+
+```json
+// SUCCESS
+{
+  "status": "success",
+  "statusCode": 200,
+  "data": { /* response data */ },
+  "meta": {
+    "timestamp": "2024-01-01T00:00:00.000Z",
+    "requestId": "abc-123"
+  }
+}
+
+// ERROR
+{
+  "status": "error",
+  "statusCode": 400,
+  "error": {
+    "code": "VAL_4001",
+    "message": "Validation failed"
+  },
+  "meta": {
+    "timestamp": "...",
+    "requestId": "...",
+    "path": "/api/endpoint"
+  }
+}
+```
+
+---
+
+## Authentication
+
+### Login
+```
+POST /auth/login
+```
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "YourPassword123!"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "statusCode": 200,
+  "data": {
+    "accessToken": "eyJhbG...",
+    "refreshToken": "eyJhbG...",
+    "user": {
+      "id": "507f1...",
+      "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "roles": ["User"]
+    }
+  }
+}
+```
+
+### Refresh Token
+```
+POST /auth/refresh
+```
+
+**Request:**
+```json
+{
+  "refreshToken": "eyJhbG..."
+}
+```
+
+---
+
+## Error Codes Reference
+
+| Code | HTTP | Description | Solution |
+|------|------|-------------|----------|
+| AUTH_1001 | 401 | Invalid credentials | Check email/password |
+| AUTH_1002 | 401 | Token expired | Call /auth/refresh |
+| AUTH_1003 | 401 | Invalid token | Login again |
+| VAL_4001 | 400 | Validation failed | Check request body |
+| RES_5001 | 404 | Resource not found | Verify ID exists |
+| RATE_8001 | 429 | Rate limit | Wait and retry |
+
+---
+
+## Frontend Integration Examples
+
+### Flutter (Dart + Dio)
+
+```dart
+import 'package:dio/dio.dart';
+
+class ApiClient {
+  final Dio _dio;
+  String? _accessToken;
+  String? _refreshToken;
+
+  ApiClient({required String baseUrl}) : _dio = Dio(BaseOptions(baseUrl: baseUrl)) {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (_accessToken != null) {
+          options.headers['Authorization'] = 'Bearer $_accessToken';
+        }
+        return handler.next(options);
+      },
+      onError: (error, handler) async {
+        if (error.response?.statusCode == 401 && _refreshToken != null) {
+          // Auto refresh token
+          try {
+            final tokens = await refreshToken();
+            _accessToken = tokens['accessToken'];
+            // Retry failed request
+            final opts = error.requestOptions;
+            opts.headers['Authorization'] = 'Bearer $_accessToken';
+            final response = await _dio.fetch(opts);
+            return handler.resolve(response);
+          } catch (e) {
+            // Refresh failed, redirect to login
+          }
+        }
+        return handler.next(error);
+      },
+    ));
+  }
+
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    final response = await _dio.post('/auth/login', data: {
+      'email': email,
+      'password': password,
+    });
+    
+    if (response.data['status'] == 'success') {
+      _accessToken = response.data['data']['accessToken'];
+      _refreshToken = response.data['data']['refreshToken'];
+      return response.data['data'];
+    }
+    
+    throw ApiException(
+      code: response.data['error']['code'],
+      message: response.data['error']['message'],
+    );
+  }
+
+  Future<Map<String, dynamic>> refreshToken() async {
+    final response = await _dio.post('/auth/refresh', data: {
+      'refreshToken': _refreshToken,
+    });
+    return response.data['data'];
+  }
+}
+
+class ApiException implements Exception {
+  final String code;
+  final String message;
+  
+  ApiException({required this.code, required this.message});
+  
+  bool get isTokenExpired => code == 'AUTH_1002';
+  bool get isValidationError => code.startsWith('VAL_');
+}
+```
+
+### React (TypeScript + Axios)
+
+```typescript
+import axios, { AxiosInstance } from 'axios';
+
+interface ApiResponse<T> {
+  status: 'success' | 'error';
+  statusCode: number;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+class ApiClient {
+  private axios: AxiosInstance;
+  private accessToken: string | null = null;
+
+  constructor(baseURL: string) {
+    this.axios = axios.create({ baseURL });
+    
+    this.axios.interceptors.request.use((config) => {
+      if (this.accessToken) {
+        config.headers.Authorization = `Bearer ${this.accessToken}`;
+      }
+      return config;
+    });
+
+    this.axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        if (error.response?.data?.error?.code === 'AUTH_1002') {
+          // Token expired - try refresh
+          await this.refreshToken();
+          return this.axios.request(error.config);
+        }
+        throw error;
+      }
+    );
+  }
+
+  async login(email: string, password: string) {
+    const { data } = await this.axios.post<ApiResponse<AuthData>>('/auth/login', {
+      email,
+      password,
+    });
+    
+    if (data.status === 'success' && data.data) {
+      this.accessToken = data.data.accessToken;
+      localStorage.setItem('refreshToken', data.data.refreshToken);
+      return data.data;
+    }
+    
+    throw new ApiError(data.error!);
+  }
+
+  async refreshToken() {
+    const refreshToken = localStorage.getItem('refreshToken');
+    const { data } = await this.axios.post('/auth/refresh', { refreshToken });
+    this.accessToken = data.data.accessToken;
+  }
+}
+
+interface AuthData {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    roles: string[];
+  };
+}
+
+class ApiError extends Error {
+  code: string;
+  
+  constructor(error: { code: string; message: string }) {
+    super(error.message);
+    this.code = error.code;
+  }
+}
+
+export const api = new ApiClient('{{ 'http://localhost:3000' }}');
+```
+
+---
+
+## Rate Limiting
+
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| POST /auth/login | 5 | 1 minute |
+| POST /auth/register | 3 | 5 minutes |
+| POST /auth/refresh | 5 | 1 minute |
+| Other endpoints | 100-200 | 1 minute |
+
+When rate limited, you'll receive:
+```json
+{
+  "status": "error",
+  "statusCode": 429,
+  "error": {
+    "code": "RATE_8001",
+    "message": "Rate limit exceeded, please try again later"
+  }
+}
+```
+
+---
+
+## Swagger Documentation
+
+Full interactive API documentation available at:
+```
+http://localhost:3000/api
+```

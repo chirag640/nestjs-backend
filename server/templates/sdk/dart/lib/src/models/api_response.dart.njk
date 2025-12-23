@@ -1,0 +1,106 @@
+/// Standardized API Response wrapper
+/// 
+/// All API responses follow this structure:
+/// ```json
+/// {
+///   "status": "success" | "error",
+///   "statusCode": 200,
+///   "data": { ... },
+///   "meta": { "timestamp": "...", "requestId": "..." }
+/// }
+/// ```
+class ApiResponse<T> {
+  final String status;
+  final int statusCode;
+  final T? data;
+  final ApiMeta meta;
+  final ApiPagination? pagination;
+  
+  ApiResponse({
+    required this.status,
+    required this.statusCode,
+    this.data,
+    required this.meta,
+    this.pagination,
+  });
+  
+  /// Whether the request was successful
+  bool get isSuccess => status == 'success';
+  
+  /// Whether the request failed
+  bool get isError => status == 'error';
+  
+  factory ApiResponse.fromJson(
+    Map<String, dynamic> json, {
+    T Function(dynamic)? fromJson,
+  }) {
+    final metaJson = json['meta'] as Map<String, dynamic>? ?? {};
+    final paginationJson = metaJson['pagination'] as Map<String, dynamic>?;
+    
+    return ApiResponse<T>(
+      status: json['status'] ?? 'unknown',
+      statusCode: json['statusCode'] ?? 0,
+      data: json['data'] != null && fromJson != null 
+          ? fromJson(json['data']) 
+          : json['data'] as T?,
+      meta: ApiMeta.fromJson(metaJson),
+      pagination: paginationJson != null 
+          ? ApiPagination.fromJson(paginationJson) 
+          : null,
+    );
+  }
+}
+
+/// API Response metadata
+class ApiMeta {
+  final String timestamp;
+  final String? requestId;
+  final String? path;
+  
+  ApiMeta({
+    required this.timestamp,
+    this.requestId,
+    this.path,
+  });
+  
+  factory ApiMeta.fromJson(Map<String, dynamic> json) {
+    return ApiMeta(
+      timestamp: json['timestamp'] ?? DateTime.now().toIso8601String(),
+      requestId: json['requestId'],
+      path: json['path'],
+    );
+  }
+}
+
+/// Pagination metadata for list responses
+class ApiPagination {
+  final int page;
+  final int limit;
+  final int total;
+  final int totalPages;
+  
+  ApiPagination({
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.totalPages,
+  });
+  
+  /// Whether there are more pages
+  bool get hasMore => page < totalPages;
+  
+  /// Whether this is the first page
+  bool get isFirst => page == 1;
+  
+  /// Whether this is the last page
+  bool get isLast => page >= totalPages;
+  
+  factory ApiPagination.fromJson(Map<String, dynamic> json) {
+    return ApiPagination(
+      page: json['page'] ?? 1,
+      limit: json['limit'] ?? 10,
+      total: json['total'] ?? 0,
+      totalPages: json['totalPages'] ?? 1,
+    );
+  }
+}
