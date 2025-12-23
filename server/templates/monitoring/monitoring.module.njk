@@ -1,0 +1,21 @@
+import { Module, Global } from '@nestjs/common';
+import { SentryService } from './sentry.service';
+import { SentryInterceptor } from './sentry.interceptor';
+
+/**
+ * Monitoring Module
+ * 
+ * Provides error tracking and performance monitoring.
+ * 
+ * ## Features:
+ * - Sentry error tracking
+ * - Performance monitoring
+ * - User context tracking
+ * - Breadcrumbs for debugging
+ */
+@Global()
+@Module({
+  providers: [SentryService, SentryInterceptor],
+  exports: [SentryService, SentryInterceptor],
+})
+export class MonitoringModule {}

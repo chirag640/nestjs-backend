@@ -1,0 +1,291 @@
+# {{ project.name }} - Deployment Guide
+
+Comprehensive guide for deploying your NestJS API to various platforms.
+
+## Quick Start
+
+Choose your preferred platform:
+
+| Platform | Best For | Config File |
+|----------|----------|-------------|
+| **Render** | Easy, free tier | `render.yaml` |
+| **Railway** | Developer-friendly | `railway.toml` |
+| **Fly.io** | Edge deployment | `fly.toml` |
+| **Heroku** | Simple PaaS | `Procfile` |
+| **DigitalOcean** | Managed containers | `.do/app.yaml` |
+| **AWS ECS** | Enterprise scale | `ecs-task-definition.json` |
+| **Azure** | Enterprise, .NET shops | `azure-pipelines.yml` |
+| **GCP Cloud Run** | Serverless containers | `cloudbuild.yaml` |
+| **VPS/Self-hosted** | Full control | `Dockerfile` + `nginx.conf` |
+
+---
+
+## 🚀 One-Click Deployments
+
+### Render
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+1. Connect your GitHub repo
+2. Render auto-detects `render.yaml`
+3. Set secret environment variables
+4. Done!
+
+### Railway
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new)
+
+1. Click deploy button
+2. Connect GitHub
+3. Railway reads `railway.toml`
+4. Add environment variables
+
+### Heroku
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
+
+1. Create Heroku account
+2. Click deploy button
+3. Configure addons (PostgreSQL/MongoDB, Redis)
+
+---
+
+## 🐳 Docker Deployment
+
+### Build & Run Locally
+```bash
+# Build image
+docker build -t {{ project.name | lower | replace(' ', '-') }} .
+
+# Run container
+docker run -p 3000:3000 \
+  -e NODE_ENV=production \
+  -e JWT_SECRET=your-secret \
+  -e DATABASE_URL=your-db-url \
+  {{ project.name | lower | replace(' ', '-') }}
+```
+
+### Docker Compose (Full Stack)
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Stop
+docker-compose down
+```
+
+---
+
+## ☁️ Cloud Platform Guides
+
+### AWS Elastic Beanstalk
+```bash
+# Install EB CLI
+pip install awsebcli
+
+# Initialize
+eb init {{ project.name | lower | replace(' ', '-') }} --platform node.js --region us-east-1
+
+# Create environment
+eb create production --single
+
+# Deploy
+eb deploy
+
+# Set environment variables
+eb setenv JWT_SECRET=xxx DATABASE_URL=xxx
+```
+
+### AWS ECS Fargate
+```bash
+# Create ECR repo
+aws ecr create-repository --repository-name {{ project.name | lower | replace(' ', '-') }}
+
+# Build & push image
+docker build -t {{ project.name | lower | replace(' ', '-') }} .
+docker tag {{ project.name | lower | replace(' ', '-') }}:latest ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/{{ project.name | lower | replace(' ', '-') }}:latest
+docker push ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/{{ project.name | lower | replace(' ', '-') }}:latest
+
+# Register task definition
+aws ecs register-task-definition --cli-input-json file://ecs-task-definition.json
+
+# Create service (requires ALB, VPC setup)
+aws ecs create-service --cluster my-cluster --service-name {{ project.name | lower | replace(' ', '-') }} --task-definition {{ project.name | lower | replace(' ', '-') }}
+```
+
+### Azure App Service
+```bash
+# Login
+az login
+
+# Create resource group
+az group create --name {{ project.name | lower | replace(' ', '-') }}-rg --location eastus
+
+# Create App Service plan
+az appservice plan create --name {{ project.name | lower | replace(' ', '-') }}-plan --resource-group {{ project.name | lower | replace(' ', '-') }}-rg --sku B1 --is-linux
+
+# Create web app
+az webapp create --resource-group {{ project.name | lower | replace(' ', '-') }}-rg --plan {{ project.name | lower | replace(' ', '-') }}-plan --name {{ project.name | lower | replace(' ', '-') }} --runtime "NODE:20-lts"
+
+# Configure
+az webapp config appsettings set --resource-group {{ project.name | lower | replace(' ', '-') }}-rg --name {{ project.name | lower | replace(' ', '-') }} --settings NODE_ENV=production JWT_SECRET=xxx
+```
+
+### Google Cloud Run
+```bash
+# Login
+gcloud auth login
+
+# Build & deploy
+gcloud run deploy {{ project.name | lower | replace(' ', '-') }} \
+  --source . \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars NODE_ENV=production \
+  --set-secrets JWT_SECRET=jwt-secret:latest
+```
+
+### Fly.io
+```bash
+# Install flyctl
+curl -L https://fly.io/install.sh | sh
+
+# Login
+fly auth login
+
+# Launch
+fly launch
+
+# Deploy
+fly deploy
+
+# Set secrets
+fly secrets set JWT_SECRET=xxx DATABASE_URL=xxx
+```
+
+### DigitalOcean App Platform
+```bash
+# Install doctl
+brew install doctl  # macOS
+
+# Auth
+doctl auth init
+
+# Create app from spec
+doctl apps create --spec .do/app.yaml
+
+# Update app
+doctl apps update APP_ID --spec .do/app.yaml
+```
+
+---
+
+## 🖥️ VPS Deployment (Self-Hosted)
+
+### Ubuntu Server Setup
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install PM2
+sudo npm install -g pm2
+
+# Clone your repo
+git clone https://github.com/your-username/{{ project.name | lower | replace(' ', '-') }}.git
+cd {{ project.name | lower | replace(' ', '-') }}
+
+# Install & build
+npm ci
+npm run build
+
+# Start with PM2
+pm2 start ecosystem.config.js --env production
+pm2 save
+pm2 startup
+```
+
+### Nginx Setup
+```bash
+# Install Nginx
+sudo apt install nginx
+
+# Copy config
+sudo cp nginx.conf /etc/nginx/sites-available/{{ project.name | lower | replace(' ', '-') }}
+sudo ln -s /etc/nginx/sites-available/{{ project.name | lower | replace(' ', '-') }} /etc/nginx/sites-enabled/
+
+# Test & reload
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### SSL with Let's Encrypt
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get certificate
+sudo certbot --nginx -d {{ project.domain | default('api.example.com') }}
+
+# Auto-renewal is automatic via systemd timer
+```
+
+---
+
+## 🔐 Environment Variables
+
+Copy and customize for your platform:
+
+```env
+# Core
+NODE_ENV=production
+PORT=3000
+
+# Database
+{% if database.type === 'MongoDB' %}
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/{{ project.name | lower }}
+{% else %}
+DATABASE_URL=postgresql://user:pass@host:5432/{{ project.name | lower }}
+{% endif %}
+
+# Auth
+JWT_SECRET=generate-a-256-bit-secret-key
+JWT_REFRESH_SECRET=generate-another-256-bit-secret-key
+JWT_EXPIRY=15m
+JWT_REFRESH_EXPIRY=7d
+
+# Redis (optional)
+REDIS_URL=redis://localhost:6379
+
+# Email (optional)
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your-email
+SMTP_PASS=your-password
+
+# Storage (optional)
+STORAGE_TYPE=s3
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-key
+AWS_SECRET_ACCESS_KEY=your-secret
+S3_BUCKET=your-bucket
+```
+
+---
+
+## 📊 Post-Deployment Checklist
+
+- [ ] Health check working (`/health/live`)
+- [ ] Database connected
+- [ ] Environment variables set
+- [ ] SSL/HTTPS enabled
+- [ ] CORS configured
+- [ ] Rate limiting enabled
+- [ ] Logging configured
+- [ ] Error tracking (Sentry) setup
+- [ ] Monitoring enabled
+- [ ] Backups configured

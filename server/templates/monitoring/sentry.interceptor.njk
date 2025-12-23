@@ -1,0 +1,65 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  HttpException,
+} from '@nestjs/common';
+import { Observable, throwError } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { SentryService } from './sentry.service';
+import { Request } from 'express';
+
+/**
+ * Sentry Interceptor
+ * 
+ * Automatically captures exceptions and sends to Sentry.
+ * Apply globally for complete error tracking.
+ */
+@Injectable()
+export class SentryInterceptor implements NestInterceptor {
+  constructor(private readonly sentry: SentryService) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest<Request>();
+    const user = (request as any).user;
+
+    // Set user context
+    if (user) {
+      this.sentry.setUser({
+        id: user.userId,
+        email: user.email,
+      });
+    }
+
+    // Add request breadcrumb
+    this.sentry.addBreadcrumb({
+      category: 'http',
+      message: `${request.method} ${request.url}`,
+      level: 'info',
+    });
+
+    return next.handle().pipe(
+      catchError((error) => {
+        // Don't report client errors (4xx)
+        if (error instanceof HttpException && error.getStatus() < 500) {
+          return throwError(() => error);
+        }
+
+        // Capture server errors (5xx)
+        this.sentry.captureException(error, {
+          url: request.url,
+          method: request.method,
+          params: request.params,
+          query: request.query,
+          headers: {
+            'user-agent': request.headers['user-agent'],
+            'x-request-id': request.headers['x-request-id'],
+          },
+        });
+
+        return throwError(() => error);
+      }),
+    );
+  }
+}

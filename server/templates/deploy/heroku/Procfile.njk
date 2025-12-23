@@ -1,0 +1,73 @@
+# {{ project.name }} - Heroku Deployment
+
+# Procfile - Heroku process types
+web: npm run start:prod
+
+---
+# app.json - Heroku App configuration (for Heroku Button / Review Apps)
+{
+  "name": "{{ project.name }}",
+  "description": "{{ project.description | default('NestJS API') }}",
+  "keywords": ["nestjs", "api", "typescript"],
+  "website": "https://github.com/your-username/{{ project.name | lower | replace(' ', '-') }}",
+  "repository": "https://github.com/your-username/{{ project.name | lower | replace(' ', '-') }}",
+  
+  "stack": "heroku-22",
+  
+  "env": {
+    "NODE_ENV": {
+      "value": "production"
+    },
+    "JWT_SECRET": {
+      "generator": "secret"
+    },
+    "JWT_REFRESH_SECRET": {
+      "generator": "secret"
+    }
+  },
+  
+  "addons": [
+    {% if database.type === 'MongoDB' %}
+    {
+      "plan": "mongolab:sandbox"
+    },
+    {% else %}
+    {
+      "plan": "heroku-postgresql:mini"
+    },
+    {% endif %}
+    {
+      "plan": "heroku-redis:mini"
+    }
+  ],
+  
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  
+  "scripts": {
+    "postdeploy": "npm run migration:run"
+  },
+  
+  "environments": {
+    "review": {
+      "addons": [
+        {% if database.type === 'MongoDB' %}
+        "mongolab:sandbox",
+        {% else %}
+        "heroku-postgresql:mini",
+        {% endif %}
+        "heroku-redis:mini"
+      ]
+    }
+  }
+}

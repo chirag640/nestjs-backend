@@ -1,0 +1,119 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as Sentry from '@sentry/node';
+import { ProfilingIntegration } from '@sentry/profiling-node';
+
+/**
+ * Sentry Error Tracking Service
+ * 
+ * Provides error monitoring and performance tracking.
+ * 
+ * ## Setup
+ * ```env
+ * SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+ * SENTRY_ENVIRONMENT=production
+ * SENTRY_TRACES_SAMPLE_RATE=0.1
+ * ```
+ */
+@Injectable()
+export class SentryService implements OnModuleInit {
+  private readonly logger = new Logger(SentryService.name);
+  private readonly enabled: boolean;
+
+  constructor(private readonly configService: ConfigService) {
+    this.enabled = !!configService.get('SENTRY_DSN');
+  }
+
+  onModuleInit() {
+    if (!this.enabled) {
+      this.logger.warn('Sentry is not configured (SENTRY_DSN missing)');
+      return;
+    }
+
+    Sentry.init({
+      dsn: this.configService.get('SENTRY_DSN'),
+      environment: this.configService.get('SENTRY_ENVIRONMENT', 'development'),
+      release: this.configService.get('APP_VERSION', '1.0.0'),
+      
+      // Performance monitoring
+      tracesSampleRate: parseFloat(
+        this.configService.get('SENTRY_TRACES_SAMPLE_RATE', '0.1')
+      ),
+      
+      // Profiling (optional)
+      profilesSampleRate: parseFloat(
+        this.configService.get('SENTRY_PROFILES_SAMPLE_RATE', '0.1')
+      ),
+      integrations: [new ProfilingIntegration()],
+      
+      // Before sending events
+      beforeSend(event, hint) {
+        // Filter out non-critical errors if needed
+        const error = hint.originalException;
+        
+        // Don't report validation errors
+        if (error && error['status'] === 400) {
+          return null;
+        }
+        
+        return event;
+      },
+    });
+
+    this.logger.log('Sentry initialized');
+  }
+
+  /**
+   * Capture exception
+   */
+  captureException(error: Error, context?: Record<string, any>): void {
+    if (!this.enabled) return;
+
+    Sentry.withScope((scope) => {
+      if (context) {
+        scope.setExtras(context);
+      }
+      Sentry.captureException(error);
+    });
+  }
+
+  /**
+   * Capture message
+   */
+  captureMessage(message: string, level: Sentry.SeverityLevel = 'info'): void {
+    if (!this.enabled) return;
+    Sentry.captureMessage(message, level);
+  }
+
+  /**
+   * Set user context
+   */
+  setUser(user: { id: string; email?: string; username?: string }): void {
+    if (!this.enabled) return;
+    Sentry.setUser(user);
+  }
+
+  /**
+   * Clear user context (on logout)
+   */
+  clearUser(): void {
+    if (!this.enabled) return;
+    Sentry.setUser(null);
+  }
+
+  /**
+   * Add breadcrumb (for debugging)
+   */
+  addBreadcrumb(breadcrumb: Sentry.Breadcrumb): void {
+    if (!this.enabled) return;
+    Sentry.addBreadcrumb(breadcrumb);
+  }
+
+  /**
+   * Start transaction for performance monitoring
+   */
+  startTransaction(name: string, op: string): Sentry.Transaction | null {
+    if (!this.enabled) return null;
+    return Sentry.startTransaction({ name, op });
+  }
+}

@@ -1,0 +1,82 @@
+# {{ project.name }} - Docker Compose for Local Development
+
+version: '3.8'
+
+services:
+  # API Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: {{ project.name | lower | replace(' ', '-') }}-api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      {% if database.type === 'MongoDB' %}
+      - MONGODB_URI=mongodb://mongo:27017/{{ project.name | lower | replace(' ', '_') }}
+      {% else %}
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/{{ project.name | lower | replace(' ', '_') }}
+      {% endif %}
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-your-super-secret-refresh-key}
+    depends_on:
+      {% if database.type === 'MongoDB' %}
+      - mongo
+      {% else %}
+      - postgres
+      {% endif %}
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  {% if database.type === 'MongoDB' %}
+  # MongoDB Database
+  mongo:
+    image: mongo:7
+    container_name: {{ project.name | lower | replace(' ', '-') }}-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+  {% else %}
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: {{ project.name | lower | replace(' ', '-') }}-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB={{ project.name | lower | replace(' ', '_') }}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  {% endif %}
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: {{ project.name | lower | replace(' ', '-') }}-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  {% if database.type === 'MongoDB' %}
+  mongo_data:
+  {% else %}
+  postgres_data:
+  {% endif %}
+  redis_data:

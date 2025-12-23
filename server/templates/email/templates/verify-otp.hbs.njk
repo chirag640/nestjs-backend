@@ -1,0 +1,15 @@
+{% raw %}{{!-- OTP Verification Email Template --}}
+<h2>Verify Your Email</h2>
+
+<p>Hi {{firstName}},</p>
+
+<p>Please use the following verification code to complete your action:</p>
+
+<div class="code-box">
+  <span class="code">{{otp}}</span>
+</div>
+
+<p class="muted">This code will expire in {{expiresIn}} minutes.</p>
+
+<p>If you didn't request this code, please ignore this email or contact support if you're concerned about your account security.</p>
+{% endraw %}

@@ -1,0 +1,59 @@
+# {{ project.name }} - AWS ECS Task Definition
+
+# task-definition.json for AWS ECS Fargate
+{
+  "family": "{{ project.name | lower | replace(' ', '-') }}",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  
+  "containerDefinitions": [
+    {
+      "name": "{{ project.name | lower | replace(' ', '-') }}-api",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/{{ project.name | lower | replace(' ', '-') }}:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "3000" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:{{ project.name | lower }}/database-url"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:{{ project.name | lower }}/jwt-secret"
+        },
+        {
+          "name": "JWT_REFRESH_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:{{ project.name | lower }}/jwt-refresh-secret"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000/health/live || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/{{ project.name | lower | replace(' ', '-') }}",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ]
+}
