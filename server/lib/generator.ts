@@ -339,6 +339,38 @@ export async function generateProject(
     files.push(...tsSdkFiles);
   }
 
+  // Generate Health & Metrics module
+  const healthFiles = await generateHealthFiles(ir);
+  files.push(...healthFiles);
+
+  // Generate Background Jobs module (when Redis/queue is enabled)
+  if (ir.features?.queues) {
+    const jobsFiles = await generateJobsFiles(ir);
+    files.push(...jobsFiles);
+  }
+
+  // Generate Notifications module (when push/sms enabled)
+  if ((ir.features as any)?.pushNotifications || (ir.features as any)?.sms) {
+    const notificationFiles = await generateNotificationFiles(ir);
+    files.push(...notificationFiles);
+  }
+
+  // Generate File Upload module (when file upload enabled)
+  if ((ir.features as any)?.fileUpload) {
+    const uploadFiles = await generateUploadFiles(ir);
+    files.push(...uploadFiles);
+  }
+
+  // Generate Audit Logging module
+  if ((ir.features as any)?.auditLogs) {
+    const auditFiles = await generateAuditFiles(ir);
+    files.push(...auditFiles);
+  }
+
+  // Generate Deployment files
+  const deployFiles = await generateDeploymentFiles(ir);
+  files.push(...deployFiles);
+
   return files;
 }
 
@@ -1965,9 +1997,119 @@ async function generatePostmanCollection(
   ir: ProjectIR
 ): Promise<GeneratedFile> {
   const rendered = renderTemplate("postman/collection.json.njk", ir);
-
   return {
     path: "postman-collection.json",
     content: rendered,
   };
+}
+
+// Generate Health Check & Metrics files
+async function generateHealthFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+  const templates = [
+    { template: "health/health.controller.njk", output: "src/health/health.controller.ts" },
+    { template: "health/health.module.njk", output: "src/health/health.module.ts" },
+    { template: "health/metrics.service.njk", output: "src/health/metrics.service.ts" },
+    { template: "health/metrics.interceptor.njk", output: "src/health/metrics.interceptor.ts" },
+  ];
+  for (const { template, output } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({ path: output, content });
+    } catch (error) { console.error(`Error generating ${output}:`, error); }
+  }
+  return files;
+}
+
+// Generate Background Jobs files  
+async function generateJobsFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+  const templates = [
+    { template: "jobs/jobs.module.njk", output: "src/jobs/jobs.module.ts" },
+    { template: "jobs/jobs.service.njk", output: "src/jobs/jobs.service.ts" },
+    { template: "jobs/jobs.controller.njk", output: "src/jobs/jobs.controller.ts" },
+  ];
+  for (const { template, output } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({ path: output, content });
+    } catch (error) { console.error(`Error generating ${output}:`, error); }
+  }
+  return files;
+}
+
+// Generate Notification files (Push + SMS)
+async function generateNotificationFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+  const templates = [
+    { template: "notifications/notifications.module.njk", output: "src/notifications/notifications.module.ts" },
+    { template: "notifications/firebase-push.service.njk", output: "src/notifications/firebase-push.service.ts" },
+    { template: "notifications/twilio-sms.service.njk", output: "src/notifications/twilio-sms.service.ts" },
+    { template: "notifications/notification.service.njk", output: "src/notifications/notification.service.ts" },
+  ];
+  for (const { template, output } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({ path: output, content });
+    } catch (error) { console.error(`Error generating ${output}:`, error); }
+  }
+  return files;
+}
+
+// Generate File Upload files
+async function generateUploadFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+  const templates = [
+    { template: "uploads/file-upload.module.njk", output: "src/uploads/file-upload.module.ts" },
+    { template: "uploads/file-upload.service.njk", output: "src/uploads/file-upload.service.ts" },
+    { template: "uploads/file-upload.controller.njk", output: "src/uploads/file-upload.controller.ts" },
+    { template: "uploads/multer.config.njk", output: "src/uploads/multer.config.ts" },
+  ];
+  for (const { template, output } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({ path: output, content });
+    } catch (error) { console.error(`Error generating ${output}:`, error); }
+  }
+  return files;
+}
+
+// Generate Audit Logging files
+async function generateAuditFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+  const templates = [
+    { template: "audit/audit-log.module.njk", output: "src/audit/audit-log.module.ts" },
+    { template: "audit/audit-log.schema.njk", output: "src/audit/audit-log.schema.ts" },
+    { template: "audit/audit-log.service.njk", output: "src/audit/audit-log.service.ts" },
+  ];
+  for (const { template, output } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = await formatCode(rendered, "typescript");
+      files.push({ path: output, content });
+    } catch (error) { console.error(`Error generating ${output}:`, error); }
+  }
+  return files;
+}
+
+// Generate Deployment configuration files
+async function generateDeploymentFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+  const templates = [
+    { template: "deploy/Dockerfile.njk", output: "Dockerfile" },
+    { template: "deploy/docker-compose.yml.njk", output: "docker-compose.yml" },
+    { template: "deploy/render.yaml.njk", output: "render.yaml" },
+    { template: "deploy/DEPLOYMENT_GUIDE.md.njk", output: "DEPLOYMENT.md" },
+  ];
+  for (const { template, output } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      files.push({ path: output, content: rendered });
+    } catch (error) { console.error(`Error generating ${output}:`, error); }
+  }
+  return files;
 }

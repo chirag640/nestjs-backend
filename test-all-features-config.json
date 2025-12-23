@@ -1,0 +1,225 @@
+{
+  "projectSetup": {
+    "projectName": "all-features-test",
+    "description": "Complete test configuration with ALL features enabled for FoundationWizard",
+    "author": "FoundationWizard",
+    "license": "MIT",
+    "nodeVersion": "20",
+    "packageManager": "npm"
+  },
+
+  "databaseConfig": {
+    "databaseType": "MongoDB",
+    "provider": "Atlas",
+    "connectionString": "mongodb+srv://user:password@cluster.mongodb.net/all-features-test",
+    "autoMigration": "push"
+  },
+
+  "modelDefinition": {
+    "models": [
+      {
+        "name": "User",
+        "timestamps": true,
+        "fields": [
+          { "name": "email", "type": "string", "required": true, "unique": true, "indexed": true },
+          { "name": "username", "type": "string", "required": true, "unique": true, "minLength": 3 },
+          { "name": "firstName", "type": "string", "required": true },
+          { "name": "lastName", "type": "string", "required": true },
+          { "name": "avatar", "type": "string", "required": false },
+          { "name": "phoneNumber", "type": "string", "required": false },
+          { "name": "deviceTokens", "type": "string[]", "required": false, "default": "[]" },
+          { "name": "roles", "type": "string[]", "required": false, "default": "['User']" },
+          { "name": "status", "type": "enum", "values": ["Active", "Inactive", "Banned"], "default": "Active" },
+          { "name": "isVerified", "type": "boolean", "default": false },
+          { "name": "preferences", "type": "json", "required": false },
+          { "name": "lastLoginAt", "type": "datetime", "required": false }
+        ],
+        "accessControl": {
+          "User": { "allowSelfOnly": true, "allow": ["firstName", "lastName", "avatar", "phoneNumber", "preferences"], "deny": ["roles", "status"], "allowRead": true, "allowWrite": true, "allowDelete": false },
+          "Admin": { "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": true, "allowDelete": true }
+        }
+      },
+      {
+        "name": "Post",
+        "timestamps": true,
+        "fields": [
+          { "name": "title", "type": "string", "required": true, "minLength": 3, "maxLength": 200 },
+          { "name": "slug", "type": "string", "required": true, "unique": true, "indexed": true },
+          { "name": "content", "type": "string", "required": true },
+          { "name": "excerpt", "type": "string", "required": false, "maxLength": 500 },
+          { "name": "coverImage", "type": "string", "required": false },
+          { "name": "images", "type": "string[]", "required": false },
+          { "name": "tags", "type": "string[]", "required": false },
+          { "name": "status", "type": "enum", "values": ["Draft", "Published", "Archived"], "default": "Draft" },
+          { "name": "isPublished", "type": "boolean", "default": false },
+          { "name": "publishedAt", "type": "datetime", "required": false },
+          { "name": "viewCount", "type": "number", "min": 0, "default": 0 },
+          { "name": "metadata", "type": "json", "required": false }
+        ],
+        "accessControl": {
+          "User": { "allow": ["*"], "deny": ["viewCount"], "allowRead": true, "allowWrite": false, "allowDelete": false },
+          "Author": { "allowSelfOnly": true, "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": true, "allowDelete": true },
+          "Admin": { "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": true, "allowDelete": true }
+        }
+      },
+      {
+        "name": "Comment",
+        "timestamps": true,
+        "fields": [
+          { "name": "content", "type": "string", "required": true, "maxLength": 2000 },
+          { "name": "isApproved", "type": "boolean", "default": false },
+          { "name": "likeCount", "type": "number", "min": 0, "default": 0 }
+        ],
+        "accessControl": {
+          "User": { "allowSelfOnly": true, "allow": ["content"], "deny": ["isApproved"], "allowRead": true, "allowWrite": true, "allowDelete": true },
+          "Admin": { "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": true, "allowDelete": true }
+        }
+      },
+      {
+        "name": "Category",
+        "timestamps": true,
+        "fields": [
+          { "name": "name", "type": "string", "required": true, "unique": true },
+          { "name": "slug", "type": "string", "required": true, "unique": true, "indexed": true },
+          { "name": "description", "type": "string", "required": false },
+          { "name": "image", "type": "string", "required": false },
+          { "name": "isActive", "type": "boolean", "default": true },
+          { "name": "sortOrder", "type": "number", "default": 0 }
+        ],
+        "accessControl": {
+          "User": { "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": false, "allowDelete": false },
+          "Admin": { "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": true, "allowDelete": true }
+        }
+      },
+      {
+        "name": "Notification",
+        "timestamps": true,
+        "fields": [
+          { "name": "title", "type": "string", "required": true },
+          { "name": "body", "type": "string", "required": true },
+          { "name": "type", "type": "enum", "values": ["Push", "Email", "SMS", "InApp"], "required": true },
+          { "name": "isRead", "type": "boolean", "default": false },
+          { "name": "data", "type": "json", "required": false },
+          { "name": "sentAt", "type": "datetime", "default": "now" }
+        ],
+        "accessControl": {
+          "User": { "allowSelfOnly": true, "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": false, "allowDelete": true }
+        }
+      },
+      {
+        "name": "File",
+        "timestamps": true,
+        "fields": [
+          { "name": "filename", "type": "string", "required": true },
+          { "name": "originalName", "type": "string", "required": true },
+          { "name": "mimeType", "type": "string", "required": true },
+          { "name": "size", "type": "number", "required": true, "min": 0 },
+          { "name": "url", "type": "string", "required": true },
+          { "name": "storageType", "type": "enum", "values": ["Local", "S3"], "default": "Local" },
+          { "name": "isPublic", "type": "boolean", "default": false }
+        ],
+        "accessControl": {
+          "User": { "allowSelfOnly": true, "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": true, "allowDelete": true },
+          "Admin": { "allow": ["*"], "deny": [], "allowRead": true, "allowWrite": true, "allowDelete": true }
+        }
+      }
+    ],
+    "relationships": [
+      { "type": "one-to-many", "sourceModel": "User", "targetModel": "Post", "fieldName": "author", "inverseFieldName": "posts" },
+      { "type": "one-to-many", "sourceModel": "Post", "targetModel": "Comment", "fieldName": "post", "inverseFieldName": "comments" },
+      { "type": "many-to-one", "sourceModel": "Comment", "targetModel": "User", "fieldName": "author" },
+      { "type": "many-to-one", "sourceModel": "Post", "targetModel": "Category", "fieldName": "category", "inverseFieldName": "posts" },
+      { "type": "one-to-many", "sourceModel": "User", "targetModel": "Notification", "fieldName": "user", "inverseFieldName": "notifications" },
+      { "type": "one-to-many", "sourceModel": "User", "targetModel": "File", "fieldName": "owner", "inverseFieldName": "files" },
+      { "type": "many-to-many", "sourceModel": "Post", "targetModel": "User", "fieldName": "likedBy", "inverseFieldName": "likedPosts", "through": "PostLike", "attributes": [{ "name": "likedAt", "type": "datetime", "default": "now" }] }
+    ]
+  },
+
+  "authConfig": {
+    "enabled": true,
+    "method": "jwt",
+    "jwt": {
+      "accessTTL": "15m",
+      "refreshTTL": "7d",
+      "rotation": true,
+      "blacklist": true
+    },
+    "roles": ["User", "Author", "Moderator", "Admin"],
+    "oauth": {
+      "enabled": true,
+      "providers": [
+        { "name": "google", "clientId": "${GOOGLE_CLIENT_ID}", "clientSecret": "${GOOGLE_CLIENT_SECRET}", "callbackURL": "http://localhost:3000/auth/oauth/google/callback" },
+        { "name": "github", "clientId": "${GITHUB_CLIENT_ID}", "clientSecret": "${GITHUB_CLIENT_SECRET}", "callbackURL": "http://localhost:3000/auth/oauth/github/callback" }
+      ]
+    }
+  },
+
+  "featureSelection": {
+    "cors": true,
+    "helmet": true,
+    "compression": true,
+    "validation": true,
+    "logging": true,
+    "caching": true,
+    "swagger": true,
+    "health": true,
+    "rateLimit": true,
+    "versioning": true,
+    "queues": true,
+    "s3Upload": true,
+    "encryptionStrategy": "local",
+    "fieldLevelAccessControl": true,
+    "gitHooks": true,
+    "sonarQube": false,
+    "pushNotifications": true,
+    "sms": true,
+    "fileUpload": true,
+    "auditLogs": true,
+    "email": true
+  },
+
+  "dockerConfig": {
+    "enabled": true,
+    "includeCompose": true,
+    "includeProd": true,
+    "healthCheck": true,
+    "nonRootUser": true,
+    "multiStage": true
+  },
+
+  "cicdConfig": {
+    "enabled": true,
+    "githubActions": true,
+    "gitlabCI": false,
+    "includeTests": true,
+    "includeE2E": true,
+    "includeSecurity": true,
+    "autoDockerBuild": true
+  },
+
+  "// REQUIRED_ENV_VARIABLES": {
+    "DATABASE_URL": "mongodb+srv://user:pass@cluster.mongodb.net/all-features-test",
+    "JWT_SECRET": "your-256-bit-secret",
+    "JWT_REFRESH_SECRET": "your-refresh-secret",
+    "REDIS_URL": "redis://localhost:6379",
+    "AWS_REGION": "us-east-1",
+    "AWS_ACCESS_KEY_ID": "your-aws-key",
+    "AWS_SECRET_ACCESS_KEY": "your-aws-secret",
+    "S3_BUCKET": "your-bucket",
+    "GOOGLE_CLIENT_ID": "your-google-id",
+    "GOOGLE_CLIENT_SECRET": "your-google-secret",
+    "GITHUB_CLIENT_ID": "your-github-id",
+    "GITHUB_CLIENT_SECRET": "your-github-secret",
+    "FIREBASE_PROJECT_ID": "your-firebase-project",
+    "FIREBASE_CLIENT_EMAIL": "firebase-adminsdk@project.iam.gserviceaccount.com",
+    "FIREBASE_PRIVATE_KEY": "-----BEGIN PRIVATE KEY-----...",
+    "TWILIO_ACCOUNT_SID": "ACxxxxxxxx",
+    "TWILIO_AUTH_TOKEN": "your-twilio-token",
+    "TWILIO_PHONE_NUMBER": "+15551234567",
+    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_PORT": "587",
+    "SMTP_USER": "your-email@gmail.com",
+    "SMTP_PASS": "your-app-password",
+    "FRONTEND_URL": "http://localhost:3000"
+  }
+}
