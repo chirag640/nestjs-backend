@@ -1,0 +1,294 @@
+import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { createHmac } from 'crypto';
+import { Webhook, WebhookDocument, WebhookDelivery, WebhookDeliveryDocument } from './webhook.schema';
+{% if features.queues %}
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+{% endif %}
+
+export interface WebhookPayload {
+  event: string;
+  data: any;
+  timestamp: string;
+  id: string;
+}
+
+/**
+ * Webhook Service
+ * 
+ * Manages webhook subscriptions and event delivery
+ * 
+ * Features:
+ * - Webhook registration and management
+ * - HMAC signature verification
+ * - Retry with exponential backoff
+ * - Delivery logging
+ */
+@Injectable()
+export class WebhookService {
+  private readonly logger = new Logger(WebhookService.name);
+
+  constructor(
+    @InjectModel(Webhook.name) private webhookModel: Model<WebhookDocument>,
+    @InjectModel(WebhookDelivery.name) private deliveryModel: Model<WebhookDeliveryDocument>,
+{% if features.queues %}
+    @InjectQueue('webhooks') private webhookQueue: Queue,
+{% endif %}
+  ) {}
+
+  /**
+   * Create a new webhook subscription
+   */
+  async create(userId: string, dto: { url: string; events: string[]; metadata?: Record<string, any> }): Promise<Webhook> {
+    // Generate HMAC secret
+    const secret = createHmac('sha256', Date.now().toString())
+      .update(userId + dto.url)
+      .digest('hex');
+
+    const webhook = new this.webhookModel({
+      userId: new Types.ObjectId(userId),
+      url: dto.url,
+      events: dto.events,
+      secret,
+      active: true,
+      metadata: dto.metadata,
+    });
+
+    await webhook.save();
+    this.logger.log(`Created webhook ${webhook._id} for user ${userId}`);
+    
+    return webhook;
+  }
+
+  /**
+   * Get all webhooks for a user
+   */
+  async findByUser(userId: string): Promise<Webhook[]> {
+    return this.webhookModel.find({ userId: new Types.ObjectId(userId) }).exec();
+  }
+
+  /**
+   * Update a webhook
+   */
+  async update(id: string, userId: string, dto: Partial<{ url: string; events: string[]; active: boolean }>): Promise<Webhook | null> {
+    return this.webhookModel.findOneAndUpdate(
+      { _id: new Types.ObjectId(id), userId: new Types.ObjectId(userId) },
+      { $set: dto },
+      { new: true }
+    ).exec();
+  }
+
+  /**
+   * Delete a webhook
+   */
+  async delete(id: string, userId: string): Promise<boolean> {
+    const result = await this.webhookModel.deleteOne({
+      _id: new Types.ObjectId(id),
+      userId: new Types.ObjectId(userId),
+    }).exec();
+    return result.deletedCount > 0;
+  }
+
+  /**
+   * Dispatch an event to all matching webhooks
+   */
+  async dispatch(event: string, payload: any): Promise<void> {
+    const webhooks = await this.webhookModel.find({
+      events: event,
+      active: true,
+      failureCount: { $lt: {{ webhook.retries + 1 }} }, // Don't send to disabled webhooks
+    }).exec();
+
+    this.logger.log(`Dispatching event "${event}" to ${webhooks.length} webhooks`);
+
+    for (const webhook of webhooks) {
+{% if features.queues %}
+      // Queue webhook delivery for async processing
+      await this.webhookQueue.add('deliver', {
+        webhookId: webhook._id.toString(),
+        event,
+        payload,
+        attempt: 0,
+      }, {
+        attempts: {{ webhook.retries }},
+        backoff: {
+          type: '{{ webhook.backoff }}',
+          delay: 1000,
+        },
+      });
+{% else %}
+      // Synchronous delivery
+      await this.deliver(webhook, event, payload, 0);
+{% endif %}
+    }
+  }
+
+  /**
+   * Deliver a webhook
+   */
+  async deliver(webhook: WebhookDocument, event: string, payload: any, attempt: number): Promise<boolean> {
+    const webhookPayload: WebhookPayload = {
+      event,
+      data: payload,
+      timestamp: new Date().toISOString(),
+      id: new Types.ObjectId().toString(),
+    };
+
+    const body = JSON.stringify(webhookPayload);
+    const signature = this.generateSignature(body, webhook.secret);
+
+    const delivery = new this.deliveryModel({
+      webhookId: webhook._id,
+      event,
+      payload: webhookPayload,
+      url: webhook.url,
+      status: 'pending',
+      attempt,
+    });
+
+    const startTime = Date.now();
+
+    try {
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': signature,
+          'X-Webhook-Event': event,
+          'X-Webhook-Delivery-Id': webhookPayload.id,
+        },
+        body,
+        signal: AbortSignal.timeout({{ webhook.timeout }}),
+      });
+
+      delivery.duration = Date.now() - startTime;
+      delivery.statusCode = response.status;
+
+      if (response.ok) {
+        delivery.status = 'success';
+        await webhook.updateOne({
+          $set: { lastSuccess: new Date(), failureCount: 0 },
+        });
+        this.logger.log(`Webhook ${webhook._id} delivered successfully`);
+      } else {
+        const responseText = await response.text();
+        delivery.status = 'failed';
+        delivery.responseBody = responseText.substring(0, 1000);
+        await this.handleFailure(webhook, attempt);
+        this.logger.warn(`Webhook ${webhook._id} failed with status ${response.status}`);
+      }
+
+      await delivery.save();
+      return delivery.status === 'success';
+    } catch (error) {
+      delivery.duration = Date.now() - startTime;
+      delivery.status = 'failed';
+      delivery.error = error.message;
+      await delivery.save();
+      await this.handleFailure(webhook, attempt);
+      this.logger.error(`Webhook ${webhook._id} delivery error: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Generate HMAC signature for webhook payload
+   */
+  private generateSignature(body: string, secret: string): string {
+{% if webhook.signature === 'hmac-sha256' %}
+    return `sha256=` + createHmac('sha256', secret).update(body).digest('hex');
+{% else %}
+    return '';
+{% endif %}
+  }
+
+  /**
+   * Handle webhook delivery failure
+   */
+  private async handleFailure(webhook: WebhookDocument, attempt: number): Promise<void> {
+    await webhook.updateOne({
+      $inc: { failureCount: 1 },
+      $set: { lastFailure: new Date() },
+    });
+
+    // Disable webhook after too many failures
+    if (webhook.failureCount + 1 >= {{ webhook.retries + 1 }}) {
+      await webhook.updateOne({ $set: { active: false } });
+      this.logger.warn(`Webhook ${webhook._id} disabled after ${webhook.failureCount + 1} failures`);
+    }
+  }
+
+  /**
+   * Get webhook delivery history
+   */
+  async getDeliveries(webhookId: string, limit = 50): Promise<WebhookDelivery[]> {
+    return this.deliveryModel
+      .find({ webhookId: new Types.ObjectId(webhookId) })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .exec();
+  }
+
+  /**
+   * Rotate webhook secret
+   */
+  async rotateSecret(id: string, userId: string): Promise<{ secret: string } | null> {
+    const webhook = await this.webhookModel.findOne({
+      _id: new Types.ObjectId(id),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!webhook) return null;
+
+    const newSecret = createHmac('sha256', Date.now().toString())
+      .update(userId + webhook.url + Date.now())
+      .digest('hex');
+
+    await webhook.updateOne({ $set: { secret: newSecret } });
+
+    return { secret: newSecret };
+  }
+
+  /**
+   * Test a webhook endpoint
+   */
+  async test(id: string, userId: string): Promise<{ success: boolean; statusCode?: number; error?: string }> {
+    const webhook = await this.webhookModel.findOne({
+      _id: new Types.ObjectId(id),
+      userId: new Types.ObjectId(userId),
+    }).select('+secret').exec();
+
+    if (!webhook) {
+      throw new HttpException('Webhook not found', HttpStatus.NOT_FOUND);
+    }
+
+    const testPayload = {
+      event: 'webhook.test',
+      data: { message: 'This is a test webhook delivery' },
+      timestamp: new Date().toISOString(),
+      id: new Types.ObjectId().toString(),
+    };
+
+    const body = JSON.stringify(testPayload);
+    const signature = this.generateSignature(body, webhook.secret);
+
+    try {
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': signature,
+          'X-Webhook-Event': 'webhook.test',
+        },
+        body,
+        signal: AbortSignal.timeout({{ webhook.timeout }}),
+      });
+
+      return { success: response.ok, statusCode: response.status };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+}

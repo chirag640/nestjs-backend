@@ -1,0 +1,119 @@
+import { Injectable, NestMiddleware, BadRequestException, Logger } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+{% if multitenancy.strategy === 'database' %}
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
+{% endif %}
+
+export interface TenantContext {
+  tenantId: string;
+  tenantName?: string;
+  database?: string;
+  schema?: string;
+}
+
+/**
+ * Multi-tenancy Middleware
+ * 
+ * Strategy: {{ multitenancy.strategy }}
+ * - database: Separate database per tenant
+ * - schema: Separate schema per tenant (PostgreSQL)
+ * - row: Shared tables with tenant_id column
+ * 
+ * Tenant ID Source: {{ multitenancy.tenantIdSource }}
+ */
+@Injectable()
+export class TenantMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(TenantMiddleware.name);
+
+  constructor(
+{% if multitenancy.strategy === 'database' %}
+    @InjectConnection() private readonly connection: Connection,
+{% endif %}
+  ) {}
+
+  async use(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const tenantId = this.extractTenantId(req);
+      
+      if (!tenantId) {
+{% if multitenancy.defaultTenant %}
+        // Use default tenant
+        req['tenantId'] = '{{ multitenancy.defaultTenant }}';
+{% else %}
+        throw new BadRequestException('Tenant ID is required');
+{% endif %}
+      } else {
+        req['tenantId'] = tenantId;
+      }
+
+{% if multitenancy.strategy === 'database' %}
+      // Switch to tenant's database
+      const tenantDb = this.connection.useDb(`tenant_${tenantId}`, { useCache: true });
+      req['tenantConnection'] = tenantDb;
+{% endif %}
+
+{% if multitenancy.strategy === 'schema' %}
+      // Set PostgreSQL schema
+      req['tenantSchema'] = `tenant_${tenantId}`;
+{% endif %}
+
+      this.logger.debug(`Request for tenant: ${tenantId}`);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  private extractTenantId(req: Request): string | undefined {
+{% if multitenancy.tenantIdSource === 'header' %}
+    // Extract from header
+    return req.headers['{{ multitenancy.headerName | lower }}'] as string;
+{% elif multitenancy.tenantIdSource === 'subdomain' %}
+    // Extract from subdomain
+    const host = req.headers.host || '';
+    const subdomain = host.split('.')[0];
+    return subdomain !== 'www' && subdomain !== 'api' ? subdomain : undefined;
+{% elif multitenancy.tenantIdSource === 'jwt' %}
+    // Extract from JWT (set by auth middleware)
+    return req['user']?.tenantId;
+{% endif %}
+  }
+}
+
+/**
+ * Tenant Context Decorator
+ * 
+ * Use this decorator to inject the current tenant context
+ * 
+ * @example
+ * @Get()
+ * findAll(@TenantId() tenantId: string) {
+ *   return this.service.findByTenant(tenantId);
+ * }
+ */
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+export const TenantId = createParamDecorator(
+  (data: unknown, ctx: ExecutionContext): string => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.tenantId;
+  },
+);
+
+export const TenantContext = createParamDecorator(
+  (data: unknown, ctx: ExecutionContext): TenantContext => {
+    const request = ctx.switchToHttp().getRequest();
+    return {
+      tenantId: request.tenantId,
+{% if multitenancy.strategy === 'database' %}
+      database: `tenant_${request.tenantId}`,
+{% endif %}
+{% if multitenancy.strategy === 'schema' %}
+      schema: request.tenantSchema,
+{% endif %}
+    };
+  },
+);

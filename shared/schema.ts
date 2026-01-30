@@ -123,6 +123,13 @@ export const authConfigSchema = z
       .array(z.string())
       .min(1, "At least one role is required")
       .default(["Admin", "User"]),
+    mfa: z.object({
+      enabled: z.boolean().default(false),
+      methods: z.array(z.enum(["totp", "sms", "email"])).default(["totp"]),
+      required: z.boolean().default(false), // Force MFA for all users
+      backupCodes: z.number().min(0).max(20).default(10), // Number of backup codes
+      totpIssuer: z.string().optional(), // Name shown in authenticator apps
+    }).optional(),
   })
   .refine((data) => !data.enabled || data.jwt !== undefined, {
     message: "jwt is required when auth.enabled is true",
@@ -262,6 +269,104 @@ export const mobileConfigSchema = z.object({
 
 export type MobileConfig = z.infer<typeof mobileConfigSchema>;
 
+// Step 10: Real-time WebSocket Configuration
+export const realtimeConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  provider: z.enum(["socket.io", "ws"]).default("socket.io"),
+  authentication: z.boolean().default(true), // JWT auth for WebSocket
+  cors: z.boolean().default(true), // Enable CORS for WebSocket
+  rooms: z.boolean().default(true), // Support named rooms
+  presence: z.boolean().default(false), // Online/offline status tracking
+  scaling: z.enum(["none", "redis"]).default("none"), // Redis adapter for horizontal scaling
+  namespaces: z.array(z.string()).default([]), // Custom namespaces (e.g., /chat, /notifications)
+  events: z.object({
+    modelChanges: z.boolean().default(true), // Broadcast CRUD changes
+    customEvents: z.array(z.string()).default([]), // Custom event names
+  }).optional(),
+});
+
+export type RealtimeConfig = z.infer<typeof realtimeConfigSchema>;
+
+// Step 11: Webhook Configuration (Outgoing)
+export const webhookConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  events: z.array(z.string()).default([]), // e.g., ["order.created", "payment.completed"]
+  retries: z.number().min(0).max(10).default(3),
+  backoff: z.enum(["linear", "exponential"]).default("exponential"),
+  signature: z.enum(["none", "hmac-sha256"]).default("hmac-sha256"),
+  timeout: z.number().min(1000).max(30000).default(5000), // Request timeout in ms
+  logging: z.boolean().default(true), // Log webhook deliveries
+});
+
+export type WebhookConfig = z.infer<typeof webhookConfigSchema>;
+
+// Step 12: Audit Logging Configuration
+export const auditConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  storage: z.enum(["database", "elasticsearch"]).default("database"),
+  retention: z.string().regex(/^\d+(d|w|m|y)$/).default("90d"), // Days to keep logs
+  events: z.array(z.enum([
+    "create", "update", "delete", "login", "logout", 
+    "access", "export", "import", "permission_change"
+  ])).default(["create", "update", "delete", "login"]),
+  piiMasking: z.boolean().default(true), // Mask PII in audit logs
+  userTracking: z.boolean().default(true), // Track user who made the change
+  ipTracking: z.boolean().default(true), // Track IP address
+});
+
+export type AuditConfig = z.infer<typeof auditConfigSchema>;
+
+// Step 13: GraphQL Configuration
+export const graphqlConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  playground: z.boolean().default(true), // GraphQL Playground in dev
+  introspection: z.boolean().default(true), // Schema introspection
+  subscriptions: z.boolean().default(false), // GraphQL Subscriptions
+  complexity: z.object({
+    enabled: z.boolean().default(true), // Query complexity analysis
+    maxComplexity: z.number().default(100),
+    maxDepth: z.number().default(7),
+  }).optional(),
+  caching: z.boolean().default(false), // Response caching
+  federation: z.boolean().default(false), // Apollo Federation support
+});
+
+export type GraphQLConfig = z.infer<typeof graphqlConfigSchema>;
+
+// Step 14: Multi-tenancy Configuration
+export const multitenancyConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  strategy: z.enum(["database", "schema", "row"]).default("row"),
+  // database = separate DB per tenant
+  // schema = separate schema per tenant (PostgreSQL)
+  // row = shared tables with tenant_id column
+  tenantIdSource: z.enum(["header", "subdomain", "jwt"]).default("header"),
+  headerName: z.string().default("X-Tenant-ID"),
+  defaultTenant: z.string().optional(),
+  isolation: z.boolean().default(true), // Enforce tenant isolation
+});
+
+export type MultitenancyConfig = z.infer<typeof multitenancyConfigSchema>;
+
+// Step 15: Payment Integration Configuration
+export const paymentConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  providers: z.array(z.enum(["stripe", "razorpay"])).default([]),
+  stripe: z.object({
+    webhookSecret: z.string().optional(),
+    currency: z.string().default("usd"),
+    paymentMethods: z.array(z.string()).default(["card"]),
+  }).optional(),
+  razorpay: z.object({
+    webhookSecret: z.string().optional(),
+    currency: z.string().default("INR"),
+  }).optional(),
+  subscriptions: z.boolean().default(false), // Subscription billing
+  invoicing: z.boolean().default(false), // Invoice generation
+});
+
+export type PaymentConfig = z.infer<typeof paymentConfigSchema>;
+
 // Complete Wizard Configuration
 export const wizardConfigSchema = z.object({
   projectSetup: projectSetupSchema,
@@ -273,6 +378,12 @@ export const wizardConfigSchema = z.object({
   dockerConfig: dockerConfigSchema.optional(),
   cicdConfig: cicdConfigSchema.optional(),
   mobileConfig: mobileConfigSchema.optional(),
+  realtimeConfig: realtimeConfigSchema.optional(),
+  webhookConfig: webhookConfigSchema.optional(),
+  auditConfig: auditConfigSchema.optional(),
+  graphqlConfig: graphqlConfigSchema.optional(),
+  multitenancyConfig: multitenancyConfigSchema.optional(),
+  paymentConfig: paymentConfigSchema.optional(),
 });
 
 export type WizardConfig = z.infer<typeof wizardConfigSchema>;

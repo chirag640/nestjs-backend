@@ -1,0 +1,173 @@
+import { Resolver, Query, Mutation, Args, ID, ResolveField, Parent, Subscription } from '@nestjs/graphql';
+import { UseGuards, NotFoundException } from '@nestjs/common';
+{% if auth and auth.enabled %}
+import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+{% endif %}
+{% if features.rbac %}
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+{% endif %}
+import { PubSub } from 'graphql-subscriptions';
+import { {{ model.name }}Service } from './{{ model.nameKebab }}.service';
+import { {{ model.name }} } from './{{ model.nameKebab }}.model';
+import { Create{{ model.name }}Input, Update{{ model.name }}Input, {{ model.name }}FilterInput } from './dto/{{ model.nameKebab }}.input';
+import { Paginated{{ model.name }}Response } from './dto/{{ model.nameKebab }}.response';
+
+const pubSub = new PubSub();
+
+/**
+ * {{ model.name }} GraphQL Resolver
+ * 
+ * Provides GraphQL queries, mutations, and subscriptions for {{ model.name }}
+ */
+@Resolver(() => {{ model.name }})
+{% if auth and auth.enabled %}
+@UseGuards(GqlAuthGuard{% if features.rbac %}, RolesGuard{% endif %})
+{% endif %}
+export class {{ model.name }}Resolver {
+  constructor(private readonly {{ model.nameCamel }}Service: {{ model.name }}Service) {}
+
+  /**
+   * Query: Get all {{ model.namePlural }} with pagination and filtering
+   */
+  @Query(() => Paginated{{ model.name }}Response, { name: '{{ model.namePlural }}' })
+{% if features.rbac and model.rbac.read %}
+  @Roles({% for role in model.rbac.read %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+{% endif %}
+  async findAll(
+    @Args('filter', { nullable: true }) filter?: {{ model.name }}FilterInput,
+    @Args('page', { defaultValue: 1 }) page?: number,
+    @Args('limit', { defaultValue: 20 }) limit?: number,
+  ): Promise<Paginated{{ model.name }}Response> {
+    return this.{{ model.nameCamel }}Service.findAll(filter, page, limit);
+  }
+
+  /**
+   * Query: Get a single {{ model.name }} by ID
+   */
+  @Query(() => {{ model.name }}, { name: '{{ model.nameCamel }}' })
+{% if features.rbac and model.rbac.read %}
+  @Roles({% for role in model.rbac.read %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+{% endif %}
+  async findOne(@Args('id', { type: () => ID }) id: string): Promise<{{ model.name }}> {
+    const result = await this.{{ model.nameCamel }}Service.findOne(id);
+    if (!result) {
+      throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
+    }
+    return result;
+  }
+
+  /**
+   * Mutation: Create a new {{ model.name }}
+   */
+  @Mutation(() => {{ model.name }})
+{% if features.rbac and model.rbac.create %}
+  @Roles({% for role in model.rbac.create %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+{% endif %}
+  async create{{ model.name }}(
+    @Args('input') input: Create{{ model.name }}Input,
+{% if auth and auth.enabled %}
+    @CurrentUser() user: any,
+{% endif %}
+  ): Promise<{{ model.name }}> {
+    const result = await this.{{ model.nameCamel }}Service.create(input{% if auth and auth.enabled %}, user{% endif %});
+{% if graphql.subscriptions %}
+    pubSub.publish('{{ model.nameCamel }}Created', { {{ model.nameCamel }}Created: result });
+{% endif %}
+    return result;
+  }
+
+  /**
+   * Mutation: Update an existing {{ model.name }}
+   */
+  @Mutation(() => {{ model.name }})
+{% if features.rbac and model.rbac.update %}
+  @Roles({% for role in model.rbac.update %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+{% endif %}
+  async update{{ model.name }}(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('input') input: Update{{ model.name }}Input,
+{% if auth and auth.enabled %}
+    @CurrentUser() user: any,
+{% endif %}
+  ): Promise<{{ model.name }}> {
+    const result = await this.{{ model.nameCamel }}Service.update(id, input{% if auth and auth.enabled %}, user{% endif %});
+    if (!result) {
+      throw new NotFoundException(`{{ model.name }} with ID ${id} not found`);
+    }
+{% if graphql.subscriptions %}
+    pubSub.publish('{{ model.nameCamel }}Updated', { {{ model.nameCamel }}Updated: result });
+{% endif %}
+    return result;
+  }
+
+  /**
+   * Mutation: Delete a {{ model.name }}
+   */
+  @Mutation(() => Boolean)
+{% if features.rbac and model.rbac.delete %}
+  @Roles({% for role in model.rbac.delete %}'{{ role }}'{% if not loop.last %}, {% endif %}{% endfor %})
+{% endif %}
+  async delete{{ model.name }}(
+    @Args('id', { type: () => ID }) id: string,
+{% if auth and auth.enabled %}
+    @CurrentUser() user: any,
+{% endif %}
+  ): Promise<boolean> {
+    const deleted = await this.{{ model.nameCamel }}Service.remove(id{% if auth and auth.enabled %}, user{% endif %});
+{% if graphql.subscriptions %}
+    if (deleted) {
+      pubSub.publish('{{ model.nameCamel }}Deleted', { {{ model.nameCamel }}Deleted: id });
+    }
+{% endif %}
+    return deleted;
+  }
+
+{% if graphql.subscriptions %}
+  /**
+   * Subscription: Listen for new {{ model.name }} creations
+   */
+  @Subscription(() => {{ model.name }})
+  {{ model.nameCamel }}Created() {
+    return pubSub.asyncIterator('{{ model.nameCamel }}Created');
+  }
+
+  /**
+   * Subscription: Listen for {{ model.name }} updates
+   */
+  @Subscription(() => {{ model.name }})
+  {{ model.nameCamel }}Updated() {
+    return pubSub.asyncIterator('{{ model.nameCamel }}Updated');
+  }
+
+  /**
+   * Subscription: Listen for {{ model.name }} deletions
+   */
+  @Subscription(() => ID)
+  {{ model.nameCamel }}Deleted() {
+    return pubSub.asyncIterator('{{ model.nameCamel }}Deleted');
+  }
+{% endif %}
+
+{% for relation in model.relations %}
+{% if relation.type == 'belongsTo' or relation.type == 'hasOne' %}
+  /**
+   * ResolveField: Get related {{ relation.target }}
+   */
+  @ResolveField()
+  async {{ relation.fieldName }}(@Parent() {{ model.nameCamel }}: {{ model.name }}): Promise<{{ relation.target }} | null> {
+    return this.{{ model.nameCamel }}Service.get{{ relation.target }}({{ model.nameCamel }}.id);
+  }
+{% endif %}
+{% if relation.type == 'hasMany' %}
+  /**
+   * ResolveField: Get related {{ relation.target }} list
+   */
+  @ResolveField()
+  async {{ relation.fieldName }}(@Parent() {{ model.nameCamel }}: {{ model.name }}): Promise<{{ relation.target }}[]> {
+    return this.{{ model.nameCamel }}Service.get{{ relation.target }}s({{ model.nameCamel }}.id);
+  }
+{% endif %}
+{% endfor %}
+}

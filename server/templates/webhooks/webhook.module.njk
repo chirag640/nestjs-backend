@@ -1,0 +1,36 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+{% if features.queues %}
+import { BullModule } from '@nestjs/bullmq';
+{% endif %}
+import { Webhook, WebhookSchema, WebhookDelivery, WebhookDeliverySchema } from './webhook.schema';
+import { WebhookService } from './webhook.service';
+import { WebhookController } from './webhook.controller';
+
+/**
+ * Webhook Module
+ * 
+ * Provides outgoing webhook functionality:
+ * - User-managed webhook subscriptions
+ * - Event-driven webhook delivery
+ * - HMAC signature verification
+ * - Automatic retries with backoff
+ * - Delivery logging and history
+ */
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: Webhook.name, schema: WebhookSchema },
+      { name: WebhookDelivery.name, schema: WebhookDeliverySchema },
+    ]),
+{% if features.queues %}
+    BullModule.registerQueue({
+      name: 'webhooks',
+    }),
+{% endif %}
+  ],
+  controllers: [WebhookController],
+  providers: [WebhookService],
+  exports: [WebhookService],
+})
+export class WebhookModule {}

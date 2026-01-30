@@ -1,0 +1,51 @@
+import { Module } from '@nestjs/common';
+{% if 'stripe' in payment.providers %}
+import { StripeService } from './stripe.service';
+import { StripeController } from './stripe.controller';
+{% endif %}
+{% if 'razorpay' in payment.providers %}
+import { RazorpayService } from './razorpay.service';
+import { RazorpayController } from './razorpay.controller';
+{% endif %}
+import { PaymentWebhookController } from './webhook.controller';
+
+/**
+ * Payment Module
+ * 
+ * Configured Providers: {{ payment.providers | join(', ') }}
+ * 
+ * Features:
+ * - One-time payments
+ {% if payment.subscriptions %}- Subscription billing{% endif %}
+ {% if payment.invoicing %}- Invoice generation{% endif %}
+ * - Webhook handling
+ * - Refunds
+ */
+@Module({
+  controllers: [
+{% if 'stripe' in payment.providers %}
+    StripeController,
+{% endif %}
+{% if 'razorpay' in payment.providers %}
+    RazorpayController,
+{% endif %}
+    PaymentWebhookController,
+  ],
+  providers: [
+{% if 'stripe' in payment.providers %}
+    StripeService,
+{% endif %}
+{% if 'razorpay' in payment.providers %}
+    RazorpayService,
+{% endif %}
+  ],
+  exports: [
+{% if 'stripe' in payment.providers %}
+    StripeService,
+{% endif %}
+{% if 'razorpay' in payment.providers %}
+    RazorpayService,
+{% endif %}
+  ],
+})
+export class PaymentModule {}

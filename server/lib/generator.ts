@@ -377,6 +377,18 @@ export async function generateProject(
     files.push(...mobileFiles);
   }
 
+  // Generate Real-time WebSocket files (Socket.io gateway, rooms, presence)
+  if (ir.realtime?.enabled) {
+    const realtimeFiles = await generateRealtimeFiles(ir);
+    files.push(...realtimeFiles);
+  }
+
+  // Generate Webhook files (outgoing webhooks)
+  if (ir.webhook?.enabled) {
+    const webhookFiles = await generateWebhookFiles(ir);
+    files.push(...webhookFiles);
+  }
+
   return files;
 }
 
@@ -2226,6 +2238,93 @@ async function generateMobileFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
       } catch (error) {
         console.error(`Error generating sync file ${output}:`, error);
       }
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Real-time WebSocket files (Socket.io gateway, module, service)
+ */
+async function generateRealtimeFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.realtime?.enabled) {
+    return files;
+  }
+
+  const realtimeTemplates = [
+    {
+      template: "realtime/app.gateway.njk",
+      output: "src/realtime/app.gateway.ts",
+      parser: "typescript",
+    },
+    {
+      template: "realtime/realtime.module.njk",
+      output: "src/realtime/realtime.module.ts",
+      parser: "typescript",
+    },
+    {
+      template: "realtime/realtime.service.njk",
+      output: "src/realtime/realtime.service.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of realtimeTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating realtime file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Webhook files (outgoing webhooks service, controller, module)
+ */
+async function generateWebhookFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.webhook?.enabled) {
+    return files;
+  }
+
+  const webhookTemplates = [
+    {
+      template: "webhooks/webhook.schema.njk",
+      output: "src/modules/webhooks/webhook.schema.ts",
+      parser: "typescript",
+    },
+    {
+      template: "webhooks/webhook.service.njk",
+      output: "src/modules/webhooks/webhook.service.ts",
+      parser: "typescript",
+    },
+    {
+      template: "webhooks/webhook.controller.njk",
+      output: "src/modules/webhooks/webhook.controller.ts",
+      parser: "typescript",
+    },
+    {
+      template: "webhooks/webhook.module.njk",
+      output: "src/modules/webhooks/webhook.module.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of webhookTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating webhook file ${output}:`, error);
     }
   }
 

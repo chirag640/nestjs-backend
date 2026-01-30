@@ -1,0 +1,35 @@
+import { Module, Global, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { TenantMiddleware, TenantId, TenantContext } from './tenant.middleware';
+import { TenantService } from './tenant.service';
+
+/**
+ * Multi-tenancy Module
+ * 
+ * Provides tenant isolation for multi-tenant applications
+ * 
+ * Strategy: {{ multitenancy.strategy }}
+ * {% if multitenancy.strategy === 'database' %}- Each tenant has a separate database{% endif %}
+ * {% if multitenancy.strategy === 'schema' %}- Each tenant has a separate PostgreSQL schema{% endif %}
+ * {% if multitenancy.strategy === 'row' %}- Tenants share tables, isolated by tenant_id column{% endif %}
+ */
+@Global()
+@Module({
+  providers: [
+    TenantMiddleware,
+    TenantService,
+  ],
+  exports: [
+    TenantMiddleware,
+    TenantService,
+  ],
+})
+export class MultitenancyModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(TenantMiddleware)
+      .forRoutes('*'); // Apply to all routes
+  }
+}
+
+// Re-export decorators
+export { TenantId, TenantContext };

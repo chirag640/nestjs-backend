@@ -1,0 +1,99 @@
+import { Module } from '@nestjs/common';
+import { GraphQLModule } from '@nestjs/graphql';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { join } from 'path';
+{% if graphql.subscriptions %}
+import { PubSub } from 'graphql-subscriptions';
+{% endif %}
+{% if graphql.complexity and graphql.complexity.enabled %}
+import { 
+  fieldExtensionsEstimator, 
+  getComplexity, 
+  simpleEstimator 
+} from 'graphql-query-complexity';
+{% endif %}
+{% if graphql.caching %}
+import responseCachePlugin from '@apollo/server-plugin-response-cache';
+{% endif %}
+
+/**
+ * GraphQL Module Configuration
+ * 
+ * Features:
+ * - Auto-generated schema from decorators
+ {% if graphql.playground %}- GraphQL Playground in development{% endif %}
+ {% if graphql.subscriptions %}- WebSocket subscriptions{% endif %}
+ {% if graphql.complexity and graphql.complexity.enabled %}- Query complexity analysis{% endif %}
+ {% if graphql.caching %}- Response caching{% endif %}
+ {% if graphql.federation %}- Apollo Federation support{% endif %}
+ */
+@Module({
+  imports: [
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      sortSchema: true,
+{% if graphql.playground %}
+      playground: process.env.NODE_ENV !== 'production',
+{% else %}
+      playground: false,
+{% endif %}
+{% if graphql.introspection %}
+      introspection: true,
+{% else %}
+      introspection: process.env.NODE_ENV !== 'production',
+{% endif %}
+{% if graphql.subscriptions %}
+      subscriptions: {
+        'graphql-ws': true,
+        'subscriptions-transport-ws': true,
+      },
+{% endif %}
+{% if graphql.caching %}
+      plugins: [responseCachePlugin()],
+{% endif %}
+      context: ({ req, res }) => ({ req, res }),
+{% if graphql.complexity and graphql.complexity.enabled %}
+      validationRules: [
+        (context) => ({
+          OperationDefinition: {
+            enter: (node) => {
+              const complexity = getComplexity({
+                schema: context.getSchema(),
+                operationName: node.name?.value,
+                query: context.getDocument(),
+                variables: context.getVariableValues() || {},
+                estimators: [
+                  fieldExtensionsEstimator(),
+                  simpleEstimator({ defaultComplexity: 1 }),
+                ],
+              });
+              
+              if (complexity > {{ graphql.complexity.maxComplexity }}) {
+                throw new Error(
+                  `Query is too complex: ${complexity}. Maximum allowed complexity: {{ graphql.complexity.maxComplexity }}`
+                );
+              }
+            },
+          },
+        }),
+      ],
+{% endif %}
+{% if graphql.federation %}
+      buildSchemaOptions: {
+        orphanedTypes: [],
+      },
+{% endif %}
+    }),
+  ],
+{% if graphql.subscriptions %}
+  providers: [
+    {
+      provide: 'PUB_SUB',
+      useValue: new PubSub(),
+    },
+  ],
+  exports: ['PUB_SUB'],
+{% endif %}
+})
+export class GraphqlModule {}

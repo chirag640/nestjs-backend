@@ -1,0 +1,99 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
+
+export type WebhookDocument = Webhook & Document;
+
+/**
+ * Webhook Subscription Schema
+ * 
+ * Stores user-defined webhooks that will receive event notifications
+ */
+@Schema({ timestamps: true, collection: 'webhooks' })
+export class Webhook {
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  userId: Types.ObjectId;
+
+  @Prop({ required: true, trim: true })
+  url: string;
+
+  @Prop({ type: [String], required: true })
+  events: string[]; // e.g., ['order.created', 'payment.completed']
+
+  @Prop({ default: true })
+  active: boolean;
+
+  @Prop({ select: false })
+  secret: string; // For HMAC signature verification
+
+  @Prop({ default: 0 })
+  failureCount: number;
+
+  @Prop()
+  lastFailure?: Date;
+
+  @Prop()
+  lastSuccess?: Date;
+
+  @Prop({ type: Object })
+  metadata?: Record<string, any>;
+
+  // Timestamps
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const WebhookSchema = SchemaFactory.createForClass(Webhook);
+
+// Indexes
+WebhookSchema.index({ events: 1 });
+WebhookSchema.index({ active: 1 });
+
+/**
+ * Webhook Delivery Log Schema
+ * 
+ * Tracks each webhook delivery attempt
+ */
+@Schema({ timestamps: true, collection: 'webhook_deliveries' })
+export class WebhookDelivery {
+  @Prop({ type: Types.ObjectId, ref: 'Webhook', required: true, index: true })
+  webhookId: Types.ObjectId;
+
+  @Prop({ required: true })
+  event: string;
+
+  @Prop({ type: Object, required: true })
+  payload: Record<string, any>;
+
+  @Prop({ required: true })
+  url: string;
+
+  @Prop({ enum: ['pending', 'success', 'failed'], default: 'pending' })
+  status: string;
+
+  @Prop()
+  statusCode?: number;
+
+  @Prop()
+  responseBody?: string;
+
+  @Prop()
+  error?: string;
+
+  @Prop({ default: 0 })
+  attempt: number;
+
+  @Prop()
+  nextRetry?: Date;
+
+  @Prop()
+  duration?: number; // Request duration in ms
+
+  // Timestamps
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const WebhookDeliverySchema = SchemaFactory.createForClass(WebhookDelivery);
+
+// TTL Index - Auto-delete old deliveries after 30 days
+WebhookDeliverySchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });

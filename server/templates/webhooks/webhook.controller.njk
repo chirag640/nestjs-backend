@@ -1,0 +1,127 @@
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, HttpStatus, HttpCode } from '@nestjs/common';
+{% if features.swagger %}
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+{% endif %}
+{% if auth and auth.enabled %}
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+{% endif %}
+import { WebhookService } from './webhook.service';
+
+class CreateWebhookDto {
+  url: string;
+  events: string[];
+  metadata?: Record<string, any>;
+}
+
+class UpdateWebhookDto {
+  url?: string;
+  events?: string[];
+  active?: boolean;
+}
+
+/**
+ * Webhook Controller
+ * 
+ * Allows users to manage their webhook subscriptions
+ */
+{% if features.swagger %}
+@ApiTags('Webhooks')
+@ApiBearerAuth()
+{% endif %}
+@Controller('webhooks')
+{% if auth and auth.enabled %}
+@UseGuards(JwtAuthGuard)
+{% endif %}
+export class WebhookController {
+  constructor(private readonly webhookService: WebhookService) {}
+
+  /**
+   * List all webhooks for the current user
+   */
+  @Get()
+{% if features.swagger %}
+  @ApiOperation({ summary: 'List all webhooks' })
+  @ApiResponse({ status: 200, description: 'List of webhooks' })
+{% endif %}
+  async list(@CurrentUser() user: any) {
+    return this.webhookService.findByUser(user.sub);
+  }
+
+  /**
+   * Create a new webhook subscription
+   */
+  @Post()
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Create a new webhook' })
+  @ApiResponse({ status: 201, description: 'Webhook created' })
+{% endif %}
+  async create(@CurrentUser() user: any, @Body() dto: CreateWebhookDto) {
+    return this.webhookService.create(user.sub, dto);
+  }
+
+  /**
+   * Update a webhook
+   */
+  @Put(':id')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Update a webhook' })
+  @ApiResponse({ status: 200, description: 'Webhook updated' })
+{% endif %}
+  async update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateWebhookDto,
+  ) {
+    return this.webhookService.update(id, user.sub, dto);
+  }
+
+  /**
+   * Delete a webhook
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Delete a webhook' })
+  @ApiResponse({ status: 204, description: 'Webhook deleted' })
+{% endif %}
+  async delete(@CurrentUser() user: any, @Param('id') id: string) {
+    await this.webhookService.delete(id, user.sub);
+  }
+
+  /**
+   * Get webhook delivery history
+   */
+  @Get(':id/deliveries')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Get webhook delivery history' })
+  @ApiResponse({ status: 200, description: 'List of deliveries' })
+{% endif %}
+  async getDeliveries(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.webhookService.getDeliveries(id);
+  }
+
+  /**
+   * Test a webhook endpoint
+   */
+  @Post(':id/test')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Test webhook delivery' })
+  @ApiResponse({ status: 200, description: 'Test result' })
+{% endif %}
+  async test(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.webhookService.test(id, user.sub);
+  }
+
+  /**
+   * Rotate webhook secret
+   */
+  @Post(':id/rotate-secret')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Rotate webhook secret' })
+  @ApiResponse({ status: 200, description: 'New secret returned' })
+{% endif %}
+  async rotateSecret(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.webhookService.rotateSecret(id, user.sub);
+  }
+}

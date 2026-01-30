@@ -1,0 +1,68 @@
+import { ObjectType, Field, ID, Int, Float } from '@nestjs/graphql';
+import { FilterableField, IDField } from '@nestjs-query/query-graphql';
+
+/**
+ * {{ model.name }} GraphQL Object Type
+ * 
+ * Represents the {{ model.name }} entity in the GraphQL schema
+ */
+@ObjectType()
+export class {{ model.name }} {
+  @IDField(() => ID)
+  id: string;
+
+{% for field in model.fields %}
+{% if field.name != 'id' %}
+  @Field(() => {{ field.graphqlType }}{% if not field.required %}, { nullable: true }{% endif %})
+{% if field.filterable %}
+  @FilterableField()
+{% endif %}
+  {{ field.name }}{% if not field.required %}?{% endif %}: {{ field.tsType }};
+
+{% endif %}
+{% endfor %}
+{% for relation in model.relations %}
+{% if relation.type == 'belongsTo' or relation.type == 'hasOne' %}
+  @Field(() => {{ relation.target }}, { nullable: true })
+  {{ relation.fieldName }}?: {{ relation.target }};
+
+{% endif %}
+{% if relation.type == 'hasMany' %}
+  @Field(() => [{{ relation.target }}], { nullable: true })
+  {{ relation.fieldName }}?: {{ relation.target }}[];
+
+{% endif %}
+{% endfor %}
+  @Field()
+  createdAt: Date;
+
+  @Field()
+  updatedAt: Date;
+}
+
+/**
+ * Paginated {{ model.name }} Response
+ */
+@ObjectType()
+export class Paginated{{ model.name }}Response {
+  @Field(() => [{{ model.name }}])
+  data: {{ model.name }}[];
+
+  @Field(() => Int)
+  total: number;
+
+  @Field(() => Int)
+  page: number;
+
+  @Field(() => Int)
+  limit: number;
+
+  @Field(() => Int)
+  totalPages: number;
+
+  @Field()
+  hasNextPage: boolean;
+
+  @Field()
+  hasPrevPage: boolean;
+}

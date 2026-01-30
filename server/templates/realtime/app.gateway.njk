@@ -1,0 +1,275 @@
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  MessageBody,
+  ConnectedSocket,
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+import { Logger, UseGuards, Injectable } from '@nestjs/common';
+{% if auth and auth.enabled %}
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+{% endif %}
+{% if realtime.scaling === 'redis' %}
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
+{% endif %}
+
+/**
+ * Main WebSocket Gateway for real-time communication
+ * 
+ * Features:
+ * - JWT Authentication (if enabled)
+ * - Room-based subscriptions
+ {% if realtime.presence %}- Online presence tracking{% endif %}
+ * - Model change broadcasts
+ {% if realtime.scaling === 'redis' %}- Redis adapter for horizontal scaling{% endif %}
+ */
+@WebSocketGateway({
+  cors: {% if realtime.cors %}{ origin: '*', credentials: true }{% else %}false{% endif %},
+  namespace: '/',
+  transports: ['websocket', 'polling'],
+})
+@Injectable()
+export class AppGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer()
+  server: Server;
+
+  private readonly logger = new Logger(AppGateway.name);
+{% if realtime.presence %}
+  private readonly connectedUsers = new Map<string, { socketId: string; userId?: string; rooms: Set<string> }>();
+{% endif %}
+
+  constructor(
+{% if auth and auth.enabled %}
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+{% endif %}
+  ) {}
+
+  async afterInit(server: Server): Promise<void> {
+{% if realtime.scaling === 'redis' %}
+    // Set up Redis adapter for horizontal scaling
+    const pubClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+    const subClient = pubClient.duplicate();
+    
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    server.adapter(createAdapter(pubClient, subClient));
+    
+    this.logger.log('WebSocket Redis adapter initialized');
+{% endif %}
+    this.logger.log('WebSocket Gateway initialized');
+  }
+
+  async handleConnection(client: Socket): Promise<void> {
+{% if auth and auth.enabled and realtime.authentication %}
+    try {
+      // Extract JWT from handshake
+      const token = this.extractToken(client);
+      if (!token) {
+        this.logger.warn(`Client ${client.id} connected without token`);
+        client.emit('error', { message: 'Authentication required' });
+        client.disconnect();
+        return;
+      }
+
+      // Verify JWT
+      const payload = await this.jwtService.verifyAsync(token, {
+        secret: this.configService.get<string>('JWT_SECRET'),
+      });
+
+      // Attach user info to socket
+      client.data.user = payload;
+      client.data.userId = payload.sub;
+{% if realtime.presence %}
+      // Track connected user
+      this.connectedUsers.set(client.id, {
+        socketId: client.id,
+        userId: payload.sub,
+        rooms: new Set(),
+      });
+{% endif %}
+
+      this.logger.log(`Client ${client.id} connected (User: ${payload.sub})`);
+    } catch (error) {
+      this.logger.warn(`Client ${client.id} auth failed: ${error.message}`);
+      client.emit('error', { message: 'Invalid token' });
+      client.disconnect();
+      return;
+    }
+{% else %}
+{% if realtime.presence %}
+    // Track connected client
+    this.connectedUsers.set(client.id, {
+      socketId: client.id,
+      rooms: new Set(),
+    });
+{% endif %}
+    this.logger.log(`Client ${client.id} connected`);
+{% endif %}
+  }
+
+  async handleDisconnect(client: Socket): Promise<void> {
+{% if realtime.presence %}
+    const user = this.connectedUsers.get(client.id);
+    if (user) {
+      // Leave all rooms and notify
+      for (const room of user.rooms) {
+        client.to(room).emit('presence:left', {
+          userId: user.userId,
+          socketId: client.id,
+          room,
+        });
+      }
+      this.connectedUsers.delete(client.id);
+    }
+{% endif %}
+    this.logger.log(`Client ${client.id} disconnected`);
+  }
+
+{% if auth and auth.enabled and realtime.authentication %}
+  private extractToken(client: Socket): string | null {
+    // Try auth header first
+    const authHeader = client.handshake.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      return authHeader.substring(7);
+    }
+    // Try query parameter
+    return client.handshake.query.token as string || null;
+  }
+{% endif %}
+
+{% if realtime.rooms %}
+  /**
+   * Join a room for targeted broadcasts
+   * @example socket.emit('room:join', { room: 'orders:user123' })
+   */
+  @SubscribeMessage('room:join')
+  async handleJoinRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { room: string },
+  ): Promise<{ success: boolean; room: string }> {
+    const { room } = data;
+    
+    // Validate room name
+    if (!room || typeof room !== 'string') {
+      return { success: false, room };
+    }
+
+    await client.join(room);
+{% if realtime.presence %}
+    const user = this.connectedUsers.get(client.id);
+    if (user) {
+      user.rooms.add(room);
+      // Notify room members
+      client.to(room).emit('presence:joined', {
+        userId: user.userId,
+        socketId: client.id,
+        room,
+      });
+    }
+{% endif %}
+    
+    this.logger.debug(`Client ${client.id} joined room: ${room}`);
+    return { success: true, room };
+  }
+
+  /**
+   * Leave a room
+   * @example socket.emit('room:leave', { room: 'orders:user123' })
+   */
+  @SubscribeMessage('room:leave')
+  async handleLeaveRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { room: string },
+  ): Promise<{ success: boolean; room: string }> {
+    const { room } = data;
+    
+    await client.leave(room);
+{% if realtime.presence %}
+    const user = this.connectedUsers.get(client.id);
+    if (user) {
+      user.rooms.delete(room);
+      // Notify room members
+      client.to(room).emit('presence:left', {
+        userId: user.userId,
+        socketId: client.id,
+        room,
+      });
+    }
+{% endif %}
+    
+    this.logger.debug(`Client ${client.id} left room: ${room}`);
+    return { success: true, room };
+  }
+{% endif %}
+
+{% if realtime.presence %}
+  /**
+   * Get online users in a room
+   * @example socket.emit('presence:get', { room: 'orders' })
+   */
+  @SubscribeMessage('presence:get')
+  handleGetPresence(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { room?: string },
+  ): { users: Array<{ userId?: string; socketId: string }> } {
+    const { room } = data;
+    
+    const users: Array<{ userId?: string; socketId: string }> = [];
+    
+    for (const [socketId, user] of this.connectedUsers.entries()) {
+      if (!room || user.rooms.has(room)) {
+        users.push({
+          userId: user.userId,
+          socketId: user.socketId,
+        });
+      }
+    }
+    
+    return { users };
+  }
+{% endif %}
+
+  /**
+   * Broadcast a model change to relevant rooms/clients
+   * Called internally by services when data changes
+   */
+  broadcastModelChange(
+    model: string,
+    action: 'created' | 'updated' | 'deleted',
+    data: any,
+    room?: string,
+  ): void {
+    const event = `${model}:${action}`;
+    const payload = { model, action, data, timestamp: new Date().toISOString() };
+    
+    if (room) {
+      this.server.to(room).emit(event, payload);
+    } else {
+      this.server.emit(event, payload);
+    }
+    
+    this.logger.debug(`Broadcast: ${event} to ${room || 'all'}`);
+  }
+
+  /**
+   * Send a message to a specific user
+   */
+  sendToUser(userId: string, event: string, data: any): void {
+{% if realtime.presence %}
+    for (const [socketId, user] of this.connectedUsers.entries()) {
+      if (user.userId === userId) {
+        this.server.to(socketId).emit(event, data);
+      }
+    }
+{% else %}
+    // Without presence tracking, broadcast to user-specific room
+    this.server.to(`user:${userId}`).emit(event, data);
+{% endif %}
+  }
+}

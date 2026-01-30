@@ -1,0 +1,195 @@
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import Razorpay from 'razorpay';
+import { createHmac } from 'crypto';
+
+export interface CreateOrderDto {
+  amount: number; // Amount in smallest currency unit (paise)
+  currency?: string;
+  receipt?: string;
+  notes?: Record<string, string>;
+}
+
+export interface VerifyPaymentDto {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+/**
+ * Razorpay Payment Service
+ * 
+ * Handles:
+ * - Order creation
+ * - Payment verification
+ * - Refunds
+ * - Webhooks
+ * 
+ * Environment Variables:
+ * - RAZORPAY_KEY_ID: Your Razorpay key ID
+ * - RAZORPAY_KEY_SECRET: Your Razorpay key secret
+ * - RAZORPAY_WEBHOOK_SECRET: Webhook secret for signature verification
+ */
+@Injectable()
+export class RazorpayService {
+  private readonly logger = new Logger(RazorpayService.name);
+  private readonly razorpay: Razorpay;
+
+  constructor() {
+    this.razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID!,
+      key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    });
+  }
+
+  /**
+   * Create a Razorpay order
+   */
+  async createOrder(dto: CreateOrderDto): Promise<any> {
+    try {
+      const order = await this.razorpay.orders.create({
+        amount: dto.amount,
+        currency: dto.currency || '{{ payment.razorpay.currency | default("INR") }}',
+        receipt: dto.receipt || `receipt_${Date.now()}`,
+        notes: dto.notes,
+      });
+
+      this.logger.log(`Created Razorpay order: ${order.id}`);
+      return {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        keyId: process.env.RAZORPAY_KEY_ID,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to create order: ${error.message}`);
+      throw new BadRequestException(`Order creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify payment signature
+   */
+  verifyPayment(dto: VerifyPaymentDto): boolean {
+    const body = dto.razorpay_order_id + '|' + dto.razorpay_payment_id;
+    const expectedSignature = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+      .update(body)
+      .digest('hex');
+
+    const isValid = expectedSignature === dto.razorpay_signature;
+    
+    if (isValid) {
+      this.logger.log(`Payment verified: ${dto.razorpay_payment_id}`);
+    } else {
+      this.logger.warn(`Payment verification failed: ${dto.razorpay_payment_id}`);
+    }
+
+    return isValid;
+  }
+
+  /**
+   * Fetch payment details
+   */
+  async getPayment(paymentId: string): Promise<any> {
+    return this.razorpay.payments.fetch(paymentId);
+  }
+
+  /**
+   * Fetch order details
+   */
+  async getOrder(orderId: string): Promise<any> {
+    return this.razorpay.orders.fetch(orderId);
+  }
+
+  /**
+   * Create a refund
+   */
+  async createRefund(paymentId: string, amount?: number): Promise<any> {
+    try {
+      const refund = await this.razorpay.payments.refund(paymentId, {
+        amount,
+      });
+
+      this.logger.log(`Created refund for payment: ${paymentId}`);
+      return refund;
+    } catch (error) {
+      this.logger.error(`Failed to create refund: ${error.message}`);
+      throw new BadRequestException(`Refund failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify webhook signature
+   */
+  verifyWebhookSignature(body: string, signature: string): boolean {
+    const expectedSignature = createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
+      .update(body)
+      .digest('hex');
+
+    return expectedSignature === signature;
+  }
+
+{% if payment.subscriptions %}
+  /**
+   * Create a subscription plan
+   */
+  async createPlan(params: {
+    name: string;
+    amount: number;
+    period: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    interval: number;
+    currency?: string;
+  }): Promise<any> {
+    try {
+      const plan = await this.razorpay.plans.create({
+        period: params.period,
+        interval: params.interval,
+        item: {
+          name: params.name,
+          amount: params.amount,
+          currency: params.currency || '{{ payment.razorpay.currency | default("INR") }}',
+        },
+      });
+
+      this.logger.log(`Created plan: ${plan.id}`);
+      return plan;
+    } catch (error) {
+      this.logger.error(`Failed to create plan: ${error.message}`);
+      throw new BadRequestException(`Plan creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a subscription
+   */
+  async createSubscription(params: {
+    planId: string;
+    customerId?: string;
+    totalCount?: number;
+    notes?: Record<string, string>;
+  }): Promise<any> {
+    try {
+      const subscription = await this.razorpay.subscriptions.create({
+        plan_id: params.planId,
+        customer_id: params.customerId,
+        total_count: params.totalCount,
+        notes: params.notes,
+      });
+
+      this.logger.log(`Created subscription: ${subscription.id}`);
+      return subscription;
+    } catch (error) {
+      this.logger.error(`Failed to create subscription: ${error.message}`);
+      throw new BadRequestException(`Subscription creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Cancel a subscription
+   */
+  async cancelSubscription(subscriptionId: string): Promise<any> {
+    const subscription = await this.razorpay.subscriptions.cancel(subscriptionId);
+    this.logger.log(`Cancelled subscription: ${subscriptionId}`);
+    return subscription;
+  }
+{% endif %}
+}

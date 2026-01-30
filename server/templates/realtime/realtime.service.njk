@@ -1,0 +1,86 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { AppGateway } from './app.gateway';
+
+/**
+ * Real-time Events Service
+ * 
+ * Use this service to broadcast events from your application services
+ * 
+ * @example
+ * // In a service
+ * constructor(private readonly realtimeService: RealtimeService) {}
+ * 
+ * async createOrder(dto: CreateOrderDto) {
+ *   const order = await this.orderRepository.create(dto);
+ *   
+ *   // Broadcast to all clients subscribed to this user's orders
+ *   this.realtimeService.broadcast('order', 'created', order, `orders:${order.userId}`);
+ *   
+ *   return order;
+ * }
+ */
+@Injectable()
+export class RealtimeService {
+  private readonly logger = new Logger(RealtimeService.name);
+
+  constructor(private readonly gateway: AppGateway) {}
+
+  /**
+   * Broadcast a model change event
+   * 
+   * @param model - Model name (e.g., 'order')
+   * @param action - Action performed ('created', 'updated', 'deleted')
+   * @param data - The data to broadcast
+   * @param room - Optional room to target (e.g., 'orders:user123')
+   */
+  broadcast(
+    model: string,
+    action: 'created' | 'updated' | 'deleted',
+    data: any,
+    room?: string,
+  ): void {
+    this.gateway.broadcastModelChange(model, action, data, room);
+  }
+
+  /**
+   * Send a notification to a specific user
+   * 
+   * @param userId - Target user ID
+   * @param type - Notification type
+   * @param payload - Notification data
+   */
+  notifyUser(userId: string, type: string, payload: any): void {
+    this.gateway.sendToUser(userId, `notification:${type}`, {
+      type,
+      payload,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Broadcast to a specific room
+   * 
+   * @param room - Room name
+   * @param event - Event name
+   * @param data - Event data
+   */
+  emitToRoom(room: string, event: string, data: any): void {
+    this.gateway.server.to(room).emit(event, {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Broadcast to all connected clients
+   * 
+   * @param event - Event name
+   * @param data - Event data
+   */
+  emitToAll(event: string, data: any): void {
+    this.gateway.server.emit(event, {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}

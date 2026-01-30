@@ -1,0 +1,243 @@
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { authenticator } from 'otplib';
+import { toDataURL } from 'qrcode';
+import { randomBytes, createHash } from 'crypto';
+import { User, UserDocument } from './user.schema';
+
+export interface MfaSetupResult {
+  secret: string;
+  qrCode: string; // Base64 data URL
+  backupCodes?: string[];
+}
+
+export interface MfaVerifyResult {
+  success: boolean;
+  isBackupCode?: boolean;
+}
+
+/**
+ * MFA Service - Multi-Factor Authentication
+ * 
+ * Supports:
+ * - TOTP (Time-based One-Time Password) via authenticator apps
+ * - Backup codes for recovery
+ * 
+ * Environment Variables:
+ * - MFA_ISSUER: Name shown in authenticator apps (defaults to project name)
+ */
+@Injectable()
+export class MfaService {
+  private readonly logger = new Logger(MfaService.name);
+  private readonly issuer: string;
+
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+  ) {
+    this.issuer = process.env.MFA_ISSUER || '{{ project.name }}';
+    
+    // Configure TOTP
+    authenticator.options = {
+      window: 1, // Allow 1 step tolerance (30 seconds)
+      digits: 6,
+      step: 30,
+    };
+  }
+
+  /**
+   * Generate TOTP secret and QR code for setup
+   */
+  async setupTotp(userId: string): Promise<MfaSetupResult> {
+    const user = await this.userModel.findById(new Types.ObjectId(userId));
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Generate new secret
+    const secret = authenticator.generateSecret();
+    
+    // Generate QR code URL for authenticator apps
+    const otpAuthUrl = authenticator.keyuri(
+      user.email,
+      this.issuer,
+      secret,
+    );
+    
+    const qrCode = await toDataURL(otpAuthUrl);
+
+    // Store pending secret (not active until verified)
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: { 'mfaPendingSecret': secret },
+    });
+
+    this.logger.log(`TOTP setup initiated for user ${userId}`);
+
+    return {
+      secret,
+      qrCode,
+    };
+  }
+
+  /**
+   * Verify TOTP code and activate MFA
+   */
+  async verifyAndActivate(userId: string, code: string): Promise<{ success: boolean; backupCodes?: string[] }> {
+    const user = await this.userModel.findById(new Types.ObjectId(userId)).select('+mfaPendingSecret');
+    if (!user || !user.mfaPendingSecret) {
+      throw new BadRequestException('MFA setup not initiated');
+    }
+
+    // Verify the code
+    const isValid = authenticator.verify({
+      token: code,
+      secret: user.mfaPendingSecret,
+    });
+
+    if (!isValid) {
+      return { success: false };
+    }
+
+    // Generate backup codes
+    const backupCodes = this.generateBackupCodes({{ auth.mfa.backupCodes | default(10) }});
+    const hashedBackupCodes = backupCodes.map(code => this.hashBackupCode(code));
+
+    // Activate MFA
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: {
+        'mfaEnabled': true,
+        'mfaSecret': user.mfaPendingSecret,
+        'mfaBackupCodes': hashedBackupCodes,
+      },
+      $unset: { 'mfaPendingSecret': 1 },
+    });
+
+    this.logger.log(`MFA activated for user ${userId}`);
+
+    return {
+      success: true,
+      backupCodes,
+    };
+  }
+
+  /**
+   * Verify a TOTP code during login
+   */
+  async verifyTotp(userId: string, code: string): Promise<MfaVerifyResult> {
+    const user = await this.userModel.findById(new Types.ObjectId(userId)).select('+mfaSecret +mfaBackupCodes');
+    if (!user || !user.mfaSecret) {
+      throw new BadRequestException('MFA not enabled for this user');
+    }
+
+    // First try TOTP verification
+    const isValid = authenticator.verify({
+      token: code,
+      secret: user.mfaSecret,
+    });
+
+    if (isValid) {
+      return { success: true, isBackupCode: false };
+    }
+
+    // Try backup code
+    const backupResult = await this.tryBackupCode(userId, code, user.mfaBackupCodes);
+    if (backupResult) {
+      return { success: true, isBackupCode: true };
+    }
+
+    return { success: false };
+  }
+
+  /**
+   * Disable MFA for a user
+   */
+  async disable(userId: string, code: string): Promise<boolean> {
+    // Verify code before disabling
+    const verifyResult = await this.verifyTotp(userId, code);
+    if (!verifyResult.success) {
+      throw new BadRequestException('Invalid verification code');
+    }
+
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: { 'mfaEnabled': false },
+      $unset: {
+        'mfaSecret': 1,
+        'mfaBackupCodes': 1,
+        'mfaPendingSecret': 1,
+      },
+    });
+
+    this.logger.log(`MFA disabled for user ${userId}`);
+    return true;
+  }
+
+  /**
+   * Regenerate backup codes
+   */
+  async regenerateBackupCodes(userId: string, code: string): Promise<string[]> {
+    // Verify current code first
+    const verifyResult = await this.verifyTotp(userId, code);
+    if (!verifyResult.success) {
+      throw new BadRequestException('Invalid verification code');
+    }
+
+    const backupCodes = this.generateBackupCodes({{ auth.mfa.backupCodes | default(10) }});
+    const hashedBackupCodes = backupCodes.map(c => this.hashBackupCode(c));
+
+    await this.userModel.findByIdAndUpdate(userId, {
+      $set: { 'mfaBackupCodes': hashedBackupCodes },
+    });
+
+    this.logger.log(`Backup codes regenerated for user ${userId}`);
+    return backupCodes;
+  }
+
+  /**
+   * Check if MFA is enabled for a user
+   */
+  async isEnabled(userId: string): Promise<boolean> {
+    const user = await this.userModel.findById(new Types.ObjectId(userId)).select('mfaEnabled');
+    return user?.mfaEnabled ?? false;
+  }
+
+  /**
+   * Get remaining backup codes count
+   */
+  async getBackupCodesCount(userId: string): Promise<number> {
+    const user = await this.userModel.findById(new Types.ObjectId(userId)).select('mfaBackupCodes');
+    return user?.mfaBackupCodes?.length ?? 0;
+  }
+
+  // Private helpers
+
+  private generateBackupCodes(count: number): string[] {
+    const codes: string[] = [];
+    for (let i = 0; i < count; i++) {
+      // Generate 8-character alphanumeric codes
+      const code = randomBytes(4).toString('hex').toUpperCase();
+      codes.push(code);
+    }
+    return codes;
+  }
+
+  private hashBackupCode(code: string): string {
+    return createHash('sha256').update(code.toUpperCase()).digest('hex');
+  }
+
+  private async tryBackupCode(userId: string, code: string, storedCodes: string[]): Promise<boolean> {
+    const hashedInput = this.hashBackupCode(code);
+    const index = storedCodes.findIndex(c => c === hashedInput);
+    
+    if (index === -1) {
+      return false;
+    }
+
+    // Remove used backup code
+    await this.userModel.findByIdAndUpdate(userId, {
+      $pull: { 'mfaBackupCodes': hashedInput },
+    });
+
+    this.logger.log(`Backup code used for user ${userId}, ${storedCodes.length - 1} remaining`);
+    return true;
+  }
+}

@@ -1,0 +1,27 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { User, UserSchema } from '../user.schema';
+import { MfaService } from './mfa.service';
+import { MfaController } from './mfa.controller';
+
+/**
+ * MFA Module - Multi-Factor Authentication
+ * 
+ * Provides:
+ * - TOTP-based authentication (Google Authenticator, etc.)
+ * - Backup codes for account recovery
+ * - QR code generation for easy setup
+ * 
+ * Required Dependencies:
+ * - otplib: TOTP generation and verification
+ * - qrcode: QR code generation
+ */
+@Module({
+  imports: [
+    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+  ],
+  controllers: [MfaController],
+  providers: [MfaService],
+  exports: [MfaService],
+})
+export class MfaModule {}

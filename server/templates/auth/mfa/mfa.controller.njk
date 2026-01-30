@@ -1,0 +1,97 @@
+import { Controller, Post, Get, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+{% if features.swagger %}
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+{% endif %}
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { CurrentUser } from '../decorators/current-user.decorator';
+import { MfaService } from './mfa.service';
+
+class VerifyCodeDto {
+  code: string;
+}
+
+/**
+ * MFA Controller - Multi-Factor Authentication
+ * 
+ * Endpoints for setting up and managing MFA
+ */
+{% if features.swagger %}
+@ApiTags('MFA')
+@ApiBearerAuth()
+{% endif %}
+@Controller('auth/mfa')
+@UseGuards(JwtAuthGuard)
+export class MfaController {
+  constructor(private readonly mfaService: MfaService) {}
+
+  /**
+   * Get MFA status for current user
+   */
+  @Get('status')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Get MFA status' })
+  @ApiResponse({ status: 200, description: 'MFA status' })
+{% endif %}
+  async getStatus(@CurrentUser() user: any) {
+    const enabled = await this.mfaService.isEnabled(user.sub);
+    const backupCodesRemaining = enabled 
+      ? await this.mfaService.getBackupCodesCount(user.sub) 
+      : 0;
+    
+    return {
+      enabled,
+      backupCodesRemaining,
+    };
+  }
+
+  /**
+   * Initiate TOTP setup - returns secret and QR code
+   */
+  @Post('setup')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Start MFA setup' })
+  @ApiResponse({ status: 200, description: 'TOTP secret and QR code' })
+{% endif %}
+  async setup(@CurrentUser() user: any) {
+    return this.mfaService.setupTotp(user.sub);
+  }
+
+  /**
+   * Verify TOTP code and activate MFA
+   */
+  @Post('verify')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Verify and activate MFA' })
+  @ApiResponse({ status: 200, description: 'Activation result with backup codes' })
+{% endif %}
+  async verify(@CurrentUser() user: any, @Body() dto: VerifyCodeDto) {
+    return this.mfaService.verifyAndActivate(user.sub, dto.code);
+  }
+
+  /**
+   * Disable MFA (requires valid code)
+   */
+  @Post('disable')
+  @HttpCode(HttpStatus.OK)
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Disable MFA' })
+  @ApiResponse({ status: 200, description: 'MFA disabled' })
+{% endif %}
+  async disable(@CurrentUser() user: any, @Body() dto: VerifyCodeDto) {
+    await this.mfaService.disable(user.sub, dto.code);
+    return { success: true, message: 'MFA disabled' };
+  }
+
+  /**
+   * Regenerate backup codes (requires valid code)
+   */
+  @Post('backup-codes/regenerate')
+{% if features.swagger %}
+  @ApiOperation({ summary: 'Regenerate backup codes' })
+  @ApiResponse({ status: 200, description: 'New backup codes' })
+{% endif %}
+  async regenerateBackupCodes(@CurrentUser() user: any, @Body() dto: VerifyCodeDto) {
+    const backupCodes = await this.mfaService.regenerateBackupCodes(user.sub, dto.code);
+    return { backupCodes };
+  }
+}

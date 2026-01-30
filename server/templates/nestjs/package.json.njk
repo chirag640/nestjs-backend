@@ -45,6 +45,10 @@
     "@nestjs-modules/mailer": "^2.0.2",
     "nodemailer": "^6.9.15",
     "handlebars": "^4.7.8",
+{% if auth.mfa and auth.mfa.enabled %}
+    "otplib": "^12.0.1",
+    "qrcode": "^1.5.3",
+{% endif %}
 {% endif %}
 {% if oauth and oauth.enabled %}
     {% for provider in oauth.providers %}
@@ -109,6 +113,35 @@
 {% endif %}
 {% if mobile.offlineSync and mobile.offlineSync.enabled %}
     "lodash": "^4.17.21",
+{% endif %}
+{% endif %}
+{% if realtime and realtime.enabled %}
+    "@nestjs/websockets": "^10.0.0",
+    "@nestjs/platform-socket.io": "^10.0.0",
+    "socket.io": "^4.7.0",
+{% if realtime.scaling === 'redis' %}
+    "@socket.io/redis-adapter": "^8.3.0",
+{% endif %}
+{% endif %}
+{% if graphql and graphql.enabled %}
+    "@nestjs/graphql": "^12.0.0",
+    "@nestjs/apollo": "^12.0.0",
+    "@apollo/server": "^4.9.0",
+    "graphql": "^16.8.0",
+{% if graphql.subscriptions %}
+    "graphql-subscriptions": "^2.0.0",
+    "graphql-ws": "^5.14.0",
+{% endif %}
+{% if graphql.complexity and graphql.complexity.enabled %}
+    "graphql-query-complexity": "^0.12.0",
+{% endif %}
+{% endif %}
+{% if payment and payment.enabled %}
+{% if 'stripe' in payment.providers %}
+    "stripe": "^14.0.0",
+{% endif %}
+{% if 'razorpay' in payment.providers %}
+    "razorpay": "^2.9.0",
 {% endif %}
 {% endif %}
     "@aws-sdk/client-kms": "^3.682.0",

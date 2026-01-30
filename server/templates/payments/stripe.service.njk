@@ -1,0 +1,229 @@
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import Stripe from 'stripe';
+
+export interface CreatePaymentIntentDto {
+  amount: number; // Amount in smallest currency unit (cents, paise, etc.)
+  currency?: string;
+  customerId?: string;
+  metadata?: Record<string, string>;
+  description?: string;
+}
+
+export interface CreateSubscriptionDto {
+  customerId: string;
+  priceId: string;
+  metadata?: Record<string, string>;
+}
+
+export interface CreateCustomerDto {
+  email: string;
+  name?: string;
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Stripe Payment Service
+ * 
+ * Handles:
+ * - Payment intents (one-time payments)
+ * - Customers
+ * - Subscriptions (recurring billing)
+ * - Webhooks
+ * 
+ * Environment Variables:
+ * - STRIPE_SECRET_KEY: Your Stripe secret key
+ * - STRIPE_WEBHOOK_SECRET: Webhook endpoint secret
+ */
+@Injectable()
+export class StripeService {
+  private readonly logger = new Logger(StripeService.name);
+  private readonly stripe: Stripe;
+
+  constructor() {
+    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2024-06-20',
+    });
+  }
+
+  /**
+   * Create a payment intent for one-time payment
+   */
+  async createPaymentIntent(dto: CreatePaymentIntentDto): Promise<Stripe.PaymentIntent> {
+    try {
+      const paymentIntent = await this.stripe.paymentIntents.create({
+        amount: dto.amount,
+        currency: dto.currency || '{{ payment.stripe.currency | default("usd") }}',
+        customer: dto.customerId,
+        metadata: dto.metadata,
+        description: dto.description,
+        payment_method_types: {{ payment.stripe.paymentMethods | dump | default('["card"]') }},
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      });
+
+      this.logger.log(`Created payment intent: ${paymentIntent.id}`);
+      return paymentIntent;
+    } catch (error) {
+      this.logger.error(`Failed to create payment intent: ${error.message}`);
+      throw new BadRequestException(`Payment failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create or get a Stripe customer
+   */
+  async createCustomer(dto: CreateCustomerDto): Promise<Stripe.Customer> {
+    try {
+      // Check if customer exists
+      const existingCustomers = await this.stripe.customers.list({
+        email: dto.email,
+        limit: 1,
+      });
+
+      if (existingCustomers.data.length > 0) {
+        return existingCustomers.data[0];
+      }
+
+      // Create new customer
+      const customer = await this.stripe.customers.create({
+        email: dto.email,
+        name: dto.name,
+        metadata: dto.metadata,
+      });
+
+      this.logger.log(`Created Stripe customer: ${customer.id}`);
+      return customer;
+    } catch (error) {
+      this.logger.error(`Failed to create customer: ${error.message}`);
+      throw new BadRequestException(`Customer creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get customer by ID
+   */
+  async getCustomer(customerId: string): Promise<Stripe.Customer> {
+    return this.stripe.customers.retrieve(customerId) as Promise<Stripe.Customer>;
+  }
+
+{% if payment.subscriptions %}
+  /**
+   * Create a subscription
+   */
+  async createSubscription(dto: CreateSubscriptionDto): Promise<Stripe.Subscription> {
+    try {
+      const subscription = await this.stripe.subscriptions.create({
+        customer: dto.customerId,
+        items: [{ price: dto.priceId }],
+        metadata: dto.metadata,
+        payment_behavior: 'default_incomplete',
+        payment_settings: {
+          save_default_payment_method: 'on_subscription',
+        },
+        expand: ['latest_invoice.payment_intent'],
+      });
+
+      this.logger.log(`Created subscription: ${subscription.id}`);
+      return subscription;
+    } catch (error) {
+      this.logger.error(`Failed to create subscription: ${error.message}`);
+      throw new BadRequestException(`Subscription creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Cancel a subscription
+   */
+  async cancelSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    const subscription = await this.stripe.subscriptions.cancel(subscriptionId);
+    this.logger.log(`Cancelled subscription: ${subscriptionId}`);
+    return subscription;
+  }
+
+  /**
+   * Get subscription by ID
+   */
+  async getSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    return this.stripe.subscriptions.retrieve(subscriptionId);
+  }
+
+  /**
+   * List customer's subscriptions
+   */
+  async listSubscriptions(customerId: string): Promise<Stripe.Subscription[]> {
+    const subscriptions = await this.stripe.subscriptions.list({
+      customer: customerId,
+    });
+    return subscriptions.data;
+  }
+{% endif %}
+
+  /**
+   * Create a checkout session (hosted payment page)
+   */
+  async createCheckoutSession(params: {
+    customerId?: string;
+    priceId?: string;
+    amount?: number;
+    successUrl: string;
+    cancelUrl: string;
+    mode: 'payment' | 'subscription';
+  }): Promise<Stripe.Checkout.Session> {
+    const lineItems = params.priceId
+      ? [{ price: params.priceId, quantity: 1 }]
+      : [{
+          price_data: {
+            currency: '{{ payment.stripe.currency | default("usd") }}',
+            product_data: { name: 'Payment' },
+            unit_amount: params.amount,
+          },
+          quantity: 1,
+        }];
+
+    const session = await this.stripe.checkout.sessions.create({
+      customer: params.customerId,
+      line_items: lineItems,
+      mode: params.mode,
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+    });
+
+    this.logger.log(`Created checkout session: ${session.id}`);
+    return session;
+  }
+
+  /**
+   * Verify webhook signature
+   */
+  constructEvent(payload: Buffer, signature: string): Stripe.Event {
+    return this.stripe.webhooks.constructEvent(
+      payload,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!,
+    );
+  }
+
+  /**
+   * List all payment methods for a customer
+   */
+  async listPaymentMethods(customerId: string): Promise<Stripe.PaymentMethod[]> {
+    const paymentMethods = await this.stripe.paymentMethods.list({
+      customer: customerId,
+      type: 'card',
+    });
+    return paymentMethods.data;
+  }
+
+  /**
+   * Create a refund
+   */
+  async createRefund(paymentIntentId: string, amount?: number): Promise<Stripe.Refund> {
+    const refund = await this.stripe.refunds.create({
+      payment_intent: paymentIntentId,
+      amount,
+    });
+    this.logger.log(`Created refund: ${refund.id}`);
+    return refund;
+  }
+}

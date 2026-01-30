@@ -236,6 +236,94 @@ export interface MobileIR {
 }
 
 /**
+ * Real-time WebSocket Configuration IR
+ */
+export interface RealtimeIR {
+  enabled: boolean;
+  provider: "socket.io" | "ws";
+  authentication: boolean;
+  cors: boolean;
+  rooms: boolean;
+  presence: boolean;
+  scaling: "none" | "redis";
+  namespaces: string[];
+  modelChanges: boolean;
+  customEvents: string[];
+}
+
+/**
+ * Webhook Configuration IR (Outgoing webhooks)
+ */
+export interface WebhookIR {
+  enabled: boolean;
+  events: string[];
+  retries: number;
+  backoff: "linear" | "exponential";
+  signature: "none" | "hmac-sha256";
+  timeout: number;
+  logging: boolean;
+}
+
+/**
+ * Audit Logging Configuration IR
+ */
+export interface AuditIR {
+  enabled: boolean;
+  storage: "database" | "elasticsearch";
+  retention: string;
+  events: string[];
+  piiMasking: boolean;
+  userTracking: boolean;
+  ipTracking: boolean;
+}
+
+/**
+ * GraphQL Configuration IR
+ */
+export interface GraphQLIR {
+  enabled: boolean;
+  playground: boolean;
+  introspection: boolean;
+  subscriptions: boolean;
+  complexity: {
+    enabled: boolean;
+    maxComplexity: number;
+    maxDepth: number;
+  };
+  caching: boolean;
+  federation: boolean;
+}
+
+/**
+ * Multi-tenancy Configuration IR
+ */
+export interface MultitenancyIR {
+  enabled: boolean;
+  strategy: "database" | "schema" | "row";
+  tenantIdSource: "header" | "subdomain" | "jwt";
+  headerName: string;
+  defaultTenant?: string;
+  isolation: boolean;
+}
+
+/**
+ * Payment Integration Configuration IR
+ */
+export interface PaymentIR {
+  enabled: boolean;
+  providers: string[];
+  stripe?: {
+    currency: string;
+    paymentMethods: string[];
+  };
+  razorpay?: {
+    currency: string;
+  };
+  subscriptions: boolean;
+  invoicing: boolean;
+}
+
+/**
  * Complete Intermediate Representation
  */
 export interface ProjectIR {
@@ -263,6 +351,12 @@ export interface ProjectIR {
   docker?: DockerIR; // Docker configuration
   cicd?: CICDIR; // CI/CD configuration
   mobile?: MobileIR; // Mobile configuration (biometrics, device mgmt, sync)
+  realtime?: RealtimeIR; // Real-time WebSocket configuration
+  webhook?: WebhookIR; // Outgoing webhook configuration
+  audit?: AuditIR; // Audit logging configuration
+  graphql?: GraphQLIR; // GraphQL API configuration
+  multitenancy?: MultitenancyIR; // Multi-tenancy configuration
+  payment?: PaymentIR; // Payment integration configuration
   metadata: {
     // Generation metadata
     generatorVersion: string;
@@ -353,6 +447,36 @@ export function buildIR(config: WizardConfig): ProjectIR {
   // Add Mobile features if enabled
   if (config.mobileConfig?.enabled) {
     ir.mobile = buildMobileIR(config);
+  }
+
+  // Add Real-time WebSocket features if enabled
+  if (config.realtimeConfig?.enabled) {
+    ir.realtime = buildRealtimeIR(config);
+  }
+
+  // Add Webhook features if enabled
+  if (config.webhookConfig?.enabled) {
+    ir.webhook = buildWebhookIR(config);
+  }
+
+  // Add Audit logging if enabled
+  if (config.auditConfig?.enabled) {
+    ir.audit = buildAuditIR(config);
+  }
+
+  // Add GraphQL if enabled
+  if (config.graphqlConfig?.enabled) {
+    ir.graphql = buildGraphQLIR(config);
+  }
+
+  // Add Multi-tenancy if enabled
+  if (config.multitenancyConfig?.enabled) {
+    ir.multitenancy = buildMultitenancyIR(config);
+  }
+
+  // Add Payment integration if enabled
+  if (config.paymentConfig?.enabled) {
+    ir.payment = buildPaymentIR(config);
   }
 
   return ir;
@@ -952,6 +1076,126 @@ function buildMobileIR(config: WizardConfig): MobileIR {
       batchSize: mobileConfig.offlineSync.batchSize ?? 100,
       syncModels: mobileConfig.offlineSync.syncModels || [],
       idempotencyKeyTTL: mobileConfig.offlineSync.idempotencyKeyTTL ?? 86400,
+    };
+  }
+
+  return ir;
+}
+
+/**
+ * Build Real-time WebSocket IR from configuration
+ */
+function buildRealtimeIR(config: WizardConfig): RealtimeIR {
+  const realtimeConfig = config.realtimeConfig!;
+  
+  return {
+    enabled: realtimeConfig.enabled,
+    provider: realtimeConfig.provider || "socket.io",
+    authentication: realtimeConfig.authentication ?? true,
+    cors: realtimeConfig.cors ?? true,
+    rooms: realtimeConfig.rooms ?? true,
+    presence: realtimeConfig.presence ?? false,
+    scaling: realtimeConfig.scaling || "none",
+    namespaces: realtimeConfig.namespaces || [],
+    modelChanges: realtimeConfig.events?.modelChanges ?? true,
+    customEvents: realtimeConfig.events?.customEvents || [],
+  };
+}
+
+/**
+ * Build Webhook IR from configuration (Outgoing webhooks)
+ */
+function buildWebhookIR(config: WizardConfig): WebhookIR {
+  const webhookConfig = config.webhookConfig!;
+  
+  return {
+    enabled: webhookConfig.enabled,
+    events: webhookConfig.events || [],
+    retries: webhookConfig.retries ?? 3,
+    backoff: webhookConfig.backoff || "exponential",
+    signature: webhookConfig.signature || "hmac-sha256",
+    timeout: webhookConfig.timeout ?? 5000,
+    logging: webhookConfig.logging ?? true,
+  };
+}
+
+/**
+ * Build Audit Logging IR from configuration
+ */
+function buildAuditIR(config: WizardConfig): AuditIR {
+  const auditConfig = config.auditConfig!;
+  
+  return {
+    enabled: auditConfig.enabled,
+    storage: auditConfig.storage || "database",
+    retention: auditConfig.retention || "90d",
+    events: auditConfig.events || ["create", "update", "delete", "login"],
+    piiMasking: auditConfig.piiMasking ?? true,
+    userTracking: auditConfig.userTracking ?? true,
+    ipTracking: auditConfig.ipTracking ?? true,
+  };
+}
+
+/**
+ * Build GraphQL IR from configuration
+ */
+function buildGraphQLIR(config: WizardConfig): GraphQLIR {
+  const graphqlConfig = config.graphqlConfig!;
+  
+  return {
+    enabled: graphqlConfig.enabled,
+    playground: graphqlConfig.playground ?? true,
+    introspection: graphqlConfig.introspection ?? true,
+    subscriptions: graphqlConfig.subscriptions ?? false,
+    complexity: {
+      enabled: graphqlConfig.complexity?.enabled ?? true,
+      maxComplexity: graphqlConfig.complexity?.maxComplexity ?? 100,
+      maxDepth: graphqlConfig.complexity?.maxDepth ?? 7,
+    },
+    caching: graphqlConfig.caching ?? false,
+    federation: graphqlConfig.federation ?? false,
+  };
+}
+
+/**
+ * Build Multi-tenancy IR from configuration
+ */
+function buildMultitenancyIR(config: WizardConfig): MultitenancyIR {
+  const mtConfig = config.multitenancyConfig!;
+  
+  return {
+    enabled: mtConfig.enabled,
+    strategy: mtConfig.strategy || "row",
+    tenantIdSource: mtConfig.tenantIdSource || "header",
+    headerName: mtConfig.headerName || "X-Tenant-ID",
+    defaultTenant: mtConfig.defaultTenant,
+    isolation: mtConfig.isolation ?? true,
+  };
+}
+
+/**
+ * Build Payment IR from configuration
+ */
+function buildPaymentIR(config: WizardConfig): PaymentIR {
+  const paymentConfig = config.paymentConfig!;
+  
+  const ir: PaymentIR = {
+    enabled: paymentConfig.enabled,
+    providers: paymentConfig.providers || [],
+    subscriptions: paymentConfig.subscriptions ?? false,
+    invoicing: paymentConfig.invoicing ?? false,
+  };
+
+  if (paymentConfig.stripe) {
+    ir.stripe = {
+      currency: paymentConfig.stripe.currency || "usd",
+      paymentMethods: paymentConfig.stripe.paymentMethods || ["card"],
+    };
+  }
+
+  if (paymentConfig.razorpay) {
+    ir.razorpay = {
+      currency: paymentConfig.razorpay.currency || "INR",
     };
   }
 
