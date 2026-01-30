@@ -24,12 +24,22 @@ interface ValidationError {
   message: string;
   suggestion?: string;
   code?: string;
+  severity?: "error" | "warning" | "info";
+}
+
+interface ValidationSuggestion {
+  type: "fix" | "enhancement" | "warning";
+  title: string;
+  description: string;
+  autoFixable: boolean;
+  fix?: any;
 }
 
 interface ValidationResult {
   valid: boolean;
   errors?: ValidationError[];
-  warnings?: Array<{ type: string; message: string }>;
+  warnings?: ValidationError[];
+  suggestions?: ValidationSuggestion[];
   summary?: string;
   message?: string;
 }
@@ -192,7 +202,8 @@ export default function Step0_ManualConfig() {
       config: {
         projectSetup: {
           projectName: "relationship-demo",
-          description: "Demonstration of all relationship types with custom naming",
+          description:
+            "Demonstration of all relationship types with custom naming",
           author: "Foundation Wizard",
           license: "MIT",
           nodeVersion: "20",
@@ -218,7 +229,7 @@ export default function Step0_ManualConfig() {
               name: "Profile",
               fields: [
                 { name: "bio", type: "string", required: false },
-                { name: "avatarUrl", "type": "string", "required": false },
+                { name: "avatarUrl", type: "string", required: false },
               ],
               timestamps: true,
             },
@@ -373,7 +384,7 @@ export default function Step0_ManualConfig() {
         // Server unavailable - fall back to client-side validation
         console.warn(
           "Server validation failed, using client-side:",
-          serverError.message
+          serverError.message,
         );
 
         const clientValidation = wizardConfigSchema.safeParse(parsedConfig);
@@ -454,6 +465,34 @@ export default function Step0_ManualConfig() {
       return 'Did you mean "callbackURL" (capital URL)? Common typo: callbackUrl → callbackURL';
     }
 
+    // Model definition errors
+    if (path.includes("models") && error.code === "too_small") {
+      return "At least one model is required for your project";
+    }
+
+    // Field errors
+    if (path.includes("fields") && error.code === "too_small") {
+      return "Each model must have at least one field";
+    }
+
+    // Database configuration
+    if (path.includes("databaseType") && error.code === "invalid_enum_value") {
+      return 'Valid database types: "PostgreSQL", "MySQL", "MongoDB"';
+    }
+
+    if (path.includes("orm") && error.code === "invalid_enum_value") {
+      return 'Valid ORM options: "TypeORM", "Prisma", "Mongoose"';
+    }
+
+    // Auth configuration
+    if (
+      path.includes("authConfig.strategies") &&
+      error.code === "invalid_enum_value"
+    ) {
+      return 'Valid authentication strategies: "jwt", "local", "api-key", "oauth2"';
+    }
+
+    // Generic suggestions by error type
     if (error.code === "invalid_type") {
       return `Expected type: ${error.expected}, but received: ${error.received}`;
     }
@@ -466,7 +505,10 @@ export default function Step0_ManualConfig() {
     if (error.code === "invalid_string") {
       return "Check format requirements (e.g., camelCase, PascalCase)";
     }
-    return "";
+    if (error.code === "unrecognized_keys") {
+      return `Remove unrecognized keys: ${error.keys?.join(", ")}`;
+    }
+    return "Please check the configuration documentation";
   };
 
   const handleImport = async () => {
@@ -501,7 +543,7 @@ export default function Step0_ManualConfig() {
               ...field,
               id: field.id || `field-${model.name}-${field.name}-${idx}`,
             })),
-          })
+          }),
         );
 
         const relationships =
@@ -509,7 +551,7 @@ export default function Step0_ManualConfig() {
             (rel: any, idx: number) => ({
               ...rel,
               id: rel.id || `rel-${idx}`,
-            })
+            }),
           ) || [];
 
         setModelDefinition({ models, relationships });
@@ -562,7 +604,7 @@ export default function Step0_ManualConfig() {
     const example = JSON.stringify(
       exampleTemplates.healthRecord.config,
       null,
-      2
+      2,
     );
     navigator.clipboard.writeText(example);
     toast({
@@ -668,51 +710,214 @@ export default function Step0_ManualConfig() {
 
         {/* Validation Results */}
         {validationResult && (
-          <div className="space-y-3">
+          <div className="space-y-4">
+            {/* Summary Alert */}
             {validationResult.valid ? (
               <Alert className="border-green-500/50 bg-green-500/10">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <AlertDescription className="text-green-700 dark:text-green-300">
-                  {validationResult.message}
-                  {validationResult.warnings &&
-                    validationResult.warnings.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {validationResult.warnings.map((warning, idx) => (
-                          <div key={idx} className="text-sm">
-                            ⚠️ {warning.message}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div className="font-semibold">
+                    {validationResult.summary || "✅ Configuration is valid"}
+                  </div>
+                  {validationResult.message && (
+                    <div className="text-sm mt-1">
+                      {validationResult.message}
+                    </div>
+                  )}
                 </AlertDescription>
               </Alert>
             ) : (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <div className="font-semibold mb-2">
-                    {validationResult.summary}
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {validationResult.errors?.map((error, idx) => (
-                      <div
-                        key={idx}
-                        className="text-sm border-l-2 border-red-500 pl-3 py-1"
-                      >
-                        <div className="font-medium">
-                          {error.path || "Config"}
-                        </div>
-                        <div>{error.message}</div>
-                        {error.suggestion && (
-                          <div className="text-muted-foreground mt-1">
-                            💡 {error.suggestion}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                  <div className="font-semibold">
+                    {validationResult.summary || "Validation failed"}
                   </div>
                 </AlertDescription>
               </Alert>
+            )}
+
+            {/* Errors Section */}
+            {validationResult.errors && validationResult.errors.length > 0 && (
+              <Card className="p-4 border-red-500/50 bg-red-500/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertCircle className="h-5 w-5 text-red-500" />
+                  <h3 className="font-semibold text-red-700 dark:text-red-300">
+                    Errors ({validationResult.errors.length})
+                  </h3>
+                </div>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {validationResult.errors.map((error, idx) => (
+                    <div
+                      key={idx}
+                      className="border-l-2 border-red-500 pl-3 py-2 bg-background/50 rounded-r"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium text-sm text-red-700 dark:text-red-300">
+                            {error.path || "Config"}
+                          </div>
+                          <div className="text-sm mt-1">{error.message}</div>
+                          {error.suggestion && (
+                            <div className="text-sm text-muted-foreground mt-2 bg-muted/50 p-2 rounded">
+                              💡{" "}
+                              <span className="font-medium">Suggestion:</span>{" "}
+                              {error.suggestion}
+                            </div>
+                          )}
+                        </div>
+                        {error.code && (
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            {error.code}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Warnings Section */}
+            {validationResult.warnings &&
+              validationResult.warnings.length > 0 && (
+                <Card className="p-4 border-yellow-500/50 bg-yellow-500/5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                    <h3 className="font-semibold text-yellow-700 dark:text-yellow-300">
+                      Warnings ({validationResult.warnings.length})
+                    </h3>
+                  </div>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {validationResult.warnings.map((warning, idx) => (
+                      <div
+                        key={idx}
+                        className="border-l-2 border-yellow-500 pl-3 py-2 bg-background/50 rounded-r"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm text-yellow-700 dark:text-yellow-300">
+                              {warning.path || "Config"}
+                            </div>
+                            <div className="text-sm mt-1">
+                              {warning.message}
+                            </div>
+                            {warning.suggestion && (
+                              <div className="text-sm text-muted-foreground mt-2 bg-muted/50 p-2 rounded">
+                                💡{" "}
+                                <span className="font-medium">Suggestion:</span>{" "}
+                                {warning.suggestion}
+                              </div>
+                            )}
+                          </div>
+                          {warning.code && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              {warning.code}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+            {/* Suggestions Section */}
+            {validationResult.suggestions &&
+              validationResult.suggestions.length > 0 && (
+                <Card className="p-4 border-blue-500/50 bg-blue-500/5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Wand2 className="h-5 w-5 text-blue-600" />
+                    <h3 className="font-semibold text-blue-700 dark:text-blue-300">
+                      Suggestions ({validationResult.suggestions.length})
+                    </h3>
+                  </div>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {validationResult.suggestions.map((suggestion, idx) => (
+                      <div
+                        key={idx}
+                        className="border-l-2 border-blue-500 pl-3 py-2 bg-background/50 rounded-r"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm text-blue-700 dark:text-blue-300">
+                                {suggestion.title}
+                              </span>
+                              {suggestion.autoFixable && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-xs bg-blue-100 text-blue-700"
+                                >
+                                  Auto-fixable
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-sm mt-1">
+                              {suggestion.description}
+                            </div>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`ml-2 text-xs ${
+                              suggestion.type === "fix"
+                                ? "border-red-500 text-red-500"
+                                : suggestion.type === "warning"
+                                  ? "border-yellow-500 text-yellow-600"
+                                  : "border-blue-500 text-blue-600"
+                            }`}
+                          >
+                            {suggestion.type}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+            {/* Validation Stats */}
+            {(validationResult.errors?.length ||
+              validationResult.warnings?.length ||
+              validationResult.suggestions?.length) && (
+              <div className="flex gap-4 text-sm text-muted-foreground bg-muted/30 p-3 rounded-lg">
+                {validationResult.errors &&
+                  validationResult.errors.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-red-500">●</span>
+                      <span>
+                        {validationResult.errors.length}{" "}
+                        {validationResult.errors.length === 1
+                          ? "Error"
+                          : "Errors"}
+                      </span>
+                    </div>
+                  )}
+                {validationResult.warnings &&
+                  validationResult.warnings.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-yellow-500">●</span>
+                      <span>
+                        {validationResult.warnings.length}{" "}
+                        {validationResult.warnings.length === 1
+                          ? "Warning"
+                          : "Warnings"}
+                      </span>
+                    </div>
+                  )}
+                {validationResult.suggestions &&
+                  validationResult.suggestions.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-500">●</span>
+                      <span>
+                        {validationResult.suggestions.length}{" "}
+                        {validationResult.suggestions.length === 1
+                          ? "Suggestion"
+                          : "Suggestions"}
+                      </span>
+                    </div>
+                  )}
+              </div>
             )}
           </div>
         )}

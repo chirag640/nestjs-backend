@@ -73,7 +73,7 @@ export class NotificationProcessor extends WorkerHost {
 
     // TODO: Implement actual reminder sending logic
     // Example: Send SMS/Email/Push notification to worker
-    const message = `Hello ${data.workerName}, this is a reminder for your ${data.appointmentType} appointment.`;
+    const _message = `Hello ${data.workerName}, this is a reminder for your ${data.appointmentType} appointment.`;
     
 {% if auth and auth.enabled %}
     if (data.workerPhone) {
@@ -207,7 +207,8 @@ export class NotificationProcessor extends WorkerHost {
         results.push({ userId, success: true });
       } catch (error) {
         this.logger.error(`Failed to send notification to user ${userId}:`, error);
-        results.push({ userId, success: false, error: error.message });
+        const err = error as any;
+        results.push({ userId, success: false, error: err.message });
       }
       
       // Update progress
@@ -223,7 +224,7 @@ export class NotificationProcessor extends WorkerHost {
   }
 
   @OnWorkerEvent('completed')
-  onCompleted(job: Job, result: any) {
+  onCompleted(job: Job, _result: any) {
     this.logger.log(`Job ${job.id} completed successfully`);
   }
 

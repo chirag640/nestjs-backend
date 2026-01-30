@@ -4,7 +4,6 @@ import { S3LifecycleService } from './s3-lifecycle.service';
 import { 
   RequestPresignedUploadDto, 
   CompleteUploadDto, 
-  RequestPresignedDownloadDto,
   DeleteFileDto
 } from './dtos/file-upload.dto';
 {% if auth and auth.enabled %}
@@ -57,7 +56,7 @@ export class FileUploadController {
     return this.s3Service.completeUpload(
       dto.storagePath,
       dto.fileId,
-      dto.storagePath.split('/')[2], // Extract entityId from path
+      dto.storagePath.split('/')[2] || 'unknown', // Extract entityId from path
       dto.checksum
     );
   }

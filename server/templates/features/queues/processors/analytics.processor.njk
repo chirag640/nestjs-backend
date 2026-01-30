@@ -19,7 +19,7 @@ import {
 export class AnalyticsProcessor extends WorkerHost {
   private readonly logger = new Logger(AnalyticsProcessor.name);
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(private readonly _configService: ConfigService) {
     super();
   }
 
@@ -272,7 +272,7 @@ export class AnalyticsProcessor extends WorkerHost {
   }
 
   @OnWorkerEvent('completed')
-  onCompleted(job: Job, result: any) {
+  onCompleted(job: Job, _result: any) {
     this.logger.log(`Analytics job ${job.id} completed successfully`);
   }
 

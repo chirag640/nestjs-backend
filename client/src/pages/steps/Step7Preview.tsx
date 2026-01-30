@@ -40,6 +40,21 @@ interface PreviewState {
   canRedo: boolean;
   isLoading: boolean;
   error: string | null;
+  errorDetails?: {
+    error?: string;
+    message?: string;
+    errors?: Array<{
+      location: string;
+      path: string;
+      issue: string;
+      suggestion: string;
+      value?: string;
+      code?: string;
+    }>;
+    warnings?: any[];
+    hint?: string;
+    technicalDetails?: any;
+  };
   projectName: string;
   totalFiles: number;
   diagnostics: EditorDiagnostic[];
@@ -100,20 +115,20 @@ export default function Step7Preview() {
       });
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: response.statusText }));
+        const errorData = await response.json().catch(() => ({
+          error: "Network Error",
+          message: response.statusText,
+          errors: [],
+        }));
 
-        // Format validation errors if present
-        let errorMessage = errorData.error || "Generation failed";
-        if (errorData.details && Array.isArray(errorData.details)) {
-          const validationErrors = errorData.details
-            .map((d: any) => d.message)
-            .join(", ");
-          errorMessage = `${errorMessage}: ${validationErrors}`;
-        }
-
-        throw new Error(errorMessage);
+        // Store detailed error data for display
+        setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: errorData.message || errorData.error || "Generation failed",
+          errorDetails: errorData,
+        }));
+        return;
       }
 
       const data = await response.json();
@@ -121,7 +136,7 @@ export default function Step7Preview() {
 
       // Load file tree
       const treeResponse = await fetch(
-        `/api/preview/tree?sessionId=${sessionId}`
+        `/api/preview/tree?sessionId=${sessionId}`,
       );
       if (!treeResponse.ok) {
         throw new Error("Failed to load file tree");
@@ -182,7 +197,7 @@ export default function Step7Preview() {
 
     try {
       const response = await fetch(
-        `/api/preview/file?sessionId=${sid}&path=${encodeURIComponent(filePath)}`
+        `/api/preview/file?sessionId=${sid}&path=${encodeURIComponent(filePath)}`,
       );
       if (!response.ok) {
         throw new Error("Failed to load file");
@@ -192,7 +207,7 @@ export default function Step7Preview() {
 
       // Load original content for diff
       const diffResponse = await fetch(
-        `/api/preview/diff?sessionId=${sid}&path=${encodeURIComponent(filePath)}`
+        `/api/preview/diff?sessionId=${sid}&path=${encodeURIComponent(filePath)}`,
       );
       const diffData = diffResponse.ok ? await diffResponse.json() : null;
 
@@ -335,7 +350,7 @@ export default function Step7Preview() {
           message: d.message,
           severity: d.severity === 2 ? "error" : "warning",
           source: "eslint",
-        })
+        }),
       );
 
       setState((prev) => ({
@@ -532,7 +547,7 @@ export default function Step7Preview() {
     if (!state.sessionId || !state.selectedFile) return;
 
     const confirm = window.confirm(
-      "Reset file to original content? This cannot be undone."
+      "Reset file to original content? This cannot be undone.",
     );
     if (!confirm) return;
 
@@ -598,50 +613,177 @@ export default function Step7Preview() {
   }
 
   if (state.error && !state.sessionId) {
+    const errorDetails = state.errorDetails;
+    const hasDetailedErrors =
+      errorDetails?.errors && errorDetails.errors.length > 0;
+
     return (
-      <div className="flex items-center justify-center h-[600px]">
-        <div className="max-w-2xl w-full space-y-4 p-6">
+      <div className="flex items-center justify-center min-h-[600px] p-6">
+        <div className="max-w-4xl w-full space-y-4">
+          {/* Main Error Alert */}
           <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="h-5 w-5" />
             <AlertDescription>
-              <div className="space-y-3">
-                <p className="font-semibold">Generation failed</p>
-                <p className="text-sm">{state.error}</p>
-                <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" onClick={previousStep}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Go Back to Review
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={generateProject}
-                    disabled={state.isLoading}
-                  >
-                    {state.isLoading ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                    )}
-                    Retry Generation
-                  </Button>
-                </div>
+              <div className="space-y-2">
+                <p className="font-semibold text-lg">
+                  {errorDetails?.error || "Generation Failed"}
+                </p>
+                <p className="text-sm">
+                  {errorDetails?.message || state.error}
+                </p>
               </div>
             </AlertDescription>
           </Alert>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-sm">
-              <strong>Common issues:</strong>
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Model names must be PascalCase (e.g., User, BlogPost)</li>
-                <li>
-                  Field names must be camelCase (e.g., firstName, createdAt)
-                </li>
-                <li>All required fields must be filled in previous steps</li>
-              </ul>
-            </AlertDescription>
-          </Alert>
+
+          {/* Detailed Error List */}
+          {hasDetailedErrors && (
+            <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4 space-y-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Bug className="w-5 h-5 text-destructive" />
+                <h3 className="font-semibold text-base">
+                  {errorDetails.errors!.length} Error
+                  {errorDetails.errors!.length !== 1 ? "s" : ""} Found
+                </h3>
+              </div>
+
+              <div className="space-y-3">
+                {errorDetails.errors!.map((error, index) => (
+                  <div
+                    key={index}
+                    className="bg-background border border-destructive/30 rounded-md p-4 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 space-y-2">
+                        {/* Location */}
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive" className="text-xs">
+                            #{index + 1}
+                          </Badge>
+                          <code className="text-xs bg-muted px-2 py-1 rounded">
+                            {error.location}
+                          </code>
+                        </div>
+
+                        {/* Path */}
+                        {error.path && error.path !== "unknown" && (
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium">Path:</span>{" "}
+                            <code className="bg-muted px-1.5 py-0.5 rounded">
+                              {error.path}
+                            </code>
+                          </div>
+                        )}
+
+                        {/* Issue */}
+                        <div className="text-sm">
+                          <span className="font-medium text-destructive">
+                            Issue:
+                          </span>{" "}
+                          {error.issue}
+                        </div>
+
+                        {/* Value */}
+                        {error.value && error.value !== "N/A" && (
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium">Current value:</span>{" "}
+                            <code className="bg-muted px-1.5 py-0.5 rounded">
+                              {error.value}
+                            </code>
+                          </div>
+                        )}
+
+                        {/* Suggestion */}
+                        {error.suggestion && (
+                          <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2 mt-2">
+                            <div className="flex items-start gap-2">
+                              <Zap className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                              <div className="text-sm text-blue-700 dark:text-blue-300">
+                                <span className="font-medium">Fix:</span>{" "}
+                                {error.suggestion}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Hint */}
+          {errorDetails?.hint && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                <strong>💡 Hint:</strong> {errorDetails.hint}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <Button variant="outline" size="default" onClick={previousStep}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Go Back to Review
+            </Button>
+            <Button
+              variant="default"
+              size="default"
+              onClick={generateProject}
+              disabled={state.isLoading}
+            >
+              {state.isLoading ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4 mr-2" />
+              )}
+              Retry Generation
+            </Button>
+          </div>
+
+          {/* Common Issues Reference */}
+          {!hasDetailedErrors && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                <strong>Common issues:</strong>
+                <ul className="list-disc list-inside mt-2 space-y-1.5 text-muted-foreground">
+                  <li>
+                    <strong>Model names</strong> must be PascalCase (e.g.,{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                      User
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                      BlogPost
+                    </code>
+                    )
+                  </li>
+                  <li>
+                    <strong>Field names</strong> must be camelCase (e.g.,{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                      firstName
+                    </code>
+                    ,{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                      createdAt
+                    </code>
+                    )
+                  </li>
+                  <li>
+                    <strong>Required fields</strong> must be filled in all
+                    previous steps
+                  </li>
+                  <li>
+                    <strong>Relationships</strong> must reference existing model
+                    names
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       </div>
     );

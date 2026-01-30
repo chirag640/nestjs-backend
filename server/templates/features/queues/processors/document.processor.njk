@@ -233,7 +233,8 @@ export class DocumentProcessor extends WorkerHost {
         deletedAt: new Date(),
       };
     } catch (error) {
-      if (error.code === 'ENOENT') {
+      const err = error as any;
+      if (err.code === 'ENOENT') {
         // File already deleted
         this.logger.warn(`File ${data.filepath} already deleted`);
         return {
@@ -307,7 +308,7 @@ export class DocumentProcessor extends WorkerHost {
   }
 
   @OnWorkerEvent('completed')
-  onCompleted(job: Job, result: any) {
+  onCompleted(job: Job, _result: any) {
     this.logger.log(`Document job ${job.id} completed successfully`);
   }
 

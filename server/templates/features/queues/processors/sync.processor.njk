@@ -78,22 +78,23 @@ export class SyncProcessor extends WorkerHost {
           action: operation.action,
         });
       } catch (error) {
-        this.logger.error(`Failed to process operation ${operation.id}:`, error);
+        const err = error as any;
+        this.logger.error(`Failed to process operation ${operation.id}:`, err);
         
         // Check if this is a conflict
-        if (error.code === 'CONFLICT') {
+        if (err.code === 'CONFLICT') {
           results.push({
             operationId: operation.id,
             success: false,
             conflict: true,
-            serverVersion: error.serverVersion,
+            serverVersion: err.serverVersion,
             clientVersion: operation.clientVersion,
           });
         } else {
           results.push({
             operationId: operation.id,
             success: false,
-            error: error.message,
+            error: err.message,
           });
         }
       }
@@ -120,7 +121,7 @@ export class SyncProcessor extends WorkerHost {
   /**
    * Process individual sync operation
    */
-  private async processSyncOperation(operation: any, userId: string, deviceId: string) {
+  private async processSyncOperation(operation: any, _userId: string, _deviceId: string) {
     // TODO: Implement actual sync logic
     // - Validate operation data
     // - Check for conflicts (version mismatch)
@@ -143,7 +144,7 @@ export class SyncProcessor extends WorkerHost {
     
     await job.updateProgress(20);
 
-    let resolvedVersion;
+    let _resolvedVersion;
 
     switch (data.strategy) {
       case 'client-wins':
@@ -298,7 +299,7 @@ export class SyncProcessor extends WorkerHost {
   }
 
   @OnWorkerEvent('completed')
-  onCompleted(job: Job, result: any) {
+  onCompleted(job: Job, _result: any) {
     this.logger.log(`Sync job ${job.id} completed successfully`);
   }
 

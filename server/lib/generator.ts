@@ -1443,6 +1443,7 @@ async function generateTypescriptSdk(ir: ProjectIR): Promise<GeneratedFile[]> {
     { template: "sdk/typescript/src/hooks/use-query.tsx.njk", output: "sdk/typescript/src/hooks/use-query.tsx" },
     // Package files
     { template: "sdk/typescript/package.json.njk", output: "sdk/typescript/package.json" },
+    { template: "sdk/typescript/tsconfig.json.njk", output: "sdk/typescript/tsconfig.json" },
     { template: "sdk/typescript/README.md.njk", output: "sdk/typescript/README.md" },
   ];
 

@@ -4,7 +4,7 @@
 
 // Simple client-side router and app initialization
 class AdminApp {
-  private currentRoute: string = '';
+  private _currentRoute: string = '';
   private routes: Map<string, () => void> = new Map();
 
   constructor() {
@@ -431,7 +431,7 @@ class AdminApp {
       allow: (formData.get('allow') as string).split(',').map(s => s.trim()).filter(Boolean),
       deny: (formData.get('deny') as string).split(',').map(s => s.trim()).filter(Boolean),
       description: formData.get('description') as string || undefined,
-      allowSelfOnly: form.querySelector('[name="allowSelfOnly"]')?.checked || false,
+      allowSelfOnly: (form.querySelector('[name="allowSelfOnly"]') as HTMLInputElement)?.checked || false,
     };
 
     try {

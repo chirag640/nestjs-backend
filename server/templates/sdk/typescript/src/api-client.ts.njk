@@ -68,16 +68,17 @@ export class ApiClient {
 
   private setupInterceptors() {
     // Add auth header
-    this.axios.interceptors.request.use((config) => {
+    this.axios.interceptors.request.use((config: AxiosRequestConfig) => {
       if (this.accessToken) {
-        config.headers.Authorization = `Bearer ${this.accessToken}`;
+        config.headers = config.headers ?? {};
+        (config.headers as Record<string, string>).Authorization = `Bearer ${this.accessToken}`;
       }
       return config;
     });
 
     // Handle errors and token refresh
     this.axios.interceptors.response.use(
-      (response) => response,
+      (response: import('axios').AxiosResponse) => response,
       async (error: AxiosError) => {
         const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 

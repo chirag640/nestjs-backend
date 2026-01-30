@@ -9,16 +9,24 @@ export type {{ joinName }}Document = {{ joinName }} & Document;
 @Schema({ timestamps: true })
 export class {{ joinName }} {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.fromModel }}', required: true })
-  {{ relationship.fromModel | lower }}Id: MongooseSchema.Types.ObjectId;
+  {{ relationship.fromModel | lower }}Id!: MongooseSchema.Types.ObjectId;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: '{{ relationship.toModel }}', required: true })
-  {{ relationship.toModel | lower }}Id: MongooseSchema.Types.ObjectId;
+  {{ relationship.toModel | lower }}Id!: MongooseSchema.Types.ObjectId;
 
 {% if relationship.attributes and relationship.attributes.length > 0 %}
   // Custom join attributes
 {% for attr in relationship.attributes %}
-  @Prop({{ '{' }}{% if attr.required %} required: true,{% endif %}{% if attr.unique %} unique: true,{% endif %}{% if attr.indexed %} index: true,{% endif %}{% if attr.default !== undefined %} default: {{ attr.default }},{% endif %} type: {{ attr.type | capitalize }} {{ '}' }})
+{% if attr.type === 'datetime' %}
+  @Prop({ {% if attr.required %}required: true, {% endif %}{% if attr.default !== undefined %}default: {{ attr.default }}, {% endif %}type: Date })
+  {{ attr.name }}: Date;
+{% elif attr.type === 'date' %}
+  @Prop({ {% if attr.required %}required: true, {% endif %}{% if attr.default !== undefined %}default: {{ attr.default }}, {% endif %}type: Date })
+  {{ attr.name }}: Date;
+{% else %}
+  @Prop({ {% if attr.required %}required: true, {% endif %}{% if attr.unique %}unique: true, {% endif %}{% if attr.indexed %}index: true, {% endif %}{% if attr.default !== undefined %}default: {{ attr.default }}, {% endif %}type: {{ attr.type | capitalize }} })
   {{ attr.name }}: {{ attr.type }};
+{% endif %}
 
 {% endfor %}
 {% endif %}

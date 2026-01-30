@@ -89,6 +89,13 @@
     "@bull-board/nestjs": "^6.5.0",
     "@bull-board/express": "^6.5.0",
 {% endif %}
+{% if features.health %}
+    "@nestjs/axios": "^3.0.0",
+    "prom-client": "^15.1.0",
+{% endif %}
+{% if features.adminUI %}
+    "@nestjs/serve-static": "^4.0.0",
+{% endif %}
 {% if features.s3Upload %}
     "@aws-sdk/client-s3": "^3.682.0",
     "@aws-sdk/s3-request-presigner": "^3.682.0",

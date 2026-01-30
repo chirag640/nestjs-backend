@@ -29,14 +29,18 @@ class {{ joinName }}AttributesDto {
   @IsNumber()
 {% elif attr.type === 'boolean' %}
   @IsBoolean()
-{% elif attr.type === 'date' %}
+{% elif attr.type === 'date' or attr.type === 'datetime' %}
   @IsDate()
   @Type(() => Date)
 {% endif %}
 {% if not attr.required %}
   @IsOptional()
 {% endif %}
-  {{ attr.name }}{% if not attr.required %}?{% endif %}: {{ attr.type }};
+{% if attr.type === 'datetime' %}
+  {{ attr.name }}{% if not attr.required %}?{% endif %}: Date;
+{% else %}
+  {{ attr.name }}{% if not attr.required %}?{% endif %}: {{ attr.type | replace('date', 'Date') }};
+{% endif %}
 
 {% endfor %}
 }
@@ -48,14 +52,14 @@ export class Create{{ joinName }}Dto {
     example: '507f1f77bcf86cd799439011',
   })
   @IsMongoId()
-  {{ relationship.fromModel | lower }}Id: string;
+  {{ relationship.fromModel | lower }}Id!: string;
 
   @ApiProperty({
     description: 'ID of the {{ relationship.toModel }} record',
     example: '507f1f77bcf86cd799439012',
   })
   @IsMongoId()
-  {{ relationship.toModel | lower }}Id: string;
+  {{ relationship.toModel | lower }}Id!: string;
 
 {% if relationship.attributes and relationship.attributes.length > 0 %}
   @ApiProperty({
@@ -64,6 +68,6 @@ export class Create{{ joinName }}Dto {
   })
   @ValidateNested()
   @Type(() => {{ joinName }}AttributesDto)
-  attributes: {{ joinName }}AttributesDto;
+  attributes!: {{ joinName }}AttributesDto;
 {% endif %}
 }

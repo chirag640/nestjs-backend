@@ -10,13 +10,13 @@ import {
   ListObjectsV2Command
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { createHash } from 'crypto';
+// createHash import removed - checksum handled by document processor
 import { 
   FileMetadata, 
   PresignedUploadResponse, 
   PresignedDownloadResponse,
   UploadCompletionResult,
-  FileValidationRules
+  FileValidationRules as _FileValidationRules
 } from './interfaces/file-metadata.interface';
 {% if features.queues %}
 import { DocumentProducer } from '../queue/producers/document.producer';
@@ -52,8 +52,8 @@ export class S3LifecycleService {
   // Bucket structure prefixes
   private readonly TEMP_PREFIX = 'temp';
   private readonly DOCUMENTS_PREFIX = 'documents';
-  private readonly ARCHIVED_PREFIX = 'archived';
-  private readonly THUMBNAILS_PREFIX = 'thumbnails';
+  private readonly _ARCHIVED_PREFIX = 'archived';
+  private readonly _THUMBNAILS_PREFIX = 'thumbnails';
   
   // Default validation rules
   private readonly DEFAULT_MAX_SIZE = 10 * 1024 * 1024; // 10MB
@@ -220,7 +220,7 @@ export class S3LifecycleService {
         if (!checksum) {
           await this.documentProducer.generateChecksum({
             fileId,
-            filePath: permanentPath,
+            filepath: permanentPath,
             algorithm: 'sha256',
           });
         }
@@ -229,7 +229,7 @@ export class S3LifecycleService {
         if (mimeType.startsWith('image/')) {
           await this.documentProducer.generateThumbnail({
             fileId,
-            filePath: permanentPath,
+            filepath: permanentPath,
             sizes: [
               { width: 150, height: 150 },
               { width: 300, height: 300 },
@@ -241,7 +241,7 @@ export class S3LifecycleService {
         if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
           await this.documentProducer.performOCR({
             fileId,
-            filePath: permanentPath,
+            filepath: permanentPath,
             language: 'eng',
           });
         }

@@ -1,15 +1,13 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { EmailProcessor } from './processors/email.processor';
-import { DataProcessor } from './processors/data.processor';
 import { JobsService } from './jobs.service';
 import { JobsController } from './jobs.controller';
 
 /**
  * Background Jobs Module
  * 
- * Provides async job processing with Bull (Redis-backed queues).
+ * Provides async job processing with BullMQ (Redis-backed queues).
  * 
  * ## Features:
  * - Email sending in background
@@ -30,14 +28,14 @@ import { JobsController } from './jobs.controller';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        redis: {
+        connection: {
           host: configService.get('REDIS_HOST', 'localhost'),
           port: configService.get('REDIS_PORT', 6379),
           password: configService.get('REDIS_PASSWORD'),
         },
         defaultJobOptions: {
-          removeOnComplete: 100, // Keep last 100 completed jobs
-          removeOnFail: 50, // Keep last 50 failed jobs
+          removeOnComplete: 100,
+          removeOnFail: 50,
           attempts: 3,
           backoff: {
             type: 'exponential',
@@ -53,8 +51,9 @@ import { JobsController } from './jobs.controller';
       { name: 'scheduled' },
     ),
   ],
-  providers: [JobsService, EmailProcessor, DataProcessor],
+  providers: [JobsService],
   controllers: [JobsController],
   exports: [JobsService, BullModule],
 })
 export class JobsModule {}
+

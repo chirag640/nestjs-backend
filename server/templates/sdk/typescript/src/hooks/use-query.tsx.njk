@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ApiClient } from '../api-client';
-import type { ApiResponse, PaginatedResponse, ApiError } from '../types';
+import type { ApiResponse, ApiError } from '../types';
 import { isApiError } from '../errors';
 
 interface UseApiQueryOptions<T> {
@@ -200,7 +200,7 @@ export function usePaginatedQuery<T>(
     ...result,
     page: currentPage,
     setPage: setCurrentPage,
-    nextPage: () => setCurrentPage((p) => p + 1),
-    prevPage: () => setCurrentPage((p) => Math.max(1, p - 1)),
+    nextPage: () => setCurrentPage((p: number) => p + 1),
+    prevPage: () => setCurrentPage((p: number) => Math.max(1, p - 1)),
   };
 }

@@ -59,8 +59,8 @@ export function getErrorMessage(error: ApiError): string {
     [ErrorCodes.RESOURCE_NOT_FOUND]: 'The requested item was not found',
     [ErrorCodes.RATE_LIMIT_EXCEEDED]: 'Too many requests. Please wait a moment.',
   };
-
-  return messages[error.code] ?? (Array.isArray(error.message) ? error.message[0] : error.message);
+  const defaultMessage = Array.isArray(error.message) ? error.message[0] : error.message;
+  return messages[error.code] ?? defaultMessage ?? 'An error occurred';
 }
 
 /**
