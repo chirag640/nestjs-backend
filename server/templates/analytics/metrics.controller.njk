@@ -1,0 +1,41 @@
+import { Controller, Get, Res } from '@nestjs/common';
+import { Response } from 'express';
+{% if features.swagger %}
+import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
+{% endif %}
+import { MetricsService } from './metrics.service';
+
+/**
+ * Metrics Controller
+ * 
+ * Exposes Prometheus metrics endpoint at GET /metrics
+ * 
+ * To use with Prometheus, add to prometheus.yml:
+ * ```yaml
+ * scrape_configs:
+ *   - job_name: '{{ project.name }}'
+ *     static_configs:
+ *       - targets: ['localhost:3000']
+ *     metrics_path: '/metrics'
+ * ```
+ */
+{% if features.swagger %}
+@ApiTags('Monitoring')
+{% endif %}
+@Controller('metrics')
+export class MetricsController {
+  constructor(private readonly metricsService: MetricsService) {}
+
+  /**
+   * Prometheus metrics endpoint
+   */
+  @Get()
+{% if features.swagger %}
+  @ApiExcludeEndpoint() // Hide from Swagger docs
+{% endif %}
+  async getMetrics(@Res() res: Response): Promise<void> {
+    const metrics = await this.metricsService.getMetrics();
+    res.set('Content-Type', this.metricsService.getContentType());
+    res.send(metrics);
+  }
+}

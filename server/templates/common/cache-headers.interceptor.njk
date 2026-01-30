@@ -1,0 +1,131 @@
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { tap } from 'rxjs/operators';
+import { Response, Request } from 'express';
+import { createHash } from 'crypto';
+
+/**
+ * Cache Headers Interceptor
+ * 
+ * Adds proper HTTP caching headers:
+ * - ETag: Hash-based entity tag for conditional requests
+ * - Last-Modified: Timestamp for conditional GET
+ * - Cache-Control: Configurable caching directives
+ * 
+ * Supports conditional requests:
+ * - If-None-Match: Returns 304 if ETag matches
+ * - If-Modified-Since: Returns 304 if not changed
+ * 
+ * Usage:
+ * @UseInterceptors(CacheHeadersInterceptor)
+ * @Get('data')
+ * getData() { ... }
+ */
+@Injectable()
+export class CacheHeadersInterceptor implements NestInterceptor {
+  private readonly defaultMaxAge: number;
+  private readonly isPublic: boolean;
+
+  constructor(options?: { maxAge?: number; isPublic?: boolean }) {
+    this.defaultMaxAge = options?.maxAge ?? 60; // 1 minute default
+    this.isPublic = options?.isPublic ?? false;
+  }
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const ctx = context.switchToHttp();
+    const request = ctx.getRequest<Request>();
+    const response = ctx.getResponse<Response>();
+
+    return next.handle().pipe(
+      tap((data) => {
+        if (!data || request.method !== 'GET') {
+          return;
+        }
+
+        // Generate ETag from response data
+        const etag = this.generateETag(data);
+        
+        // Check If-None-Match header
+        const clientEtag = request.headers['if-none-match'];
+        if (clientEtag && clientEtag === etag) {
+          response.status(304);
+          return;
+        }
+
+        // Set caching headers
+        response.setHeader('ETag', etag);
+        response.setHeader(
+          'Cache-Control',
+          `${this.isPublic ? 'public' : 'private'}, max-age=${this.defaultMaxAge}`
+        );
+        
+        // Set Last-Modified if data has updatedAt
+        if (data?.updatedAt) {
+          const lastModified = new Date(data.updatedAt).toUTCString();
+          response.setHeader('Last-Modified', lastModified);
+          
+          // Check If-Modified-Since
+          const ifModifiedSince = request.headers['if-modified-since'];
+          if (ifModifiedSince && new Date(ifModifiedSince) >= new Date(data.updatedAt)) {
+            response.status(304);
+            return;
+          }
+        }
+      }),
+    );
+  }
+
+  private generateETag(data: any): string {
+    const hash = createHash('md5')
+      .update(JSON.stringify(data))
+      .digest('hex');
+    return `"${hash}"`;
+  }
+}
+
+/**
+ * No-Cache Decorator
+ * 
+ * Mark endpoints that should never be cached:
+ * @NoCache()
+ * @Get('sensitive')
+ * getSensitiveData() { ... }
+ */
+import { SetMetadata } from '@nestjs/common';
+
+export const NO_CACHE_KEY = 'no-cache';
+export const NoCache = () => SetMetadata(NO_CACHE_KEY, true);
+
+/**
+ * Cache TTL Decorator
+ * 
+ * Set custom cache duration per endpoint:
+ * @CacheTTL(3600) // 1 hour
+ * @Get('static')
+ * getStaticData() { ... }
+ */
+export const CACHE_TTL_KEY = 'cache-ttl';
+export const CacheTTL = (seconds: number) => SetMetadata(CACHE_TTL_KEY, seconds);
+
+/**
+ * Public Cache Decorator
+ * 
+ * Mark response as publicly cacheable (CDN, proxies):
+ * @PublicCache()
+ * @Get('public-data')
+ * getPublicData() { ... }
+ */
+export const PUBLIC_CACHE_KEY = 'public-cache';
+export const PublicCache = () => SetMetadata(PUBLIC_CACHE_KEY, true);
+
+/**
+ * Stale-While-Revalidate Decorator
+ * 
+ * Allows serving stale content while revalidating:
+ * @StaleWhileRevalidate(300, 600) // 5 min fresh, 10 min stale
+ * @Get('feed')
+ * getFeed() { ... }
+ */
+export const SWR_KEY = 'stale-while-revalidate';
+export const StaleWhileRevalidate = (maxAge: number, staleWhileRevalidate: number) => 
+  SetMetadata(SWR_KEY, { maxAge, staleWhileRevalidate });

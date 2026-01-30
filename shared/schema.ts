@@ -367,6 +367,81 @@ export const paymentConfigSchema = z.object({
 
 export type PaymentConfig = z.infer<typeof paymentConfigSchema>;
 
+// Step 16: API Analytics Configuration
+export const analyticsConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  metrics: z.array(z.string()).default(["requests", "latency", "errors"]),
+  storage: z.enum(["prometheus", "influxdb"]).default("prometheus"),
+  alerting: z.boolean().default(false),
+});
+
+export type AnalyticsConfig = z.infer<typeof analyticsConfigSchema>;
+
+// Step 17: Feature Flags Configuration
+export const featureFlagsConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  provider: z.enum(["internal", "launchdarkly", "growthbook"]).default("internal"),
+  targeting: z.object({
+    user: z.boolean().default(true),
+    organization: z.boolean().default(true),
+    percentage: z.boolean().default(true),
+  }).optional(),
+});
+
+export type FeatureFlagsConfig = z.infer<typeof featureFlagsConfigSchema>;
+
+// Step 18: Advanced Notifications Configuration
+export const notificationsConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  channels: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(false),
+    push: z.boolean().default(false),
+    inApp: z.boolean().default(true),
+  }),
+  scheduling: z.boolean().default(false),
+  batching: z.boolean().default(false),
+});
+
+export type NotificationsConfig = z.infer<typeof notificationsConfigSchema>;
+
+// Step 19: AI/ML Integration Configuration
+export const aiConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  providers: z.array(z.enum(["openai", "anthropic"])).default([]),
+  features: z.object({
+    embeddings: z.boolean().default(false),
+    summarization: z.boolean().default(false),
+    moderation: z.boolean().default(false),
+    recommendations: z.boolean().default(false),
+  }),
+  vectorDb: z.enum(["none", "pinecone", "weaviate"]).optional(),
+});
+
+export type AiConfig = z.infer<typeof aiConfigSchema>;
+
+// Step 20: Report Generation Configuration
+export const reportsConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  formats: z.array(z.enum(["pdf", "excel", "csv", "json"])).default(["pdf", "csv"]),
+  scheduling: z.boolean().default(false),
+  delivery: z.array(z.enum(["email", "s3", "webhook"])).default(["email"]),
+});
+
+export type ReportsConfig = z.infer<typeof reportsConfigSchema>;
+
+// Step 21: Internationalization (i18n) Configuration
+export const i18nConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  defaultLocale: z.string().default("en"),
+  supportedLocales: z.array(z.string()).default(["en", "es", "fr"]),
+  dateFormat: z.boolean().default(true),
+  currencyFormat: z.boolean().default(true),
+  rtl: z.boolean().default(false),
+});
+
+export type I18nConfig = z.infer<typeof i18nConfigSchema>;
+
 // Complete Wizard Configuration
 export const wizardConfigSchema = z.object({
   projectSetup: projectSetupSchema,
@@ -384,6 +459,12 @@ export const wizardConfigSchema = z.object({
   graphqlConfig: graphqlConfigSchema.optional(),
   multitenancyConfig: multitenancyConfigSchema.optional(),
   paymentConfig: paymentConfigSchema.optional(),
+  analyticsConfig: analyticsConfigSchema.optional(),
+  featureFlagsConfig: featureFlagsConfigSchema.optional(),
+  notificationsConfig: notificationsConfigSchema.optional(),
+  aiConfig: aiConfigSchema.optional(),
+  reportsConfig: reportsConfigSchema.optional(),
+  i18nConfig: i18nConfigSchema.optional(),
 });
 
 export type WizardConfig = z.infer<typeof wizardConfigSchema>;

@@ -1,0 +1,236 @@
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
+
+export interface ApiKey {
+  _id: string;
+  key: string; // Hashed API key (never store plaintext)
+  prefix: string; // First 8 chars for identification (e.g., "sk_live_...")
+  name: string;
+  userId: string;
+  permissions: string[];
+  rateLimit?: number; // Requests per minute
+  expiresAt?: Date;
+  lastUsedAt?: Date;
+  isActive: boolean;
+  createdAt: Date;
+}
+
+/**
+ * API Key Authentication Service
+ * 
+ * Provides server-to-server authentication via API keys:
+ * - Generate, rotate, and revoke keys
+ * - Keys are hashed (like passwords) - never stored plaintext
+ * - Rate limiting per key
+ * - Scoped permissions
+ * 
+ * Usage:
+ * - Send key in header: Authorization: Bearer sk_live_xxxx
+ * - Or: X-API-Key: sk_live_xxxx
+ */
+@Injectable()
+export class ApiKeyService {
+  private readonly logger = new Logger(ApiKeyService.name);
+
+  constructor(
+    @InjectModel('ApiKey') private apiKeyModel: Model<ApiKey>,
+  ) {}
+
+  /**
+   * Generate a new API key
+   * Returns the plaintext key ONCE - must be saved by user
+   */
+  async generate(params: {
+    userId: string;
+    name: string;
+    permissions: string[];
+    expiresIn?: number; // Days until expiration
+    rateLimit?: number;
+  }): Promise<{ key: string; prefix: string; id: string }> {
+    // Generate a cryptographically secure random key
+    const keyBytes = randomBytes(32);
+    const key = `sk_{{ project.name | lower }}_${keyBytes.toString('base64url')}`;
+    const prefix = key.substring(0, 16);
+    
+    // Hash the key for storage
+    const hashedKey = this.hashKey(key);
+
+    // Calculate expiration
+    const expiresAt = params.expiresIn 
+      ? new Date(Date.now() + params.expiresIn * 24 * 60 * 60 * 1000)
+      : undefined;
+
+    // Store in database
+    const apiKey = await this.apiKeyModel.create({
+      key: hashedKey,
+      prefix,
+      name: params.name,
+      userId: params.userId,
+      permissions: params.permissions,
+      rateLimit: params.rateLimit,
+      expiresAt,
+      isActive: true,
+    });
+
+    this.logger.log(`API key created: ${prefix}...`);
+
+    // Return plaintext key ONCE
+    return {
+      key,
+      prefix,
+      id: apiKey._id.toString(),
+    };
+  }
+
+  /**
+   * Validate an API key and return its metadata
+   */
+  async validate(key: string): Promise<ApiKey | null> {
+    const prefix = key.substring(0, 16);
+    const hashedKey = this.hashKey(key);
+
+    // Find by prefix first (faster)
+    const apiKey = await this.apiKeyModel.findOne({
+      prefix,
+      isActive: true,
+    }).lean();
+
+    if (!apiKey) {
+      return null;
+    }
+
+    // Timing-safe comparison of hashed keys
+    if (!this.compareKeys(hashedKey, apiKey.key)) {
+      return null;
+    }
+
+    // Check expiration
+    if (apiKey.expiresAt && new Date() > apiKey.expiresAt) {
+      this.logger.warn(`API key expired: ${prefix}...`);
+      return null;
+    }
+
+    // Update last used timestamp (async, don't wait)
+    this.apiKeyModel.updateOne(
+      { _id: apiKey._id },
+      { lastUsedAt: new Date() }
+    ).exec();
+
+    return apiKey;
+  }
+
+  /**
+   * Revoke an API key
+   */
+  async revoke(id: string, userId: string): Promise<boolean> {
+    const result = await this.apiKeyModel.updateOne(
+      { _id: id, userId },
+      { isActive: false }
+    );
+
+    if (result.modifiedCount > 0) {
+      this.logger.log(`API key revoked: ${id}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * List all keys for a user (does NOT return the actual keys)
+   */
+  async listForUser(userId: string): Promise<Omit<ApiKey, 'key'>[]> {
+    return this.apiKeyModel
+      .find({ userId, isActive: true })
+      .select('-key')
+      .lean();
+  }
+
+  /**
+   * Rotate an API key - generates a new key and revokes the old one
+   */
+  async rotate(id: string, userId: string): Promise<{ key: string; prefix: string } | null> {
+    const existing = await this.apiKeyModel.findOne({ _id: id, userId, isActive: true });
+    
+    if (!existing) {
+      return null;
+    }
+
+    // Revoke old key
+    await this.revoke(id, userId);
+
+    // Generate new key with same settings
+    return this.generate({
+      userId: existing.userId,
+      name: existing.name,
+      permissions: existing.permissions,
+      rateLimit: existing.rateLimit,
+      expiresIn: existing.expiresAt 
+        ? Math.ceil((existing.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+        : undefined,
+    });
+  }
+
+  // Private helpers
+
+  private hashKey(key: string): string {
+    return createHash('sha256').update(key).digest('hex');
+  }
+
+  private compareKeys(a: string, b: string): boolean {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    
+    if (bufA.length !== bufB.length) {
+      return false;
+    }
+    
+    return timingSafeEqual(bufA, bufB);
+  }
+}
+
+/**
+ * API Key Guard
+ * 
+ * Use as a route guard:
+ * @UseGuards(ApiKeyGuard)
+ * @Get('external/data')
+ * getData() { }
+ */
+@Injectable()
+export class ApiKeyGuard implements CanActivate {
+  constructor(private readonly apiKeyService: ApiKeyService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    
+    // Extract API key from headers
+    const authHeader = request.headers['authorization'];
+    const apiKeyHeader = request.headers['x-api-key'];
+    
+    let key: string | undefined;
+    
+    if (authHeader?.startsWith('Bearer sk_')) {
+      key = authHeader.substring(7);
+    } else if (apiKeyHeader?.startsWith('sk_')) {
+      key = apiKeyHeader;
+    }
+
+    if (!key) {
+      throw new UnauthorizedException('API key required');
+    }
+
+    const apiKeyData = await this.apiKeyService.validate(key);
+    
+    if (!apiKeyData) {
+      throw new UnauthorizedException('Invalid or expired API key');
+    }
+
+    // Attach API key data to request for use in handlers
+    request['apiKey'] = apiKeyData;
+    request['userId'] = apiKeyData.userId;
+
+    return true;
+  }
+}

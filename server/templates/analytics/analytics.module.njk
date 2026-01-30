@@ -1,0 +1,30 @@
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { MetricsService, MetricsMiddleware } from './metrics.service';
+import { MetricsController } from './metrics.controller';
+
+/**
+ * Analytics Module
+ * 
+ * Provides Prometheus-compatible metrics for monitoring:
+ * - HTTP request counts and latency
+ * - Active connections
+ * - Business metrics (registrations, logins, payments)
+ * - Queue job processing
+ * 
+ * Access metrics at: GET /metrics
+ * 
+ * Dependencies:
+ * - prom-client: Prometheus metrics library
+ */
+@Module({
+  controllers: [MetricsController],
+  providers: [MetricsService],
+  exports: [MetricsService],
+})
+export class AnalyticsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(MetricsMiddleware)
+      .forRoutes('*');
+  }
+}

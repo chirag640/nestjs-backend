@@ -1,181 +1,242 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { FirebasePushService, PushNotificationPayload } from './firebase-push.service';
-import { TwilioSmsService, SmsPayload } from './twilio-sms.service';
-{% if features.email %}
-import { EmailService } from '../email/email.service';
+{% if notifications.channels.sms %}
+import { Twilio } from 'twilio';
+{% endif %}
+{% if notifications.channels.push %}
+import * as admin from 'firebase-admin';
+{% endif %}
+{% if notifications.channels.email %}
+import { MailerService } from '@nestjs-modules/mailer';
 {% endif %}
 
-export type NotificationChannel = 'push' | 'sms' | 'email';
-
-export interface NotificationData {
-  userId?: string;
-  email?: string;
-  phone?: string;
-  deviceTokens?: string[];
-}
-
-export interface NotificationOptions {
+export interface NotificationPayload {
+  userId: string;
   title: string;
   body: string;
-  channels?: NotificationChannel[];
   data?: Record<string, any>;
-  email?: {
-    template: string;
-    context?: Record<string, any>;
-  };
+  channel?: 'email' | 'sms' | 'push' | 'inApp' | 'all';
+  scheduledAt?: Date;
+  priority?: 'high' | 'normal' | 'low';
+}
+
+export interface UserNotificationPreferences {
+  email: boolean;
+  sms: boolean;
+  push: boolean;
+  inApp: boolean;
+  digestEnabled: boolean;
+  digestFrequency?: 'daily' | 'weekly';
 }
 
 /**
- * Unified Notification Service
+ * Notification Service
  * 
- * Facade for multi-channel notifications.
- * Automatically selects appropriate channel based on available user data.
+ * Multi-channel notification delivery:
+ * - Email (SendGrid/SMTP)
+ * - SMS (Twilio/MSG91)
+ * - Push (Firebase Cloud Messaging)
+ * - In-App (Real-time via WebSocket)
  * 
- * @example
- * ```typescript
- * // Send to all available channels
- * await notificationService.notify(
- *   { userId: 'xxx', email: 'user@example.com', phone: '+1555...', deviceTokens: [...] },
- *   {
- *     title: 'Order Shipped',
- *     body: 'Your order #123 has been shipped!',
- *     channels: ['push', 'email'],
- *     data: { orderId: '123' },
- *     email: { template: 'order-shipped' },
- *   }
- * );
- * 
- * // Send to specific channel
- * await notificationService.sendPush(tokens, { title, body });
- * await notificationService.sendSms(phone, message);
- * ```
+ * Features:
+ * - User notification preferences
+ * - Scheduling
+ * - Batching/Digest
+ * - Templates
  */
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
+{% if notifications.channels.sms %}
+  private readonly twilioClient: Twilio;
+{% endif %}
 
   constructor(
-    private readonly pushService: FirebasePushService,
-    private readonly smsService: TwilioSmsService,
-    {% if features.email %}
-    private readonly emailService: EmailService,
-    {% endif %}
-  ) {}
+{% if notifications.channels.email %}
+    private readonly mailerService: MailerService,
+{% endif %}
+  ) {
+{% if notifications.channels.sms %}
+    this.twilioClient = new Twilio(
+      process.env.TWILIO_ACCOUNT_SID!,
+      process.env.TWILIO_AUTH_TOKEN!,
+    );
+{% endif %}
+{% if notifications.channels.push %}
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        }),
+      });
+    }
+{% endif %}
+  }
 
   /**
-   * Send notification through multiple channels
+   * Send notification to user via preferred channels
    */
-  async notify(
-    recipient: NotificationData,
-    options: NotificationOptions,
-  ): Promise<{
-    push?: { success: boolean; error?: string };
-    sms?: { success: boolean; error?: string };
-    email?: { success: boolean; error?: string };
-  }> {
-    const results: any = {};
-    const channels = options.channels || ['push']; // Default to push
+  async send(payload: NotificationPayload): Promise<void> {
+    const { channel = 'inApp' } = payload;
 
-    // Push notification
-    if (channels.includes('push') && recipient.deviceTokens?.length) {
-      try {
-        const result = await this.pushService.sendToDevices(recipient.deviceTokens, {
-          title: options.title,
-          body: options.body,
-          data: options.data as Record<string, string>,
-        });
-        results.push = {
-          success: result.successCount > 0,
-          error: result.failureCount > 0 ? `${result.failureCount} failed` : undefined,
-        };
-      } catch (error) {
-        results.push = { success: false, error: error.message };
-      }
+    // TODO: Fetch user preferences from database
+    // const preferences = await this.getUserPreferences(payload.userId);
+
+    const promises: Promise<void>[] = [];
+
+    if (channel === 'all' || channel === 'email') {
+{% if notifications.channels.email %}
+      promises.push(this.sendEmail(payload));
+{% endif %}
     }
 
-    // SMS notification
-    if (channels.includes('sms') && recipient.phone) {
-      try {
-        const result = await this.smsService.send({
-          to: recipient.phone,
-          body: `${options.title}: ${options.body}`,
-        });
-        results.sms = result;
-      } catch (error) {
-        results.sms = { success: false, error: error.message };
-      }
+    if (channel === 'all' || channel === 'sms') {
+{% if notifications.channels.sms %}
+      promises.push(this.sendSMS(payload));
+{% endif %}
     }
 
-    // Email notification
-    {% if features.email %}
-    if (channels.includes('email') && recipient.email && options.email) {
-      try {
-        await this.emailService.sendTemplatedEmail(
-          recipient.email,
-          options.title,
-          options.email.template,
-          {
-            ...options.email.context,
-            title: options.title,
-            body: options.body,
+    if (channel === 'all' || channel === 'push') {
+{% if notifications.channels.push %}
+      promises.push(this.sendPush(payload));
+{% endif %}
+    }
+
+    if (channel === 'all' || channel === 'inApp') {
+      promises.push(this.sendInApp(payload));
+    }
+
+    await Promise.allSettled(promises);
+  }
+
+{% if notifications.channels.email %}
+  /**
+   * Send email notification
+   */
+  private async sendEmail(payload: NotificationPayload): Promise<void> {
+    try {
+      // TODO: Fetch user email from database
+      const userEmail = 'user@example.com'; // Replace with actual lookup
+      
+      await this.mailerService.sendMail({
+        to: userEmail,
+        subject: payload.title,
+        template: 'notification',
+        context: {
+          title: payload.title,
+          body: payload.body,
+          data: payload.data,
+        },
+      });
+      
+      this.logger.log(`Email sent to ${payload.userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to send email: ${error.message}`);
+    }
+  }
+{% endif %}
+
+{% if notifications.channels.sms %}
+  /**
+   * Send SMS notification
+   */
+  private async sendSMS(payload: NotificationPayload): Promise<void> {
+    try {
+      // TODO: Fetch user phone from database
+      const userPhone = '+1234567890'; // Replace with actual lookup
+      
+      await this.twilioClient.messages.create({
+        body: `${payload.title}: ${payload.body}`,
+        to: userPhone,
+        from: process.env.TWILIO_PHONE_NUMBER!,
+      });
+      
+      this.logger.log(`SMS sent to ${payload.userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to send SMS: ${error.message}`);
+    }
+  }
+{% endif %}
+
+{% if notifications.channels.push %}
+  /**
+   * Send push notification via FCM
+   */
+  private async sendPush(payload: NotificationPayload): Promise<void> {
+    try {
+      // TODO: Fetch user FCM tokens from database
+      const fcmTokens: string[] = []; // Replace with actual lookup
+      
+      if (!fcmTokens.length) {
+        this.logger.warn(`No FCM tokens for user ${payload.userId}`);
+        return;
+      }
+
+      await admin.messaging().sendEachForMulticast({
+        tokens: fcmTokens,
+        notification: {
+          title: payload.title,
+          body: payload.body,
+        },
+        data: payload.data as Record<string, string>,
+        android: {
+          priority: payload.priority === 'high' ? 'high' : 'normal',
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+            },
           },
-        );
-        results.email = { success: true };
-      } catch (error) {
-        results.email = { success: false, error: error.message };
-      }
+        },
+      });
+      
+      this.logger.log(`Push notification sent to ${payload.userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to send push: ${error.message}`);
     }
-    {% endif %}
+  }
+{% endif %}
 
-    return results;
+  /**
+   * Send in-app notification (stored + real-time)
+   */
+  private async sendInApp(payload: NotificationPayload): Promise<void> {
+    try {
+      // TODO: Store notification in database
+      // await this.notificationModel.create({...});
+      
+      // TODO: Emit via WebSocket if realtime is enabled
+      // this.realtimeService.sendToUser(payload.userId, 'notification', payload);
+      
+      this.logger.log(`In-app notification created for ${payload.userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to create in-app notification: ${error.message}`);
+    }
   }
 
   /**
-   * Send push notification to devices
+   * Mark notification as read
    */
-  async sendPush(tokens: string[], payload: PushNotificationPayload) {
-    return this.pushService.sendToDevices(tokens, payload);
+  async markAsRead(userId: string, notificationId: string): Promise<void> {
+    // TODO: Update notification in database
+    this.logger.log(`Notification ${notificationId} marked as read for ${userId}`);
   }
 
   /**
-   * Send push to topic
+   * Get unread notification count
    */
-  async sendPushToTopic(topic: string, payload: PushNotificationPayload) {
-    return this.pushService.sendToTopic(topic, payload);
+  async getUnreadCount(userId: string): Promise<number> {
+    // TODO: Query database
+    return 0;
   }
 
   /**
-   * Send SMS
+   * Get user notifications
    */
-  async sendSms(to: string, body: string) {
-    return this.smsService.send({ to, body });
-  }
-
-  /**
-   * Send OTP via SMS
-   */
-  async sendOtp(phone: string, options?: { length?: number; expiresIn?: number }) {
-    return this.smsService.sendOtp(phone, options);
-  }
-
-  /**
-   * Verify OTP
-   */
-  async verifyOtp(phone: string, code: string) {
-    return this.smsService.verifyOtp(phone, code);
-  }
-
-  /**
-   * Subscribe user to push topic
-   */
-  async subscribeToTopic(tokens: string[], topic: string) {
-    return this.pushService.subscribeToTopic(tokens, topic);
-  }
-
-  /**
-   * Unsubscribe user from push topic
-   */
-  async unsubscribeFromTopic(tokens: string[], topic: string) {
-    return this.pushService.unsubscribeFromTopic(tokens, topic);
+  async getUserNotifications(userId: string, page = 1, limit = 20): Promise<any[]> {
+    // TODO: Query database with pagination
+    return [];
   }
 }

@@ -1,0 +1,207 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+
+export interface FeatureFlagDefinition {
+  key: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  rolloutPercentage?: number; // 0-100
+  targeting?: {
+    users?: string[];       // Specific user IDs
+    organizations?: string[]; // Specific tenant/org IDs
+    environments?: string[]; // 'development', 'staging', 'production'
+  };
+  variants?: {
+    name: string;
+    weight: number; // For A/B testing
+    payload?: any;
+  }[];
+}
+
+export interface FeatureFlagContext {
+  userId?: string;
+  organizationId?: string;
+  environment?: string;
+  userAttributes?: Record<string, any>;
+}
+
+/**
+ * Feature Flags Service
+ * 
+ * Provides:
+ * - Boolean feature flags (on/off)
+ * - Percentage rollouts (gradual release)
+ * - User/Organization targeting
+ * - A/B testing with variants
+ * 
+ * Environment Variables:
+ * - FEATURE_FLAGS_PROVIDER: 'internal' (default), 'launchdarkly', 'growthbook'
+ */
+@Injectable()
+export class FeatureFlagsService implements OnModuleInit {
+  private readonly logger = new Logger(FeatureFlagsService.name);
+  private flags: Map<string, FeatureFlagDefinition> = new Map();
+  private environment: string;
+
+  constructor(
+{% if featureFlags.provider === 'internal' %}
+    @InjectModel('FeatureFlag') private flagModel: Model<any>,
+{% endif %}
+  ) {
+    this.environment = process.env.NODE_ENV || 'development';
+  }
+
+  async onModuleInit() {
+    await this.loadFlags();
+    this.logger.log(`Feature flags loaded: ${this.flags.size} flags`);
+  }
+
+  /**
+   * Check if a feature is enabled
+   */
+  async isEnabled(key: string, context: FeatureFlagContext = {}): Promise<boolean> {
+    const flag = this.flags.get(key);
+    if (!flag) {
+      this.logger.warn(`Feature flag '${key}' not found, returning false`);
+      return false;
+    }
+
+    // Check if globally disabled
+    if (!flag.enabled) {
+      return false;
+    }
+
+    // Check environment targeting
+    if (flag.targeting?.environments?.length) {
+      if (!flag.targeting.environments.includes(this.environment)) {
+        return false;
+      }
+    }
+
+    // Check user targeting
+    if (flag.targeting?.users?.length && context.userId) {
+      if (flag.targeting.users.includes(context.userId)) {
+        return true;
+      }
+    }
+
+    // Check organization targeting
+    if (flag.targeting?.organizations?.length && context.organizationId) {
+      if (flag.targeting.organizations.includes(context.organizationId)) {
+        return true;
+      }
+    }
+
+    // Percentage rollout
+    if (flag.rolloutPercentage !== undefined && flag.rolloutPercentage < 100) {
+      const hash = this.hashContext(key, context);
+      return hash < flag.rolloutPercentage;
+    }
+
+    return true;
+  }
+
+  /**
+   * Get variant for A/B testing
+   */
+  async getVariant(key: string, context: FeatureFlagContext = {}): Promise<string | null> {
+    const flag = this.flags.get(key);
+    if (!flag || !flag.enabled || !flag.variants?.length) {
+      return null;
+    }
+
+    // Calculate which variant based on hash
+    const hash = this.hashContext(key, context);
+    let cumulative = 0;
+    
+    for (const variant of flag.variants) {
+      cumulative += variant.weight;
+      if (hash < cumulative) {
+        return variant.name;
+      }
+    }
+
+    return flag.variants[0]?.name || null;
+  }
+
+  /**
+   * Get variant payload for A/B testing
+   */
+  async getVariantPayload<T = any>(key: string, context: FeatureFlagContext = {}): Promise<T | null> {
+    const flag = this.flags.get(key);
+    const variantName = await this.getVariant(key, context);
+    
+    if (!variantName || !flag?.variants) {
+      return null;
+    }
+
+    const variant = flag.variants.find(v => v.name === variantName);
+    return variant?.payload as T || null;
+  }
+
+  /**
+   * Create or update a feature flag
+   */
+  async upsertFlag(definition: FeatureFlagDefinition): Promise<void> {
+{% if featureFlags.provider === 'internal' %}
+    await this.flagModel.findOneAndUpdate(
+      { key: definition.key },
+      definition,
+      { upsert: true, new: true },
+    );
+{% endif %}
+    this.flags.set(definition.key, definition);
+    this.logger.log(`Feature flag '${definition.key}' updated`);
+  }
+
+  /**
+   * Delete a feature flag
+   */
+  async deleteFlag(key: string): Promise<void> {
+{% if featureFlags.provider === 'internal' %}
+    await this.flagModel.deleteOne({ key });
+{% endif %}
+    this.flags.delete(key);
+    this.logger.log(`Feature flag '${key}' deleted`);
+  }
+
+  /**
+   * Get all flags (for admin dashboard)
+   */
+  async getAllFlags(): Promise<FeatureFlagDefinition[]> {
+    return Array.from(this.flags.values());
+  }
+
+  /**
+   * Reload flags from database
+   */
+  async loadFlags(): Promise<void> {
+{% if featureFlags.provider === 'internal' %}
+    const dbFlags = await this.flagModel.find().lean();
+    this.flags.clear();
+    for (const flag of dbFlags) {
+      this.flags.set(flag.key, flag as FeatureFlagDefinition);
+    }
+{% endif %}
+  }
+
+  /**
+   * Consistent hash for percentage-based rollout
+   * Returns a number 0-100 that is consistent for the same key + context
+   */
+  private hashContext(key: string, context: FeatureFlagContext): number {
+    const identifier = context.userId || context.organizationId || 'anonymous';
+    const str = `${key}:${identifier}`;
+    
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    return Math.abs(hash) % 100;
+  }
+}

@@ -324,6 +324,81 @@ export interface PaymentIR {
 }
 
 /**
+ * Analytics Configuration IR
+ */
+export interface AnalyticsIR {
+  enabled: boolean;
+  metrics: string[];
+  storage: "prometheus" | "influxdb";
+  alerting: boolean;
+}
+
+/**
+ * Feature Flags Configuration IR
+ */
+export interface FeatureFlagsIR {
+  enabled: boolean;
+  provider: "internal" | "launchdarkly" | "growthbook";
+  targeting: {
+    user: boolean;
+    organization: boolean;
+    percentage: boolean;
+  };
+}
+
+/**
+ * Notifications Configuration IR
+ */
+export interface NotificationsIR {
+  enabled: boolean;
+  channels: {
+    email: boolean;
+    sms: boolean;
+    push: boolean;
+    inApp: boolean;
+  };
+  scheduling: boolean;
+  batching: boolean;
+}
+
+/**
+ * AI/ML Configuration IR
+ */
+export interface AiIR {
+  enabled: boolean;
+  providers: string[];
+  features: {
+    embeddings: boolean;
+    summarization: boolean;
+    moderation: boolean;
+    recommendations: boolean;
+  };
+  vectorDb?: string;
+}
+
+/**
+ * Reports Configuration IR
+ */
+export interface ReportsIR {
+  enabled: boolean;
+  formats: string[];
+  scheduling: boolean;
+  delivery: string[];
+}
+
+/**
+ * I18n Configuration IR
+ */
+export interface I18nIR {
+  enabled: boolean;
+  defaultLocale: string;
+  supportedLocales: string[];
+  dateFormat: boolean;
+  currencyFormat: boolean;
+  rtl: boolean;
+}
+
+/**
  * Complete Intermediate Representation
  */
 export interface ProjectIR {
@@ -357,6 +432,12 @@ export interface ProjectIR {
   graphql?: GraphQLIR; // GraphQL API configuration
   multitenancy?: MultitenancyIR; // Multi-tenancy configuration
   payment?: PaymentIR; // Payment integration configuration
+  analytics?: AnalyticsIR; // API Analytics configuration
+  featureFlags?: FeatureFlagsIR; // Feature flags configuration
+  notifications?: NotificationsIR; // Notifications configuration
+  ai?: AiIR; // AI/ML configuration
+  reports?: ReportsIR; // Report generation configuration
+  i18n?: I18nIR; // I18n configuration
   metadata: {
     // Generation metadata
     generatorVersion: string;
@@ -477,6 +558,36 @@ export function buildIR(config: WizardConfig): ProjectIR {
   // Add Payment integration if enabled
   if (config.paymentConfig?.enabled) {
     ir.payment = buildPaymentIR(config);
+  }
+
+  // Add Analytics if enabled
+  if (config.analyticsConfig?.enabled) {
+    ir.analytics = buildAnalyticsIR(config);
+  }
+
+  // Add Feature Flags if enabled
+  if (config.featureFlagsConfig?.enabled) {
+    ir.featureFlags = buildFeatureFlagsIR(config);
+  }
+
+  // Add Notifications if enabled
+  if (config.notificationsConfig?.enabled) {
+    ir.notifications = buildNotificationsIR(config);
+  }
+
+  // Add AI/ML if enabled
+  if (config.aiConfig?.enabled) {
+    ir.ai = buildAiIR(config);
+  }
+
+  // Add Reports if enabled
+  if (config.reportsConfig?.enabled) {
+    ir.reports = buildReportsIR(config);
+  }
+
+  // Add I18n if enabled
+  if (config.i18nConfig?.enabled) {
+    ir.i18n = buildI18nIR(config);
   }
 
   return ir;
@@ -1200,6 +1311,105 @@ function buildPaymentIR(config: WizardConfig): PaymentIR {
   }
 
   return ir;
+}
+
+/**
+ * Build Analytics IR from configuration
+ */
+function buildAnalyticsIR(config: WizardConfig): AnalyticsIR {
+  const analyticsConfig = config.analyticsConfig!;
+  
+  return {
+    enabled: analyticsConfig.enabled,
+    metrics: analyticsConfig.metrics || ["requests", "latency", "errors"],
+    storage: analyticsConfig.storage || "prometheus",
+    alerting: analyticsConfig.alerting ?? false,
+  };
+}
+
+/**
+ * Build Feature Flags IR from configuration
+ */
+function buildFeatureFlagsIR(config: WizardConfig): FeatureFlagsIR {
+  const ffConfig = config.featureFlagsConfig!;
+  
+  return {
+    enabled: ffConfig.enabled,
+    provider: ffConfig.provider || "internal",
+    targeting: {
+      user: ffConfig.targeting?.user ?? true,
+      organization: ffConfig.targeting?.organization ?? true,
+      percentage: ffConfig.targeting?.percentage ?? true,
+    },
+  };
+}
+
+/**
+ * Build Notifications IR from configuration
+ */
+function buildNotificationsIR(config: WizardConfig): NotificationsIR {
+  const notifConfig = config.notificationsConfig!;
+  
+  return {
+    enabled: notifConfig.enabled,
+    channels: {
+      email: notifConfig.channels?.email ?? true,
+      sms: notifConfig.channels?.sms ?? false,
+      push: notifConfig.channels?.push ?? false,
+      inApp: notifConfig.channels?.inApp ?? true,
+    },
+    scheduling: notifConfig.scheduling ?? false,
+    batching: notifConfig.batching ?? false,
+  };
+}
+
+/**
+ * Build AI/ML IR from configuration
+ */
+function buildAiIR(config: WizardConfig): AiIR {
+  const aiConfig = config.aiConfig!;
+  
+  return {
+    enabled: aiConfig.enabled,
+    providers: aiConfig.providers || [],
+    features: {
+      embeddings: aiConfig.features?.embeddings ?? false,
+      summarization: aiConfig.features?.summarization ?? false,
+      moderation: aiConfig.features?.moderation ?? false,
+      recommendations: aiConfig.features?.recommendations ?? false,
+    },
+    vectorDb: aiConfig.vectorDb,
+  };
+}
+
+/**
+ * Build Reports IR from configuration
+ */
+function buildReportsIR(config: WizardConfig): ReportsIR {
+  const reportsConfig = config.reportsConfig!;
+  
+  return {
+    enabled: reportsConfig.enabled,
+    formats: reportsConfig.formats || ["pdf", "csv"],
+    scheduling: reportsConfig.scheduling ?? false,
+    delivery: reportsConfig.delivery || ["email"],
+  };
+}
+
+/**
+ * Build I18n IR from configuration
+ */
+function buildI18nIR(config: WizardConfig): I18nIR {
+  const i18nConfig = config.i18nConfig!;
+  
+  return {
+    enabled: i18nConfig.enabled,
+    defaultLocale: i18nConfig.defaultLocale || "en",
+    supportedLocales: i18nConfig.supportedLocales || ["en", "es", "fr"],
+    dateFormat: i18nConfig.dateFormat ?? true,
+    currencyFormat: i18nConfig.currencyFormat ?? true,
+    rtl: i18nConfig.rtl ?? false,
+  };
 }
 
 /**

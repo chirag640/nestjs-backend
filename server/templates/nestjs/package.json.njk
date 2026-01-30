@@ -144,6 +144,29 @@
     "razorpay": "^2.9.0",
 {% endif %}
 {% endif %}
+{% if analytics and analytics.enabled %}
+    "prom-client": "^15.1.0",
+{% endif %}
+{% if notifications and notifications.enabled %}
+{% if notifications.channels.sms %}
+    "twilio": "^5.0.0",
+{% endif %}
+{% if notifications.channels.push %}
+    "firebase-admin": "^12.0.0",
+{% endif %}
+{% endif %}
+{% if ai and ai.enabled %}
+{% if 'openai' in ai.providers %}
+    "openai": "^4.0.0",
+{% endif %}
+{% if 'anthropic' in ai.providers %}
+    "@anthropic-ai/sdk": "^0.20.0",
+{% endif %}
+{% endif %}
+{% if reports and reports.enabled %}
+    "pdfkit": "^0.15.0",
+    "exceljs": "^4.4.0",
+{% endif %}
     "@aws-sdk/client-kms": "^3.682.0",
     "class-validator": "^0.14.0",
     "class-transformer": "^0.5.1",

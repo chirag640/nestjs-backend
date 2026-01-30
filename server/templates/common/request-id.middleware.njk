@@ -1,13 +1,99 @@
-import { Injectable, NestMiddleware } from '@nestjs/common';
+import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
+/**
+ * Request ID Middleware
+ * 
+ * Adds correlation ID to all requests for distributed tracing:
+ * - Checks for incoming X-Request-ID or X-Correlation-ID headers
+ * - Generates a new UUID if not present
+ * - Attaches to request and response headers
+ * - Available in logs for debugging
+ * 
+ * Usage:
+ * - Access via req['requestId'] in controllers/services
+ * - Pass to downstream services in X-Request-ID header
+ */
 @Injectable()
 export class RequestIdMiddleware implements NestMiddleware {
-  use(req: Request, res: Response, next: NextFunction) {
-    const requestId = (req.headers['x-request-id'] as string) || uuidv4();
-    req.headers['x-request-id'] = requestId;
+  private readonly logger = new Logger(RequestIdMiddleware.name);
+
+  use(req: Request, res: Response, next: NextFunction): void {
+    // Check for existing request ID from upstream service
+    const existingId = 
+      req.headers['x-request-id'] as string ||
+      req.headers['x-correlation-id'] as string;
+
+    // Generate new ID or use existing
+    const requestId = existingId || randomUUID();
+
+    // Attach to request object
+    req['requestId'] = requestId;
+
+    // Set response headers for client visibility
     res.setHeader('X-Request-ID', requestId);
+    res.setHeader('X-Correlation-ID', requestId);
+
+    // Log for debugging
+    this.logger.debug(`Request ${req.method} ${req.url} | ID: ${requestId}`);
+
     next();
+  }
+}
+
+/**
+ * Request ID Decorator
+ * 
+ * Extract request ID in controllers:
+ * 
+ * @Get()
+ * getData(@RequestId() requestId: string) {
+ *   this.logger.log(`Processing ${requestId}`);
+ * }
+ */
+import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+
+export const RequestId = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    return request['requestId'] || 'unknown';
+  },
+);
+
+/**
+ * Request Context Service - AsyncLocalStorage for request-scoped data
+ */
+import { AsyncLocalStorage } from 'async_hooks';
+
+export interface RequestContext {
+  requestId: string;
+  userId?: string;
+  tenantId?: string;
+  startTime: number;
+}
+
+@Injectable()
+export class RequestContextService {
+  private readonly storage = new AsyncLocalStorage<RequestContext>();
+
+  run<T>(context: RequestContext, callback: () => T): T {
+    return this.storage.run(context, callback);
+  }
+
+  get(): RequestContext | undefined {
+    return this.storage.getStore();
+  }
+
+  getRequestId(): string {
+    return this.get()?.requestId || 'unknown';
+  }
+
+  getUserId(): string | undefined {
+    return this.get()?.userId;
+  }
+
+  getTenantId(): string | undefined {
+    return this.get()?.tenantId;
   }
 }

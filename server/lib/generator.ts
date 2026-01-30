@@ -389,6 +389,42 @@ export async function generateProject(
     files.push(...webhookFiles);
   }
 
+  // Generate Analytics files (Prometheus metrics)
+  if (ir.analytics?.enabled) {
+    const analyticsFiles = await generateAnalyticsFiles(ir);
+    files.push(...analyticsFiles);
+  }
+
+  // Generate Feature Flags files
+  if (ir.featureFlags?.enabled) {
+    const featureFlagsFiles = await generateFeatureFlagsFiles(ir);
+    files.push(...featureFlagsFiles);
+  }
+
+  // Generate Notifications files (multi-channel)
+  if (ir.notifications?.enabled) {
+    const notificationsFiles = await generateNotificationsFiles(ir);
+    files.push(...notificationsFiles);
+  }
+
+  // Generate AI/ML files
+  if (ir.ai?.enabled) {
+    const aiFiles = await generateAiFiles(ir);
+    files.push(...aiFiles);
+  }
+
+  // Generate Report files (PDF/Excel)
+  if (ir.reports?.enabled) {
+    const reportsFiles = await generateReportsFiles(ir);
+    files.push(...reportsFiles);
+  }
+
+  // Generate I18n files
+  if (ir.i18n?.enabled) {
+    const i18nFiles = await generateI18nFiles(ir);
+    files.push(...i18nFiles);
+  }
+
   return files;
 }
 
@@ -2325,6 +2361,202 @@ async function generateWebhookFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
       files.push({ path: output, content });
     } catch (error) {
       console.error(`Error generating webhook file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Analytics files (Prometheus metrics service, controller, module)
+ */
+async function generateAnalyticsFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.analytics?.enabled) {
+    return files;
+  }
+
+  const analyticsTemplates = [
+    {
+      template: "analytics/metrics.service.njk",
+      output: "src/modules/analytics/metrics.service.ts",
+      parser: "typescript",
+    },
+    {
+      template: "analytics/metrics.controller.njk",
+      output: "src/modules/analytics/metrics.controller.ts",
+      parser: "typescript",
+    },
+    {
+      template: "analytics/analytics.module.njk",
+      output: "src/modules/analytics/analytics.module.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of analyticsTemplates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating analytics file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Feature Flags files (service with A/B testing)
+ */
+async function generateFeatureFlagsFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.featureFlags?.enabled) {
+    return files;
+  }
+
+  const templates = [
+    {
+      template: "feature-flags/feature-flags.service.njk",
+      output: "src/modules/feature-flags/feature-flags.service.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating feature flags file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Notifications files (multi-channel: email, sms, push, in-app)
+ */
+async function generateNotificationsFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.notifications?.enabled) {
+    return files;
+  }
+
+  const templates = [
+    {
+      template: "notifications/notification.service.njk",
+      output: "src/modules/notifications/notification.service.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating notifications file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate AI/ML files (OpenAI, Anthropic integration)
+ */
+async function generateAiFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.ai?.enabled) {
+    return files;
+  }
+
+  const templates = [
+    {
+      template: "ai/ai.service.njk",
+      output: "src/modules/ai/ai.service.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating AI file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate Report files (PDF, Excel, CSV generation)
+ */
+async function generateReportsFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.reports?.enabled) {
+    return files;
+  }
+
+  const templates = [
+    {
+      template: "reports/report.service.njk",
+      output: "src/modules/reports/report.service.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating reports file ${output}:`, error);
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Generate I18n files (internationalization service)
+ */
+async function generateI18nFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.i18n?.enabled) {
+    return files;
+  }
+
+  const templates = [
+    {
+      template: "i18n/i18n.service.njk",
+      output: "src/modules/i18n/i18n.service.ts",
+      parser: "typescript",
+    },
+  ];
+
+  for (const { template, output, parser } of templates) {
+    try {
+      const rendered = renderTemplate(template, ir);
+      const content = parser ? await formatCode(rendered, parser) : rendered;
+      files.push({ path: output, content });
+    } catch (error) {
+      console.error(`Error generating i18n file ${output}:`, error);
     }
   }
 

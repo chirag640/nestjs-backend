@@ -1,0 +1,192 @@
+import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
+import { Counter, Histogram, Gauge, Registry, collectDefaultMetrics } from 'prom-client';
+
+/**
+ * Prometheus Metrics Service
+ * 
+ * Tracks:
+ * - Request counts by endpoint, method, status
+ * - Request latency percentiles
+ * - Active connections
+ * - Custom business metrics
+ * 
+ * Access metrics at: GET /metrics
+ */
+@Injectable()
+export class MetricsService {
+  private readonly registry: Registry;
+  private readonly logger = new Logger(MetricsService.name);
+
+  // HTTP metrics
+  public readonly httpRequestsTotal: Counter<string>;
+  public readonly httpRequestDuration: Histogram<string>;
+  public readonly httpActiveConnections: Gauge<string>;
+
+  // Business metrics
+  public readonly userRegistrations: Counter<string>;
+  public readonly loginAttempts: Counter<string>;
+{% if auth and auth.enabled %}
+  public readonly activeUsers: Gauge<string>;
+{% endif %}
+{% if payment and payment.enabled %}
+  public readonly paymentsTotal: Counter<string>;
+  public readonly paymentAmount: Histogram<string>;
+{% endif %}
+{% if features.queues %}
+  public readonly queueJobsProcessed: Counter<string>;
+  public readonly queueJobDuration: Histogram<string>;
+{% endif %}
+
+  constructor() {
+    this.registry = new Registry();
+    
+    // Collect default Node.js metrics
+    collectDefaultMetrics({ register: this.registry, prefix: '{{ project.name | lower | replace(" ", "_") }}_' });
+
+    // HTTP Request Counter
+    this.httpRequestsTotal = new Counter({
+      name: '{{ project.name | lower | replace(" ", "_") }}_http_requests_total',
+      help: 'Total number of HTTP requests',
+      labelNames: ['method', 'route', 'status_code'],
+      registers: [this.registry],
+    });
+
+    // HTTP Request Duration Histogram
+    this.httpRequestDuration = new Histogram({
+      name: '{{ project.name | lower | replace(" ", "_") }}_http_request_duration_seconds',
+      help: 'Duration of HTTP requests in seconds',
+      labelNames: ['method', 'route', 'status_code'],
+      buckets: [0.001, 0.005, 0.015, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+      registers: [this.registry],
+    });
+
+    // Active Connections Gauge
+    this.httpActiveConnections = new Gauge({
+      name: '{{ project.name | lower | replace(" ", "_") }}_http_active_connections',
+      help: 'Number of active HTTP connections',
+      registers: [this.registry],
+    });
+
+    // User Registration Counter
+    this.userRegistrations = new Counter({
+      name: '{{ project.name | lower | replace(" ", "_") }}_user_registrations_total',
+      help: 'Total number of user registrations',
+      labelNames: ['source'], // 'email', 'oauth_google', etc.
+      registers: [this.registry],
+    });
+
+    // Login Attempts Counter
+    this.loginAttempts = new Counter({
+      name: '{{ project.name | lower | replace(" ", "_") }}_login_attempts_total',
+      help: 'Total number of login attempts',
+      labelNames: ['success'],
+      registers: [this.registry],
+    });
+
+{% if auth and auth.enabled %}
+    // Active Users Gauge
+    this.activeUsers = new Gauge({
+      name: '{{ project.name | lower | replace(" ", "_") }}_active_users',
+      help: 'Number of active users (logged in recently)',
+      registers: [this.registry],
+    });
+{% endif %}
+
+{% if payment and payment.enabled %}
+    // Payments Counter
+    this.paymentsTotal = new Counter({
+      name: '{{ project.name | lower | replace(" ", "_") }}_payments_total',
+      help: 'Total number of payments',
+      labelNames: ['provider', 'status'], // stripe/razorpay, success/failed
+      registers: [this.registry],
+    });
+
+    // Payment Amount Histogram
+    this.paymentAmount = new Histogram({
+      name: '{{ project.name | lower | replace(" ", "_") }}_payment_amount',
+      help: 'Payment amounts',
+      labelNames: ['provider', 'currency'],
+      buckets: [100, 500, 1000, 5000, 10000, 50000, 100000],
+      registers: [this.registry],
+    });
+{% endif %}
+
+{% if features.queues %}
+    // Queue Jobs Counter
+    this.queueJobsProcessed = new Counter({
+      name: '{{ project.name | lower | replace(" ", "_") }}_queue_jobs_processed_total',
+      help: 'Total number of queue jobs processed',
+      labelNames: ['queue', 'status'],
+      registers: [this.registry],
+    });
+
+    // Queue Job Duration
+    this.queueJobDuration = new Histogram({
+      name: '{{ project.name | lower | replace(" ", "_") }}_queue_job_duration_seconds',
+      help: 'Duration of queue jobs in seconds',
+      labelNames: ['queue'],
+      buckets: [0.1, 0.5, 1, 5, 10, 30, 60, 120],
+      registers: [this.registry],
+    });
+{% endif %}
+
+    this.logger.log('Prometheus metrics initialized');
+  }
+
+  /**
+   * Get metrics in Prometheus format
+   */
+  async getMetrics(): Promise<string> {
+    return this.registry.metrics();
+  }
+
+  /**
+   * Get content type for metrics endpoint
+   */
+  getContentType(): string {
+    return this.registry.contentType;
+  }
+
+  /**
+   * Record a business event metric
+   */
+  recordEvent(name: string, labels: Record<string, string> = {}): void {
+    const counter = this.registry.getSingleMetric(name);
+    if (counter && counter instanceof Counter) {
+      counter.inc(labels);
+    }
+  }
+}
+
+/**
+ * Metrics Middleware - automatically tracks all HTTP requests
+ */
+@Injectable()
+export class MetricsMiddleware implements NestMiddleware {
+  constructor(private readonly metricsService: MetricsService) {}
+
+  use(req: Request, res: Response, next: NextFunction): void {
+    const start = Date.now();
+    
+    // Track active connections
+    this.metricsService.httpActiveConnections.inc();
+
+    // On response finish
+    res.on('finish', () => {
+      const duration = (Date.now() - start) / 1000;
+      const route = req.route?.path || req.path;
+      const labels = {
+        method: req.method,
+        route: route,
+        status_code: String(res.statusCode),
+      };
+
+      this.metricsService.httpRequestsTotal.inc(labels);
+      this.metricsService.httpRequestDuration.observe(labels, duration);
+      this.metricsService.httpActiveConnections.dec();
+    });
+
+    next();
+  }
+}
