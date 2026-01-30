@@ -187,6 +187,55 @@ export interface CICDIR {
 }
 
 /**
+ * Biometric Authentication IR (WebAuthn/Passkeys)
+ */
+export interface BiometricAuthIR {
+  enabled: boolean;
+  rpId?: string; // Relying Party ID (domain)
+  rpName?: string; // Human-readable name
+  allowedAuthenticators: ("platform" | "cross-platform")[];
+  userVerification: "required" | "preferred" | "discouraged";
+  attestation: "none" | "indirect" | "direct";
+  residentKey: "required" | "preferred" | "discouraged";
+  timeout: number;
+}
+
+/**
+ * Device Management IR
+ */
+export interface DeviceManagementIR {
+  enabled: boolean;
+  maxDevicesPerUser: number;
+  trackDeviceInfo: boolean;
+  autoRevokeInactiveDays: number;
+  requireDeviceApproval: boolean;
+}
+
+/**
+ * Offline Sync IR
+ */
+export interface OfflineSyncIR {
+  enabled: boolean;
+  conflictResolution: "server-wins" | "client-wins" | "last-write-wins" | "manual";
+  deltaSync: boolean;
+  batchSize: number;
+  syncModels: string[];
+  idempotencyKeyTTL: number;
+}
+
+/**
+ * Mobile Configuration IR (Mobile Backend Features)
+ */
+export interface MobileIR {
+  enabled: boolean;
+  clientTypes: string[];
+  disableCsrfForBearerAuth: boolean;
+  biometricAuth?: BiometricAuthIR;
+  deviceManagement?: DeviceManagementIR;
+  offlineSync?: OfflineSyncIR;
+}
+
+/**
  * Complete Intermediate Representation
  */
 export interface ProjectIR {
@@ -213,6 +262,7 @@ export interface ProjectIR {
   flac: boolean; // Field-Level Access Control enabled
   docker?: DockerIR; // Docker configuration
   cicd?: CICDIR; // CI/CD configuration
+  mobile?: MobileIR; // Mobile configuration (biometrics, device mgmt, sync)
   metadata: {
     // Generation metadata
     generatorVersion: string;
@@ -298,6 +348,11 @@ export function buildIR(config: WizardConfig): ProjectIR {
       includeSecurity: config.cicdConfig?.includeSecurity ?? true,
       autoDockerBuild: config.cicdConfig?.autoDockerBuild ?? true,
     };
+  }
+
+  // Add Mobile features if enabled
+  if (config.mobileConfig?.enabled) {
+    ir.mobile = buildMobileIR(config);
   }
 
   return ir;
@@ -849,6 +904,58 @@ function buildFeaturesIR(config: WizardConfig): FeaturesIR {
     gitHooks: features.gitHooks ?? true,
     sonarQube: features.sonarQube ?? false,
   };
+}
+
+/**
+ * Build Mobile IR from configuration (Mobile Backend Features)
+ */
+function buildMobileIR(config: WizardConfig): MobileIR {
+  const mobileConfig = config.mobileConfig!;
+
+  const ir: MobileIR = {
+    enabled: mobileConfig.enabled,
+    clientTypes: mobileConfig.clientTypes || ["both"],
+    disableCsrfForBearerAuth: mobileConfig.disableCsrfForBearerAuth ?? true,
+  };
+
+  // Add biometric auth if enabled
+  if (mobileConfig.biometricAuth?.enabled) {
+    ir.biometricAuth = {
+      enabled: true,
+      rpId: mobileConfig.biometricAuth.rpId,
+      rpName: mobileConfig.biometricAuth.rpName || config.projectSetup!.projectName,
+      allowedAuthenticators: mobileConfig.biometricAuth.allowedAuthenticators || ["platform"],
+      userVerification: mobileConfig.biometricAuth.userVerification || "required",
+      attestation: mobileConfig.biometricAuth.attestation || "none",
+      residentKey: mobileConfig.biometricAuth.residentKey || "preferred",
+      timeout: mobileConfig.biometricAuth.timeout || 60000,
+    };
+  }
+
+  // Add device management if enabled (default: true when mobile is enabled)
+  if (mobileConfig.deviceManagement?.enabled !== false) {
+    ir.deviceManagement = {
+      enabled: mobileConfig.deviceManagement?.enabled ?? true,
+      maxDevicesPerUser: mobileConfig.deviceManagement?.maxDevicesPerUser ?? 5,
+      trackDeviceInfo: mobileConfig.deviceManagement?.trackDeviceInfo ?? true,
+      autoRevokeInactiveDays: mobileConfig.deviceManagement?.autoRevokeInactiveDays ?? 90,
+      requireDeviceApproval: mobileConfig.deviceManagement?.requireDeviceApproval ?? false,
+    };
+  }
+
+  // Add offline sync if enabled
+  if (mobileConfig.offlineSync?.enabled) {
+    ir.offlineSync = {
+      enabled: true,
+      conflictResolution: mobileConfig.offlineSync.conflictResolution || "last-write-wins",
+      deltaSync: mobileConfig.offlineSync.deltaSync ?? true,
+      batchSize: mobileConfig.offlineSync.batchSize ?? 100,
+      syncModels: mobileConfig.offlineSync.syncModels || [],
+      idempotencyKeyTTL: mobileConfig.offlineSync.idempotencyKeyTTL ?? 86400,
+    };
+  }
+
+  return ir;
 }
 
 /**

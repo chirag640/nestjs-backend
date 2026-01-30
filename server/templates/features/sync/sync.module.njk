@@ -1,0 +1,30 @@
+import { Module } from '@nestjs/common';
+{% if features.cache %}
+import { CacheModule } from '@nestjs/cache-manager';
+{% endif %}
+import { SyncController } from './sync.controller';
+import { SyncService } from './sync.service';
+
+/**
+ * Sync Module
+ * 
+ * Provides offline data synchronization:
+ * - Delta sync (pull changes since timestamp)
+ * - Push sync with conflict resolution
+ * - Idempotency key support
+ * 
+ * @requires mobileConfig.offlineSync.enabled = true
+ */
+@Module({
+  imports: [
+    {% if features.cache %}
+    CacheModule.register(),
+    {% endif %}
+    // Import your model modules here for access to repositories
+    // Example: UserModule, PostModule, etc.
+  ],
+  controllers: [SyncController],
+  providers: [SyncService],
+  exports: [SyncService],
+})
+export class SyncModule {}

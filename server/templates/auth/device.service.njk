@@ -1,0 +1,312 @@
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { Device, DeviceDocument } from './device.schema';
+import * as UAParser from 'ua-parser-js';
+{% if features.cache %}
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject } from '@nestjs/common';
+import { Cache } from 'cache-manager';
+{% endif %}
+
+export interface RegisterDeviceDto {
+  deviceId: string;
+  deviceName?: string;
+  platform: 'ios' | 'android' | 'web';
+  pushToken?: string;
+  userAgent?: string;
+  ipAddress?: string;
+}
+
+export interface DeviceInfoDto {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  platform: string;
+  isActive: boolean;
+  isPrimary: boolean;
+  lastActiveAt: Date;
+  deviceInfo?: {
+    os?: string;
+    appVersion?: string;
+    browser?: string;
+  };
+  locationInfo?: {
+    city?: string;
+    country?: string;
+  };
+  createdAt: Date;
+}
+
+/**
+ * Device Management Service
+ * 
+ * Handles multi-device session management:
+ * - Register new devices on login
+ * - Track device info and push tokens
+ * - Revoke specific devices or all devices
+ * - Enforce max device limits
+ * 
+ * @requires mobileConfig.deviceManagement.enabled = true
+ */
+@Injectable()
+export class DeviceService {
+  private readonly logger = new Logger(DeviceService.name);
+  private readonly maxDevicesPerUser = {{ mobileConfig.deviceManagement.maxDevicesPerUser | default(5) }};
+
+  constructor(
+    @InjectModel(Device.name) private deviceModel: Model<DeviceDocument>,
+    {% if features.cache %}@Inject(CACHE_MANAGER) private cacheManager: Cache,{% endif %}
+  ) {}
+
+  /**
+   * Register or update a device for a user
+   * Called on every login to track device sessions
+   */
+  async registerDevice(userId: string, dto: RegisterDeviceDto): Promise<DeviceDocument> {
+    const userObjectId = new Types.ObjectId(userId);
+    
+    // Check if device already exists
+    let device = await this.deviceModel.findOne({
+      deviceId: dto.deviceId,
+      userId: userObjectId,
+    });
+
+    // Parse user agent for device info
+    let deviceInfo = {};
+    if (dto.userAgent) {
+      const parser = new UAParser(dto.userAgent);
+      const result = parser.getResult();
+      deviceInfo = {
+        os: result.os.name,
+        osVersion: result.os.version,
+        browser: result.browser.name,
+        browserVersion: result.browser.version,
+        manufacturer: result.device.vendor,
+        model: result.device.model,
+      };
+    }
+
+    if (device) {
+      // Update existing device
+      device.lastActiveAt = new Date();
+      device.isActive = true;
+      if (dto.pushToken) device.pushToken = dto.pushToken;
+      if (dto.deviceName) device.deviceName = dto.deviceName;
+      device.deviceInfo = { ...device.deviceInfo, ...deviceInfo };
+      if (dto.ipAddress) {
+        device.locationInfo = { ...device.locationInfo, ipAddress: dto.ipAddress };
+      }
+      await device.save();
+      this.logger.debug(`Updated device ${dto.deviceId} for user ${userId}`);
+    } else {
+      // Enforce max devices limit
+      const activeDeviceCount = await this.deviceModel.countDocuments({
+        userId: userObjectId,
+        isActive: true,
+      });
+
+      if (activeDeviceCount >= this.maxDevicesPerUser) {
+        // Remove oldest inactive device or throw error
+        const oldestDevice = await this.deviceModel.findOne({
+          userId: userObjectId,
+          isActive: true,
+        }).sort({ lastActiveAt: 1 });
+
+        if (oldestDevice) {
+          await this.revokeDevice(userId, oldestDevice._id.toString());
+          this.logger.warn(`Auto-revoked oldest device ${oldestDevice.deviceId} due to limit`);
+        }
+      }
+
+      // Create new device
+      device = await this.deviceModel.create({
+        userId: userObjectId,
+        deviceId: dto.deviceId,
+        deviceName: dto.deviceName || this.generateDeviceName(dto.platform, deviceInfo),
+        platform: dto.platform,
+        pushToken: dto.pushToken,
+        deviceInfo,
+        locationInfo: dto.ipAddress ? { ipAddress: dto.ipAddress } : undefined,
+        isActive: true,
+        isPrimary: activeDeviceCount === 0, // First device is primary
+        lastActiveAt: new Date(),
+      });
+      this.logger.log(`Registered new device ${dto.deviceId} for user ${userId}`);
+    }
+
+    {% if features.cache %}
+    // Invalidate user's device cache
+    await this.cacheManager.del(`devices:${userId}`);
+    {% endif %}
+
+    return device;
+  }
+
+  /**
+   * Get all active devices for a user
+   */
+  async getActiveDevices(userId: string): Promise<DeviceInfoDto[]> {
+    {% if features.cache %}
+    const cached = await this.cacheManager.get<DeviceInfoDto[]>(`devices:${userId}`);
+    if (cached) return cached;
+    {% endif %}
+
+    const devices = await this.deviceModel.find({
+      userId: new Types.ObjectId(userId),
+      isActive: true,
+    }).sort({ lastActiveAt: -1 });
+
+    const result = devices.map(this.toDto);
+
+    {% if features.cache %}
+    await this.cacheManager.set(`devices:${userId}`, result, 300000); // 5 min cache
+    {% endif %}
+
+    return result;
+  }
+
+  /**
+   * Revoke a specific device (logout from that device)
+   */
+  async revokeDevice(userId: string, deviceId: string): Promise<void> {
+    const device = await this.deviceModel.findOne({
+      _id: new Types.ObjectId(deviceId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!device) {
+      throw new NotFoundException('Device not found');
+    }
+
+    device.isActive = false;
+    device.refreshToken = undefined;
+    device.pushToken = undefined;
+    await device.save();
+
+    {% if features.cache %}
+    await this.cacheManager.del(`devices:${userId}`);
+    {% endif %}
+
+    this.logger.log(`Revoked device ${device.deviceId} for user ${userId}`);
+  }
+
+  /**
+   * Revoke all devices except the current one
+   */
+  async revokeAllDevices(userId: string, currentDeviceId?: string): Promise<number> {
+    const query: any = {
+      userId: new Types.ObjectId(userId),
+      isActive: true,
+    };
+
+    if (currentDeviceId) {
+      query.deviceId = { $ne: currentDeviceId };
+    }
+
+    const result = await this.deviceModel.updateMany(query, {
+      $set: { isActive: false, refreshToken: null, pushToken: null },
+    });
+
+    {% if features.cache %}
+    await this.cacheManager.del(`devices:${userId}`);
+    {% endif %}
+
+    this.logger.log(`Revoked ${result.modifiedCount} devices for user ${userId}`);
+    return result.modifiedCount;
+  }
+
+  /**
+   * Update push token for a device
+   */
+  async updatePushToken(userId: string, deviceId: string, pushToken: string): Promise<void> {
+    const result = await this.deviceModel.updateOne(
+      { deviceId, userId: new Types.ObjectId(userId), isActive: true },
+      { $set: { pushToken, lastActiveAt: new Date() } },
+    );
+
+    if (result.modifiedCount === 0) {
+      throw new NotFoundException('Device not found or inactive');
+    }
+  }
+
+  /**
+   * Get push tokens for all active devices of a user
+   */
+  async getPushTokensForUser(userId: string): Promise<string[]> {
+    const devices = await this.deviceModel.find({
+      userId: new Types.ObjectId(userId),
+      isActive: true,
+      pushToken: { $exists: true, $ne: null },
+    }).select('pushToken');
+
+    return devices.map(d => d.pushToken!);
+  }
+
+  /**
+   * Find device by refresh token (for token validation)
+   */
+  async findByRefreshToken(refreshToken: string): Promise<DeviceDocument | null> {
+    return this.deviceModel.findOne({ refreshToken, isActive: true });
+  }
+
+  /**
+   * Update refresh token for device-specific session
+   */
+  async updateRefreshToken(deviceId: string, refreshToken: string | null): Promise<void> {
+    await this.deviceModel.updateOne(
+      { deviceId },
+      { $set: { refreshToken, lastActiveAt: new Date() } },
+    );
+  }
+
+  /**
+   * Cleanup inactive devices (run as scheduled job)
+   */
+  async cleanupInactiveDevices(inactiveDays: number = {{ mobileConfig.deviceManagement.autoRevokeInactiveDays | default(90) }}): Promise<number> {
+    if (inactiveDays <= 0) return 0;
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - inactiveDays);
+
+    const result = await this.deviceModel.deleteMany({
+      lastActiveAt: { $lt: cutoffDate },
+      isActive: false,
+    });
+
+    this.logger.log(`Cleaned up ${result.deletedCount} inactive devices`);
+    return result.deletedCount;
+  }
+
+  private toDto(device: DeviceDocument): DeviceInfoDto {
+    return {
+      id: device._id.toString(),
+      deviceId: device.deviceId,
+      deviceName: device.deviceName,
+      platform: device.platform,
+      isActive: device.isActive,
+      isPrimary: device.isPrimary,
+      lastActiveAt: device.lastActiveAt,
+      deviceInfo: {
+        os: device.deviceInfo?.os,
+        appVersion: device.deviceInfo?.appVersion,
+        browser: device.deviceInfo?.browser,
+      },
+      locationInfo: {
+        city: device.locationInfo?.city,
+        country: device.locationInfo?.country,
+      },
+      createdAt: device.createdAt,
+    };
+  }
+
+  private generateDeviceName(platform: string, deviceInfo: any): string {
+    if (platform === 'web') {
+      return deviceInfo.browser ? `${deviceInfo.browser} on ${deviceInfo.os || 'Unknown'}` : 'Web Browser';
+    }
+    if (deviceInfo.manufacturer && deviceInfo.model) {
+      return `${deviceInfo.manufacturer} ${deviceInfo.model}`;
+    }
+    return platform === 'ios' ? 'iPhone/iPad' : 'Android Device';
+  }
+}

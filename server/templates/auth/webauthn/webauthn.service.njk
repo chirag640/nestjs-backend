@@ -1,0 +1,413 @@
+import { Injectable, Logger, BadRequestException, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { ConfigService } from '@nestjs/config';
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+  VerifiedRegistrationResponse,
+  VerifiedAuthenticationResponse,
+} from '@simplewebauthn/server';
+import type {
+  RegistrationResponseJSON,
+  AuthenticationResponseJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/types';
+import { WebAuthnCredential, WebAuthnCredentialDocument } from './credential.schema';
+{% if features.cache %}
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject } from '@nestjs/common';
+import { Cache } from 'cache-manager';
+{% endif %}
+
+export interface WebAuthnUser {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface CredentialInfoDto {
+  credentialId: string;
+  friendlyName: string;
+  deviceType: string;
+  backedUp: boolean;
+  lastUsedAt: Date;
+  createdAt: Date;
+}
+
+/**
+ * WebAuthn Biometric Authentication Service
+ * 
+ * Implements FIDO2/WebAuthn for passwordless authentication:
+ * - Registration: Create new passkey credentials
+ * - Authentication: Verify passkey signatures
+ * - Challenge management: Secure random challenges
+ * 
+ * Supported authenticators:
+ * - Platform: FaceID, TouchID, Windows Hello
+ * - Cross-platform: YubiKey, other security keys
+ * 
+ * @requires mobileConfig.biometricAuth.enabled = true
+ * @package @simplewebauthn/server
+ * @see https://simplewebauthn.dev/
+ */
+@Injectable()
+export class WebAuthnService {
+  private readonly logger = new Logger(WebAuthnService.name);
+  private readonly rpId: string;
+  private readonly rpName: string;
+  private readonly origin: string | string[];
+  private readonly timeout: number;
+
+  constructor(
+    @InjectModel(WebAuthnCredential.name) private credentialModel: Model<WebAuthnCredentialDocument>,
+    private readonly configService: ConfigService,
+    {% if features.cache %}@Inject(CACHE_MANAGER) private cacheManager: Cache,{% endif %}
+  ) {
+    this.rpId = configService.get('WEBAUTHN_RP_ID') || '{{ mobileConfig.biometricAuth.rpId | default("localhost") }}';
+    this.rpName = configService.get('WEBAUTHN_RP_NAME') || '{{ mobileConfig.biometricAuth.rpName | default(projectSetup.projectName) }}';
+    this.origin = configService.get('WEBAUTHN_ORIGIN') || `https://${this.rpId}`;
+    this.timeout = {{ mobileConfig.biometricAuth.timeout | default(60000) }};
+  }
+
+  // ==================== REGISTRATION ====================
+
+  /**
+   * Generate registration options (challenge) for new passkey
+   */
+  async generateRegistrationOptions(user: WebAuthnUser): Promise<PublicKeyCredentialCreationOptionsJSON> {
+    // Get existing credentials to exclude
+    const existingCredentials = await this.credentialModel.find({
+      userId: new Types.ObjectId(user.id),
+      isActive: true,
+    });
+
+    const excludeCredentials = existingCredentials.map(cred => ({
+      id: cred.credentialId,
+      type: 'public-key' as const,
+      transports: cred.transports as any,
+    }));
+
+    const options = await generateRegistrationOptions({
+      rpName: this.rpName,
+      rpID: this.rpId,
+      userName: user.email,
+      userDisplayName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+      attestationType: '{{ mobileConfig.biometricAuth.attestation | default("none") }}',
+      authenticatorSelection: {
+        authenticatorAttachment: undefined, // Allow any
+        residentKey: '{{ mobileConfig.biometricAuth.residentKey | default("preferred") }}',
+        userVerification: '{{ mobileConfig.biometricAuth.userVerification | default("required") }}',
+      },
+      excludeCredentials,
+      timeout: this.timeout,
+    });
+
+    // Store challenge for verification (short-lived)
+    {% if features.cache %}
+    await this.cacheManager.set(
+      `webauthn:reg:${user.id}`,
+      options.challenge,
+      this.timeout
+    );
+    {% else %}
+    // IMPORTANT: In production without Redis, store in database or session
+    // This is a simplified in-memory fallback
+    (global as any).__webauthn_challenges = (global as any).__webauthn_challenges || {};
+    (global as any).__webauthn_challenges[`reg:${user.id}`] = {
+      challenge: options.challenge,
+      expires: Date.now() + this.timeout,
+    };
+    {% endif %}
+
+    this.logger.debug(`Generated registration options for user ${user.id}`);
+    return options;
+  }
+
+  /**
+   * Verify registration response and store credential
+   */
+  async verifyRegistration(
+    user: WebAuthnUser,
+    response: RegistrationResponseJSON,
+    friendlyName?: string,
+    deviceId?: string,
+  ): Promise<CredentialInfoDto> {
+    // Retrieve stored challenge
+    {% if features.cache %}
+    const expectedChallenge = await this.cacheManager.get<string>(`webauthn:reg:${user.id}`);
+    if (!expectedChallenge) {
+      throw new BadRequestException('Registration challenge expired or not found');
+    }
+    {% else %}
+    const stored = (global as any).__webauthn_challenges?.[`reg:${user.id}`];
+    if (!stored || stored.expires < Date.now()) {
+      throw new BadRequestException('Registration challenge expired or not found');
+    }
+    const expectedChallenge = stored.challenge;
+    delete (global as any).__webauthn_challenges[`reg:${user.id}`];
+    {% endif %}
+
+    let verification: VerifiedRegistrationResponse;
+    try {
+      verification = await verifyRegistrationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: this.origin,
+        expectedRPID: this.rpId,
+        requireUserVerification: true,
+      });
+    } catch (error: any) {
+      this.logger.error(`Registration verification failed: ${error.message}`);
+      throw new BadRequestException(`Registration failed: ${error.message}`);
+    }
+
+    if (!verification.verified || !verification.registrationInfo) {
+      throw new BadRequestException('Registration verification failed');
+    }
+
+    const { registrationInfo } = verification;
+
+    // Check for duplicate credential
+    const existing = await this.credentialModel.findOne({
+      credentialId: Buffer.from(registrationInfo.credential.id).toString('base64url'),
+    });
+    if (existing) {
+      throw new ConflictException('This passkey is already registered');
+    }
+
+    // Store the credential
+    const credential = await this.credentialModel.create({
+      userId: new Types.ObjectId(user.id),
+      credentialId: Buffer.from(registrationInfo.credential.id).toString('base64url'),
+      credentialPublicKey: Buffer.from(registrationInfo.credential.publicKey).toString('base64url'),
+      counter: registrationInfo.credential.counter,
+      deviceType: registrationInfo.credentialDeviceType,
+      backedUp: registrationInfo.credentialBackedUp,
+      transports: response.response.transports || [],
+      friendlyName: friendlyName || this.generateFriendlyName(response),
+      aaguid: registrationInfo.aaguid,
+      deviceId: deviceId ? new Types.ObjectId(deviceId) : undefined,
+    });
+
+    {% if features.cache %}
+    await this.cacheManager.del(`webauthn:reg:${user.id}`);
+    {% endif %}
+
+    this.logger.log(`Registered new passkey ${credential.credentialId.slice(0, 8)}... for user ${user.id}`);
+
+    return {
+      credentialId: credential.credentialId,
+      friendlyName: credential.friendlyName,
+      deviceType: credential.deviceType || 'unknown',
+      backedUp: credential.backedUp,
+      lastUsedAt: credential.lastUsedAt,
+      createdAt: credential.createdAt,
+    };
+  }
+
+  // ==================== AUTHENTICATION ====================
+
+  /**
+   * Generate authentication options (challenge)
+   */
+  async generateAuthenticationOptions(
+    userId?: string,
+    email?: string,
+  ): Promise<PublicKeyCredentialRequestOptionsJSON> {
+    let allowCredentials: any[] = [];
+
+    // If user is known, limit to their credentials
+    if (userId) {
+      const credentials = await this.credentialModel.find({
+        userId: new Types.ObjectId(userId),
+        isActive: true,
+      });
+      allowCredentials = credentials.map(cred => ({
+        id: cred.credentialId,
+        type: 'public-key' as const,
+        transports: cred.transports as any,
+      }));
+    }
+
+    const options = await generateAuthenticationOptions({
+      rpID: this.rpId,
+      userVerification: '{{ mobileConfig.biometricAuth.userVerification | default("required") }}',
+      allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
+      timeout: this.timeout,
+    });
+
+    // Store challenge
+    const challengeKey = userId || email || options.challenge.slice(0, 16);
+    {% if features.cache %}
+    await this.cacheManager.set(
+      `webauthn:auth:${challengeKey}`,
+      options.challenge,
+      this.timeout
+    );
+    {% else %}
+    (global as any).__webauthn_challenges = (global as any).__webauthn_challenges || {};
+    (global as any).__webauthn_challenges[`auth:${challengeKey}`] = {
+      challenge: options.challenge,
+      expires: Date.now() + this.timeout,
+    };
+    {% endif %}
+
+    this.logger.debug(`Generated authentication options for ${userId || 'discoverable'}`);
+    return { ...options, _challengeKey: challengeKey } as any;
+  }
+
+  /**
+   * Verify authentication response
+   * Returns user ID if successful
+   */
+  async verifyAuthentication(
+    response: AuthenticationResponseJSON,
+    challengeKey: string,
+  ): Promise<{ userId: string; credentialId: string }> {
+    // Find the credential
+    const credential = await this.credentialModel.findOne({
+      credentialId: response.id,
+      isActive: true,
+    });
+
+    if (!credential) {
+      throw new UnauthorizedException('Passkey not found or has been revoked');
+    }
+
+    // Get stored challenge
+    {% if features.cache %}
+    const expectedChallenge = await this.cacheManager.get<string>(`webauthn:auth:${challengeKey}`);
+    if (!expectedChallenge) {
+      throw new BadRequestException('Authentication challenge expired');
+    }
+    {% else %}
+    const stored = (global as any).__webauthn_challenges?.[`auth:${challengeKey}`];
+    if (!stored || stored.expires < Date.now()) {
+      throw new BadRequestException('Authentication challenge expired');
+    }
+    const expectedChallenge = stored.challenge;
+    delete (global as any).__webauthn_challenges[`auth:${challengeKey}`];
+    {% endif %}
+
+    let verification: VerifiedAuthenticationResponse;
+    try {
+      verification = await verifyAuthenticationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: this.origin,
+        expectedRPID: this.rpId,
+        credential: {
+          id: credential.credentialId,
+          publicKey: Buffer.from(credential.credentialPublicKey, 'base64url'),
+          counter: credential.counter,
+          transports: credential.transports as any,
+        },
+        requireUserVerification: true,
+      });
+    } catch (error: any) {
+      this.logger.error(`Authentication verification failed: ${error.message}`);
+      throw new UnauthorizedException(`Authentication failed: ${error.message}`);
+    }
+
+    if (!verification.verified) {
+      throw new UnauthorizedException('Authentication verification failed');
+    }
+
+    // Update counter (for hardware key anti-replay)
+    credential.counter = verification.authenticationInfo.newCounter;
+    credential.lastUsedAt = new Date();
+    await credential.save();
+
+    {% if features.cache %}
+    await this.cacheManager.del(`webauthn:auth:${challengeKey}`);
+    {% endif %}
+
+    this.logger.log(`Passkey authentication successful for user ${credential.userId}`);
+
+    return {
+      userId: credential.userId.toString(),
+      credentialId: credential.credentialId,
+    };
+  }
+
+  // ==================== CREDENTIAL MANAGEMENT ====================
+
+  /**
+   * List all credentials for a user
+   */
+  async getUserCredentials(userId: string): Promise<CredentialInfoDto[]> {
+    const credentials = await this.credentialModel.find({
+      userId: new Types.ObjectId(userId),
+      isActive: true,
+    }).sort({ lastUsedAt: -1 });
+
+    return credentials.map(cred => ({
+      credentialId: cred.credentialId,
+      friendlyName: cred.friendlyName,
+      deviceType: cred.deviceType || 'unknown',
+      backedUp: cred.backedUp,
+      lastUsedAt: cred.lastUsedAt,
+      createdAt: cred.createdAt,
+    }));
+  }
+
+  /**
+   * Rename a credential
+   */
+  async renameCredential(userId: string, credentialId: string, friendlyName: string): Promise<void> {
+    const result = await this.credentialModel.updateOne(
+      { userId: new Types.ObjectId(userId), credentialId, isActive: true },
+      { $set: { friendlyName } },
+    );
+    if (result.modifiedCount === 0) {
+      throw new NotFoundException('Credential not found');
+    }
+  }
+
+  /**
+   * Revoke a credential
+   */
+  async revokeCredential(userId: string, credentialId: string): Promise<void> {
+    const result = await this.credentialModel.updateOne(
+      { userId: new Types.ObjectId(userId), credentialId },
+      { $set: { isActive: false } },
+    );
+    if (result.modifiedCount === 0) {
+      throw new NotFoundException('Credential not found');
+    }
+    this.logger.log(`Revoked passkey ${credentialId.slice(0, 8)}... for user ${userId}`);
+  }
+
+  /**
+   * Check if user has any passkeys registered
+   */
+  async hasPasskeys(userId: string): Promise<boolean> {
+    const count = await this.credentialModel.countDocuments({
+      userId: new Types.ObjectId(userId),
+      isActive: true,
+    });
+    return count > 0;
+  }
+
+  private generateFriendlyName(response: RegistrationResponseJSON): string {
+    const transports = response.response.transports || [];
+    if (transports.includes('internal')) {
+      return 'Built-in Biometrics';
+    }
+    if (transports.includes('usb')) {
+      return 'Security Key (USB)';
+    }
+    if (transports.includes('nfc')) {
+      return 'Security Key (NFC)';
+    }
+    if (transports.includes('hybrid')) {
+      return 'Phone or Tablet';
+    }
+    return 'Passkey';
+  }
+}

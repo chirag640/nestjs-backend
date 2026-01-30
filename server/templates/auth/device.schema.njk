@@ -1,0 +1,83 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
+
+export type DeviceDocument = Device & Document;
+
+/**
+ * Device Schema - Tracks user devices for multi-device session management
+ * 
+ * Used for:
+ * - Push notification tokens (FCM/APNs)
+ * - Device-specific session management (logout single device)
+ * - Security auditing (track login locations)
+ * - Biometric authentication binding
+ * 
+ * @requires mobileConfig.deviceManagement.enabled = true
+ */
+@Schema({
+  timestamps: true,
+  collection: 'devices',
+})
+export class Device {
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  userId: Types.ObjectId;
+
+  @Prop({ required: true, unique: true })
+  deviceId: string; // Unique device identifier (UUID or fingerprint)
+
+  @Prop({ required: true })
+  deviceName: string; // e.g., "iPhone 15 Pro", "Chrome on Windows"
+
+  @Prop({ type: String, enum: ['ios', 'android', 'web'], required: true })
+  platform: 'ios' | 'android' | 'web';
+
+  @Prop({ required: false })
+  pushToken?: string; // FCM/APNs token for push notifications
+
+  @Prop({ default: true })
+  isActive: boolean; // Whether device session is valid
+
+  @Prop({ default: false })
+  isPrimary: boolean; // User's primary device
+
+  @Prop({ default: Date.now })
+  lastActiveAt: Date;
+
+  @Prop({ type: Object, required: false })
+  deviceInfo?: {
+    os?: string;           // e.g., "iOS 17.2", "Android 14"
+    osVersion?: string;
+    appVersion?: string;   // Your app version
+    manufacturer?: string; // e.g., "Apple", "Samsung"
+    model?: string;        // e.g., "iPhone15,3", "SM-S928B"
+    browser?: string;      // For web clients
+    browserVersion?: string;
+  };
+
+  @Prop({ type: Object, required: false })
+  locationInfo?: {
+    ipAddress?: string;
+    city?: string;
+    country?: string;
+    timezone?: string;
+  };
+
+  @Prop({ required: false })
+  refreshToken?: string; // Current refresh token for this device
+
+  {% if mobileConfig.biometricAuth and mobileConfig.biometricAuth.enabled %}
+  @Prop({ type: [String], default: [] })
+  webauthnCredentialIds: string[]; // Associated WebAuthn credential IDs for biometric auth
+  {% endif %}
+
+  // Timestamps (added automatically)
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const DeviceSchema = SchemaFactory.createForClass(Device);
+
+// Create compound indexes for efficient querying
+DeviceSchema.index({ userId: 1, isActive: 1 });
+DeviceSchema.index({ pushToken: 1 }, { sparse: true });
+DeviceSchema.index({ lastActiveAt: 1 }); // For cleanup jobs

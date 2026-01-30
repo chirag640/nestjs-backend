@@ -1,0 +1,148 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Patch,
+  Body,
+  Param,
+  Req,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+{% if features.swagger %}
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+{% endif %}
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { DeviceService, DeviceInfoDto } from './device.service';
+import { CurrentUser } from './decorators/current-user.decorator';
+
+class RegisterDeviceDto {
+  deviceId: string;
+  deviceName?: string;
+  platform: 'ios' | 'android' | 'web';
+  pushToken?: string;
+}
+
+class UpdatePushTokenDto {
+  pushToken: string;
+}
+
+/**
+ * Device Management API
+ * 
+ * Endpoints for managing user devices:
+ * - List active devices
+ * - Register new device
+ * - Revoke (logout) specific device
+ * - Revoke all devices
+ * - Update push notification token
+ * 
+ * @requires mobileConfig.deviceManagement.enabled = true
+ */
+{% if features.swagger %}
+@ApiTags('Devices')
+@ApiBearerAuth()
+{% endif %}
+@Controller('auth/devices')
+@UseGuards(JwtAuthGuard)
+export class DeviceController {
+  constructor(private readonly deviceService: DeviceService) {}
+
+  /**
+   * Get all active devices for the current user
+   */
+  @Get()
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'List active devices' })
+  @ApiResponse({ status: 200, description: 'List of active devices' })
+  {% endif %}
+  async getDevices(@CurrentUser('id') userId: string): Promise<DeviceInfoDto[]> {
+    return this.deviceService.getActiveDevices(userId);
+  }
+
+  /**
+   * Register a new device or update existing
+   */
+  @Post()
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Register device' })
+  @ApiResponse({ status: 201, description: 'Device registered' })
+  {% endif %}
+  async registerDevice(
+    @CurrentUser('id') userId: string,
+    @Body() dto: RegisterDeviceDto,
+    @Req() req: any,
+  ): Promise<DeviceInfoDto> {
+    const device = await this.deviceService.registerDevice(userId, {
+      ...dto,
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip || req.connection?.remoteAddress,
+    });
+
+    return {
+      id: device._id.toString(),
+      deviceId: device.deviceId,
+      deviceName: device.deviceName,
+      platform: device.platform,
+      isActive: device.isActive,
+      isPrimary: device.isPrimary,
+      lastActiveAt: device.lastActiveAt,
+      createdAt: device.createdAt,
+    };
+  }
+
+  /**
+   * Revoke a specific device (logout from that device)
+   */
+  @Delete(':deviceId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Revoke device' })
+  @ApiParam({ name: 'deviceId', description: 'Device ID to revoke' })
+  @ApiResponse({ status: 204, description: 'Device revoked' })
+  @ApiResponse({ status: 404, description: 'Device not found' })
+  {% endif %}
+  async revokeDevice(
+    @CurrentUser('id') userId: string,
+    @Param('deviceId') deviceId: string,
+  ): Promise<void> {
+    await this.deviceService.revokeDevice(userId, deviceId);
+  }
+
+  /**
+   * Revoke all other devices (logout from all except current)
+   */
+  @Delete()
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Revoke all other devices' })
+  @ApiResponse({ status: 200, description: 'Number of devices revoked' })
+  {% endif %}
+  async revokeAllDevices(
+    @CurrentUser('id') userId: string,
+    @Body('currentDeviceId') currentDeviceId?: string,
+  ): Promise<{ revokedCount: number }> {
+    const count = await this.deviceService.revokeAllDevices(userId, currentDeviceId);
+    return { revokedCount: count };
+  }
+
+  /**
+   * Update push notification token for a device
+   */
+  @Patch(':deviceId/push-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Update push token' })
+  @ApiParam({ name: 'deviceId', description: 'Device ID' })
+  @ApiResponse({ status: 204, description: 'Push token updated' })
+  @ApiResponse({ status: 404, description: 'Device not found' })
+  {% endif %}
+  async updatePushToken(
+    @CurrentUser('id') userId: string,
+    @Param('deviceId') deviceId: string,
+    @Body() dto: UpdatePushTokenDto,
+  ): Promise<void> {
+    await this.deviceService.updatePushToken(userId, deviceId, dto.pushToken);
+  }
+}

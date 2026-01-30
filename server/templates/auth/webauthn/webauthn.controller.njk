@@ -1,0 +1,235 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Patch,
+  Body,
+  Param,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  Query,
+} from '@nestjs/common';
+{% if features.swagger %}
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+{% endif %}
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { WebAuthnService, CredentialInfoDto, WebAuthnUser } from './webauthn.service';
+import { AuthService } from '../auth.service';
+import { CurrentUser } from '../decorators/current-user.decorator';
+import type {
+  RegistrationResponseJSON,
+  AuthenticationResponseJSON,
+} from '@simplewebauthn/types';
+
+class RegisterOptionDto {
+  friendlyName?: string;
+  deviceId?: string;
+}
+
+class VerifyRegistrationDto {
+  response: RegistrationResponseJSON;
+  friendlyName?: string;
+  deviceId?: string;
+}
+
+class VerifyAuthenticationDto {
+  response: AuthenticationResponseJSON;
+  challengeKey: string;
+}
+
+class RenameCredentialDto {
+  friendlyName: string;
+}
+
+/**
+ * WebAuthn/Passkey Authentication Controller
+ * 
+ * REST API for passwordless biometric authentication:
+ * - /auth/webauthn/register/* - Register new passkeys
+ * - /auth/webauthn/authenticate/* - Login with passkeys
+ * - /auth/webauthn/credentials - Manage existing passkeys
+ * 
+ * @requires mobileConfig.biometricAuth.enabled = true
+ * @see https://webauthn.guide/
+ */
+{% if features.swagger %}
+@ApiTags('WebAuthn')
+{% endif %}
+@Controller('auth/webauthn')
+export class WebAuthnController {
+  constructor(
+    private readonly webAuthnService: WebAuthnService,
+    private readonly authService: AuthService,
+  ) {}
+
+  // ==================== REGISTRATION ====================
+
+  /**
+   * Get registration options (challenge) for new passkey
+   * Requires authentication - user must be logged in to add a passkey
+   */
+  @Post('register/options')
+  @UseGuards(JwtAuthGuard)
+  {% if features.swagger %}
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get passkey registration options' })
+  @ApiResponse({ status: 200, description: 'Registration options with challenge' })
+  {% endif %}
+  async getRegistrationOptions(
+    @CurrentUser() user: WebAuthnUser,
+    @Body() _dto: RegisterOptionDto,
+  ) {
+    return this.webAuthnService.generateRegistrationOptions(user);
+  }
+
+  /**
+   * Verify registration and store passkey credential
+   */
+  @Post('register/verify')
+  @UseGuards(JwtAuthGuard)
+  {% if features.swagger %}
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify passkey registration' })
+  @ApiResponse({ status: 201, description: 'Passkey registered' })
+  @ApiResponse({ status: 400, description: 'Verification failed' })
+  {% endif %}
+  async verifyRegistration(
+    @CurrentUser() user: WebAuthnUser,
+    @Body() dto: VerifyRegistrationDto,
+  ): Promise<CredentialInfoDto> {
+    return this.webAuthnService.verifyRegistration(
+      user,
+      dto.response,
+      dto.friendlyName,
+      dto.deviceId,
+    );
+  }
+
+  // ==================== AUTHENTICATION ====================
+
+  /**
+   * Get authentication options (challenge) for passkey login
+   * No authentication required - this is for logging in
+   */
+  @Post('authenticate/options')
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Get passkey authentication options' })
+  @ApiQuery({ name: 'email', required: false, description: 'Optional email to filter credentials' })
+  @ApiResponse({ status: 200, description: 'Authentication options with challenge' })
+  {% endif %}
+  async getAuthenticationOptions(
+    @Query('email') email?: string,
+  ) {
+    return this.webAuthnService.generateAuthenticationOptions(undefined, email);
+  }
+
+  /**
+   * Verify authentication and return JWT tokens
+   */
+  @Post('authenticate/verify')
+  @HttpCode(HttpStatus.OK)
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Verify passkey authentication' })
+  @ApiResponse({ status: 200, description: 'Authentication successful, returns tokens' })
+  @ApiResponse({ status: 401, description: 'Authentication failed' })
+  {% endif %}
+  async verifyAuthentication(
+    @Body() dto: VerifyAuthenticationDto,
+  ) {
+    // Verify the passkey
+    const { userId } = await this.webAuthnService.verifyAuthentication(
+      dto.response,
+      dto.challengeKey,
+    );
+
+    // Generate JWT tokens (same as regular login)
+    // Note: You may want to create a dedicated method in AuthService
+    const user = await this.authService.getProfile(userId);
+    
+    // For now, return a simplified response
+    // In production, integrate with your AuthService.login() flow
+    return {
+      message: 'Passkey authentication successful',
+      userId,
+      user,
+      // tokens would be added here by AuthService integration
+    };
+  }
+
+  // ==================== CREDENTIAL MANAGEMENT ====================
+
+  /**
+   * List all passkeys for current user
+   */
+  @Get('credentials')
+  @UseGuards(JwtAuthGuard)
+  {% if features.swagger %}
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List passkeys' })
+  @ApiResponse({ status: 200, description: 'List of registered passkeys' })
+  {% endif %}
+  async listCredentials(
+    @CurrentUser('id') userId: string,
+  ): Promise<CredentialInfoDto[]> {
+    return this.webAuthnService.getUserCredentials(userId);
+  }
+
+  /**
+   * Check if user has any passkeys
+   */
+  @Get('credentials/exists')
+  @UseGuards(JwtAuthGuard)
+  {% if features.swagger %}
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Check if user has passkeys' })
+  @ApiResponse({ status: 200, description: 'Boolean response' })
+  {% endif %}
+  async hasCredentials(
+    @CurrentUser('id') userId: string,
+  ): Promise<{ hasPasskeys: boolean }> {
+    const hasPasskeys = await this.webAuthnService.hasPasskeys(userId);
+    return { hasPasskeys };
+  }
+
+  /**
+   * Rename a passkey
+   */
+  @Patch('credentials/:credentialId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  {% if features.swagger %}
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Rename passkey' })
+  @ApiParam({ name: 'credentialId', description: 'Credential ID' })
+  @ApiResponse({ status: 204, description: 'Passkey renamed' })
+  {% endif %}
+  async renameCredential(
+    @CurrentUser('id') userId: string,
+    @Param('credentialId') credentialId: string,
+    @Body() dto: RenameCredentialDto,
+  ): Promise<void> {
+    await this.webAuthnService.renameCredential(userId, credentialId, dto.friendlyName);
+  }
+
+  /**
+   * Revoke a passkey
+   */
+  @Delete('credentials/:credentialId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  {% if features.swagger %}
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoke passkey' })
+  @ApiParam({ name: 'credentialId', description: 'Credential ID' })
+  @ApiResponse({ status: 204, description: 'Passkey revoked' })
+  @ApiResponse({ status: 404, description: 'Passkey not found' })
+  {% endif %}
+  async revokeCredential(
+    @CurrentUser('id') userId: string,
+    @Param('credentialId') credentialId: string,
+  ): Promise<void> {
+    await this.webAuthnService.revokeCredential(userId, credentialId);
+  }
+}

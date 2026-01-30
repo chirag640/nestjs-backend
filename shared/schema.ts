@@ -210,6 +210,58 @@ export const cicdConfigSchema = z.object({
 
 export type CICDConfig = z.infer<typeof cicdConfigSchema>;
 
+// Step 9: Mobile Configuration (Mobile Backend Features)
+export const biometricAuthSchema = z.object({
+  enabled: z.boolean().default(false),
+  rpId: z.string().optional(), // Relying Party ID (your domain, e.g., "example.com")
+  rpName: z.string().optional(), // Human-readable RP name
+  allowedAuthenticators: z
+    .array(z.enum(["platform", "cross-platform"]))
+    .default(["platform"]), // platform = device biometrics, cross-platform = security keys
+  userVerification: z.enum(["required", "preferred", "discouraged"]).default("required"),
+  attestation: z.enum(["none", "indirect", "direct"]).default("none"), // none = privacy-friendly
+  residentKey: z.enum(["required", "preferred", "discouraged"]).default("preferred"), // For usernameless login
+  timeout: z.number().default(60000), // Challenge timeout in ms
+});
+
+export type BiometricAuth = z.infer<typeof biometricAuthSchema>;
+
+export const deviceManagementSchema = z.object({
+  enabled: z.boolean().default(true),
+  maxDevicesPerUser: z.number().min(1).max(50).default(5),
+  trackDeviceInfo: z.boolean().default(true), // Track OS, app version, IP
+  autoRevokeInactiveDays: z.number().min(0).default(90), // Auto-revoke after N days inactive (0 = never)
+  requireDeviceApproval: z.boolean().default(false), // Require approval for new devices
+});
+
+export type DeviceManagement = z.infer<typeof deviceManagementSchema>;
+
+export const offlineSyncSchema = z.object({
+  enabled: z.boolean().default(false),
+  conflictResolution: z
+    .enum(["server-wins", "client-wins", "last-write-wins", "manual"])
+    .default("last-write-wins"),
+  deltaSync: z.boolean().default(true), // Only sync changes since last sync
+  batchSize: z.number().min(10).max(1000).default(100), // Max items per sync batch
+  syncModels: z.array(z.string()).optional(), // List of model names to sync (empty = all)
+  idempotencyKeyTTL: z.number().default(86400), // Idempotency key TTL in seconds (24h default)
+});
+
+export type OfflineSync = z.infer<typeof offlineSyncSchema>;
+
+export const mobileConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  clientTypes: z
+    .array(z.enum(["web", "mobile", "both"]))
+    .default(["both"]), // Target client types
+  disableCsrfForBearerAuth: z.boolean().default(true), // CSRF not needed for JWT Bearer auth
+  biometricAuth: biometricAuthSchema.optional(),
+  deviceManagement: deviceManagementSchema.optional(),
+  offlineSync: offlineSyncSchema.optional(),
+});
+
+export type MobileConfig = z.infer<typeof mobileConfigSchema>;
+
 // Complete Wizard Configuration
 export const wizardConfigSchema = z.object({
   projectSetup: projectSetupSchema,
@@ -220,6 +272,7 @@ export const wizardConfigSchema = z.object({
   featureSelection: featureSelectionSchema,
   dockerConfig: dockerConfigSchema.optional(),
   cicdConfig: cicdConfigSchema.optional(),
+  mobileConfig: mobileConfigSchema.optional(),
 });
 
 export type WizardConfig = z.infer<typeof wizardConfigSchema>;
@@ -293,5 +346,32 @@ export const defaultWizardConfig: Partial<WizardConfig> = {
     includeE2E: true,
     includeSecurity: true,
     autoDockerBuild: true,
+  },
+  mobileConfig: {
+    enabled: false,
+    clientTypes: ["both"] as const,
+    disableCsrfForBearerAuth: true,
+    biometricAuth: {
+      enabled: false,
+      allowedAuthenticators: ["platform"] as const,
+      userVerification: "required" as const,
+      attestation: "none" as const,
+      residentKey: "preferred" as const,
+      timeout: 60000,
+    },
+    deviceManagement: {
+      enabled: true,
+      maxDevicesPerUser: 5,
+      trackDeviceInfo: true,
+      autoRevokeInactiveDays: 90,
+      requireDeviceApproval: false,
+    },
+    offlineSync: {
+      enabled: false,
+      conflictResolution: "last-write-wins" as const,
+      deltaSync: true,
+      batchSize: 100,
+      idempotencyKeyTTL: 86400,
+    },
   },
 };

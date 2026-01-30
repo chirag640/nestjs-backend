@@ -1,0 +1,422 @@
+import { Injectable, Logger, BadRequestException, ConflictException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+{% if features.cache %}
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject } from '@nestjs/common';
+import { Cache } from 'cache-manager';
+{% endif %}
+
+/**
+ * Sync record representing a change from the client
+ */
+export interface SyncRecord {
+  modelName: string;
+  operation: 'create' | 'update' | 'delete';
+  id?: string;
+  data?: Record<string, any>;
+  clientTimestamp: number;
+  idempotencyKey: string;
+}
+
+/**
+ * Result of a sync operation
+ */
+export interface SyncResult {
+  modelName: string;
+  operation: 'create' | 'update' | 'delete';
+  id: string;
+  status: 'success' | 'conflict' | 'error';
+  serverTimestamp: number;
+  conflictData?: Record<string, any>; // Server version if conflict
+  errorMessage?: string;
+}
+
+/**
+ * Delta sync response
+ */
+export interface DeltaSyncResponse {
+  changes: {
+    modelName: string;
+    operation: 'create' | 'update' | 'delete';
+    id: string;
+    data: Record<string, any>;
+    serverTimestamp: number;
+  }[];
+  serverTimestamp: number;
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+/**
+ * Offline Sync Service
+ * 
+ * Implements data synchronization patterns for mobile apps:
+ * - Delta sync: Only fetch changes since last sync
+ * - Conflict resolution: Handle concurrent modifications
+ * - Idempotency: Prevent duplicate operations
+ * - Batch processing: Efficient multi-record sync
+ * 
+ * @requires mobileConfig.offlineSync.enabled = true
+ */
+@Injectable()
+export class SyncService {
+  private readonly logger = new Logger(SyncService.name);
+  private readonly conflictResolution = '{{ mobileConfig.offlineSync.conflictResolution | default("last-write-wins") }}';
+  private readonly batchSize = {{ mobileConfig.offlineSync.batchSize | default(100) }};
+  private readonly idempotencyTTL = {{ mobileConfig.offlineSync.idempotencyKeyTTL | default(86400) }}; // seconds
+
+  constructor(
+    {% if features.cache %}@Inject(CACHE_MANAGER) private cacheManager: Cache,{% endif %}
+    // Inject your model repositories here as needed
+    // Example: @InjectModel(User.name) private userModel: Model<UserDocument>,
+  ) {}
+
+  // ==================== DELTA SYNC (PULL) ====================
+
+  /**
+   * Get all changes since a given timestamp
+   * Used by mobile clients to sync down from server
+   */
+  async pullChanges(
+    userId: string,
+    sinceTimestamp: number,
+    modelNames?: string[], // Optional: filter by model names
+    cursor?: string,
+  ): Promise<DeltaSyncResponse> {
+    const since = new Date(sinceTimestamp);
+    const changes: DeltaSyncResponse['changes'] = [];
+
+    // Get syncable models (from config or all)
+    const modelsToSync = modelNames || this.getSyncableModels();
+
+    // TODO: Implement per-model change tracking
+    // For each model, query for records updated after sinceTimestamp
+    // This is a placeholder - actual implementation depends on your models
+    
+    /*
+    Example implementation pattern:
+    
+    for (const modelName of modelsToSync) {
+      const model = this.getModelByName(modelName);
+      if (!model) continue;
+
+      const records = await model.find({
+        updatedAt: { $gt: since },
+        // Add user filtering if needed
+      })
+        .sort({ updatedAt: 1 })
+        .limit(this.batchSize);
+
+      for (const record of records) {
+        changes.push({
+          modelName,
+          operation: record.deletedAt ? 'delete' : 'update',
+          id: record._id.toString(),
+          data: record.toObject(),
+          serverTimestamp: record.updatedAt.getTime(),
+        });
+      }
+    }
+    */
+
+    // Sort by timestamp for consistent ordering
+    changes.sort((a, b) => a.serverTimestamp - b.serverTimestamp);
+
+    // Implement pagination
+    const hasMore = changes.length >= this.batchSize;
+    const nextCursor = hasMore ? changes[changes.length - 1]?.serverTimestamp.toString() : undefined;
+
+    return {
+      changes: changes.slice(0, this.batchSize),
+      serverTimestamp: Date.now(),
+      hasMore,
+      nextCursor,
+    };
+  }
+
+  // ==================== PUSH SYNC ====================
+
+  /**
+   * Process changes pushed from mobile client
+   * Handles create/update/delete operations with conflict detection
+   */
+  async pushChanges(
+    userId: string,
+    records: SyncRecord[],
+  ): Promise<SyncResult[]> {
+    const results: SyncResult[] = [];
+
+    for (const record of records) {
+      // Check idempotency key first
+      if (await this.isIdempotencyKeyUsed(record.idempotencyKey)) {
+        results.push({
+          modelName: record.modelName,
+          operation: record.operation,
+          id: record.id || 'unknown',
+          status: 'success', // Already processed, return success
+          serverTimestamp: Date.now(),
+        });
+        continue;
+      }
+
+      try {
+        const result = await this.processSyncRecord(userId, record);
+        results.push(result);
+
+        // Mark idempotency key as used
+        await this.markIdempotencyKeyUsed(record.idempotencyKey);
+      } catch (error: any) {
+        results.push({
+          modelName: record.modelName,
+          operation: record.operation,
+          id: record.id || 'unknown',
+          status: 'error',
+          serverTimestamp: Date.now(),
+          errorMessage: error.message,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Process a single sync record
+   */
+  private async processSyncRecord(
+    userId: string,
+    record: SyncRecord,
+  ): Promise<SyncResult> {
+    const { modelName, operation, id, data, clientTimestamp } = record;
+
+    // TODO: Get the actual model/repository
+    // const model = this.getModelByName(modelName);
+
+    switch (operation) {
+      case 'create':
+        return this.handleCreate(userId, modelName, data!, clientTimestamp);
+      case 'update':
+        return this.handleUpdate(userId, modelName, id!, data!, clientTimestamp);
+      case 'delete':
+        return this.handleDelete(userId, modelName, id!, clientTimestamp);
+      default:
+        throw new BadRequestException(`Unknown operation: ${operation}`);
+    }
+  }
+
+  private async handleCreate(
+    userId: string,
+    modelName: string,
+    data: Record<string, any>,
+    clientTimestamp: number,
+  ): Promise<SyncResult> {
+    // TODO: Implement actual create logic
+    // Example:
+    // const record = await this.model.create({ ...data, userId });
+    
+    const newId = new Types.ObjectId().toString();
+    const serverTimestamp = Date.now();
+
+    this.logger.debug(`Created ${modelName} record ${newId} for user ${userId}`);
+
+    return {
+      modelName,
+      operation: 'create',
+      id: newId,
+      status: 'success',
+      serverTimestamp,
+    };
+  }
+
+  private async handleUpdate(
+    userId: string,
+    modelName: string,
+    id: string,
+    data: Record<string, any>,
+    clientTimestamp: number,
+  ): Promise<SyncResult> {
+    // TODO: Implement with actual model
+    // Example conflict detection:
+    /*
+    const existing = await this.model.findById(id);
+    if (!existing) {
+      throw new NotFoundException(`${modelName} not found`);
+    }
+
+    // Check for conflict
+    if (existing.updatedAt.getTime() > clientTimestamp) {
+      return this.handleConflict(modelName, id, existing, data, clientTimestamp);
+    }
+
+    // Apply update
+    const updated = await this.model.findByIdAndUpdate(id, data, { new: true });
+    */
+
+    const serverTimestamp = Date.now();
+
+    return {
+      modelName,
+      operation: 'update',
+      id,
+      status: 'success',
+      serverTimestamp,
+    };
+  }
+
+  private async handleDelete(
+    userId: string,
+    modelName: string,
+    id: string,
+    clientTimestamp: number,
+  ): Promise<SyncResult> {
+    // TODO: Implement soft delete or hard delete
+    // Soft delete is recommended for sync scenarios
+    /*
+    await this.model.findByIdAndUpdate(id, {
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    */
+
+    return {
+      modelName,
+      operation: 'delete',
+      id,
+      status: 'success',
+      serverTimestamp: Date.now(),
+    };
+  }
+
+  // ==================== CONFLICT RESOLUTION ====================
+
+  private handleConflict(
+    modelName: string,
+    id: string,
+    serverData: Record<string, any>,
+    clientData: Record<string, any>,
+    clientTimestamp: number,
+  ): SyncResult {
+    switch (this.conflictResolution) {
+      case 'server-wins':
+        // Keep server version, reject client changes
+        return {
+          modelName,
+          operation: 'update',
+          id,
+          status: 'conflict',
+          serverTimestamp: Date.now(),
+          conflictData: serverData,
+        };
+
+      case 'client-wins':
+        // Accept client changes (would apply update)
+        return {
+          modelName,
+          operation: 'update',
+          id,
+          status: 'success',
+          serverTimestamp: Date.now(),
+        };
+
+      case 'last-write-wins':
+        // Compare timestamps, newest wins
+        const serverTimestamp = serverData.updatedAt?.getTime() || 0;
+        if (clientTimestamp > serverTimestamp) {
+          // Client is newer, apply update
+          return {
+            modelName,
+            operation: 'update',
+            id,
+            status: 'success',
+            serverTimestamp: Date.now(),
+          };
+        } else {
+          // Server is newer, reject
+          return {
+            modelName,
+            operation: 'update',
+            id,
+            status: 'conflict',
+            serverTimestamp: Date.now(),
+            conflictData: serverData,
+          };
+        }
+
+      case 'manual':
+        // Return conflict for client to handle
+        return {
+          modelName,
+          operation: 'update',
+          id,
+          status: 'conflict',
+          serverTimestamp: Date.now(),
+          conflictData: serverData,
+        };
+
+      default:
+        return {
+          modelName,
+          operation: 'update',
+          id,
+          status: 'conflict',
+          serverTimestamp: Date.now(),
+          conflictData: serverData,
+        };
+    }
+  }
+
+  // ==================== IDEMPOTENCY ====================
+
+  private async isIdempotencyKeyUsed(key: string): Promise<boolean> {
+    {% if features.cache %}
+    const cached = await this.cacheManager.get(`idempotency:${key}`);
+    return !!cached;
+    {% else %}
+    // Fallback: In-memory storage (not suitable for production)
+    (global as any).__idempotency_keys = (global as any).__idempotency_keys || {};
+    const stored = (global as any).__idempotency_keys[key];
+    return stored && stored.expires > Date.now();
+    {% endif %}
+  }
+
+  private async markIdempotencyKeyUsed(key: string): Promise<void> {
+    {% if features.cache %}
+    await this.cacheManager.set(
+      `idempotency:${key}`,
+      true,
+      this.idempotencyTTL * 1000
+    );
+    {% else %}
+    (global as any).__idempotency_keys = (global as any).__idempotency_keys || {};
+    (global as any).__idempotency_keys[key] = {
+      expires: Date.now() + this.idempotencyTTL * 1000,
+    };
+    {% endif %}
+  }
+
+  // ==================== SYNC STATUS ====================
+
+  /**
+   * Get sync status for a user
+   */
+  async getSyncStatus(userId: string): Promise<{
+    lastSyncTimestamp: number;
+    pendingChanges: number;
+    serverTimestamp: number;
+  }> {
+    // TODO: Implement actual tracking
+    return {
+      lastSyncTimestamp: 0, // Track per-user last sync
+      pendingChanges: 0, // Count changes awaiting sync
+      serverTimestamp: Date.now(),
+    };
+  }
+
+  private getSyncableModels(): string[] {
+    // Return models configured for sync
+    // From config: {{ mobileConfig.offlineSync.syncModels | default([]) | tojson }}
+    const configuredModels = {{ mobileConfig.offlineSync.syncModels | default([]) | tojson }};
+    return configuredModels.length > 0 ? configuredModels : [];
+  }
+}

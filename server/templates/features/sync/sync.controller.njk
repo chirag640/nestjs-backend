@@ -1,0 +1,102 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+{% if features.swagger %}
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+{% endif %}
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { SyncService, SyncRecord, SyncResult, DeltaSyncResponse } from './sync.service';
+
+class PullChangesDto {
+  sinceTimestamp: number;
+  modelNames?: string[];
+  cursor?: string;
+}
+
+class PushChangesDto {
+  records: SyncRecord[];
+}
+
+/**
+ * Offline Sync Controller
+ * 
+ * REST API for mobile data synchronization:
+ * - POST /sync/pull - Get changes since last sync (delta sync)
+ * - POST /sync/push - Push local changes to server
+ * - GET /sync/status - Get current sync status
+ * 
+ * @requires mobileConfig.offlineSync.enabled = true
+ */
+{% if features.swagger %}
+@ApiTags('Sync')
+@ApiBearerAuth()
+{% endif %}
+@Controller('sync')
+@UseGuards(JwtAuthGuard)
+export class SyncController {
+  constructor(private readonly syncService: SyncService) {}
+
+  /**
+   * Pull changes from server (delta sync)
+   * Returns only records changed since the provided timestamp
+   */
+  @Post('pull')
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Pull changes since timestamp' })
+  @ApiResponse({ status: 200, description: 'Delta sync response' })
+  {% endif %}
+  async pullChanges(
+    @CurrentUser('id') userId: string,
+    @Body() dto: PullChangesDto,
+  ): Promise<DeltaSyncResponse> {
+    return this.syncService.pullChanges(
+      userId,
+      dto.sinceTimestamp,
+      dto.modelNames,
+      dto.cursor,
+    );
+  }
+
+  /**
+   * Push local changes to server
+   * Handles creates, updates, and deletes with conflict detection
+   */
+  @Post('push')
+  @HttpCode(HttpStatus.OK)
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Push local changes' })
+  @ApiResponse({ status: 200, description: 'Sync results per record' })
+  {% endif %}
+  async pushChanges(
+    @CurrentUser('id') userId: string,
+    @Body() dto: PushChangesDto,
+  ): Promise<{ results: SyncResult[]; serverTimestamp: number }> {
+    const results = await this.syncService.pushChanges(userId, dto.records);
+    return {
+      results,
+      serverTimestamp: Date.now(),
+    };
+  }
+
+  /**
+   * Get current sync status
+   */
+  @Get('status')
+  {% if features.swagger %}
+  @ApiOperation({ summary: 'Get sync status' })
+  @ApiResponse({ status: 200, description: 'Sync status info' })
+  {% endif %}
+  async getSyncStatus(
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.syncService.getSyncStatus(userId);
+  }
+}

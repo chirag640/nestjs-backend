@@ -371,6 +371,12 @@ export async function generateProject(
   const deployFiles = await generateDeploymentFiles(ir);
   files.push(...deployFiles);
 
+  // Generate Mobile backend files (device management, WebAuthn, sync)
+  if (ir.mobile?.enabled) {
+    const mobileFiles = await generateMobileFiles(ir);
+    files.push(...mobileFiles);
+  }
+
   return files;
 }
 
@@ -2112,5 +2118,116 @@ async function generateDeploymentFiles(ir: ProjectIR): Promise<GeneratedFile[]> 
       files.push({ path: output, content: rendered });
     } catch (error) { console.error(`Error generating ${output}:`, error); }
   }
+  return files;
+}
+
+/**
+ * Generate Mobile backend files (device management, WebAuthn biometrics, offline sync)
+ */
+async function generateMobileFiles(ir: ProjectIR): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = [];
+
+  if (!ir.mobile?.enabled) {
+    return files;
+  }
+
+  // Device Management templates (always enabled when mobile is enabled)
+  if (ir.mobile.deviceManagement?.enabled) {
+    const deviceTemplates = [
+      {
+        template: "auth/device.schema.njk",
+        output: "src/modules/auth/device.schema.ts",
+        parser: "typescript",
+      },
+      {
+        template: "auth/device.service.njk",
+        output: "src/modules/auth/device.service.ts",
+        parser: "typescript",
+      },
+      {
+        template: "auth/device.controller.njk",
+        output: "src/modules/auth/device.controller.ts",
+        parser: "typescript",
+      },
+    ];
+
+    for (const { template, output, parser } of deviceTemplates) {
+      try {
+        const rendered = renderTemplate(template, ir);
+        const content = parser ? await formatCode(rendered, parser) : rendered;
+        files.push({ path: output, content });
+      } catch (error) {
+        console.error(`Error generating device file ${output}:`, error);
+      }
+    }
+  }
+
+  // WebAuthn/Biometric templates
+  if (ir.mobile.biometricAuth?.enabled) {
+    const webauthnTemplates = [
+      {
+        template: "auth/webauthn/credential.schema.njk",
+        output: "src/modules/auth/webauthn/credential.schema.ts",
+        parser: "typescript",
+      },
+      {
+        template: "auth/webauthn/webauthn.service.njk",
+        output: "src/modules/auth/webauthn/webauthn.service.ts",
+        parser: "typescript",
+      },
+      {
+        template: "auth/webauthn/webauthn.controller.njk",
+        output: "src/modules/auth/webauthn/webauthn.controller.ts",
+        parser: "typescript",
+      },
+      {
+        template: "auth/webauthn/webauthn.module.njk",
+        output: "src/modules/auth/webauthn/webauthn.module.ts",
+        parser: "typescript",
+      },
+    ];
+
+    for (const { template, output, parser } of webauthnTemplates) {
+      try {
+        const rendered = renderTemplate(template, ir);
+        const content = parser ? await formatCode(rendered, parser) : rendered;
+        files.push({ path: output, content });
+      } catch (error) {
+        console.error(`Error generating WebAuthn file ${output}:`, error);
+      }
+    }
+  }
+
+  // Offline Sync templates
+  if (ir.mobile.offlineSync?.enabled) {
+    const syncTemplates = [
+      {
+        template: "features/sync/sync.service.njk",
+        output: "src/modules/sync/sync.service.ts",
+        parser: "typescript",
+      },
+      {
+        template: "features/sync/sync.controller.njk",
+        output: "src/modules/sync/sync.controller.ts",
+        parser: "typescript",
+      },
+      {
+        template: "features/sync/sync.module.njk",
+        output: "src/modules/sync/sync.module.ts",
+        parser: "typescript",
+      },
+    ];
+
+    for (const { template, output, parser } of syncTemplates) {
+      try {
+        const rendered = renderTemplate(template, ir);
+        const content = parser ? await formatCode(rendered, parser) : rendered;
+        files.push({ path: output, content });
+      } catch (error) {
+        console.error(`Error generating sync file ${output}:`, error);
+      }
+    }
+  }
+
   return files;
 }

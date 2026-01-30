@@ -1,0 +1,147 @@
+{
+  "projectSetup": {
+    "projectName": "mobile-backend-demo",
+    "description": "Mobile-first backend with biometric auth, device management, and offline sync",
+    "author": "FoundationWizard",
+    "license": "MIT",
+    "nodeVersion": "20",
+    "packageManager": "npm"
+  },
+
+  "databaseConfig": {
+    "databaseType": "MongoDB",
+    "provider": "Atlas",
+    "connectionString": "mongodb+srv://user:password@cluster.mongodb.net/mobile-backend",
+    "autoMigration": "push"
+  },
+
+  "modelDefinition": {
+    "models": [
+      {
+        "name": "User",
+        "timestamps": true,
+        "fields": [
+          { "name": "email", "type": "string", "required": true, "unique": true, "indexed": true },
+          { "name": "username", "type": "string", "required": true, "unique": true },
+          { "name": "firstName", "type": "string", "required": true },
+          { "name": "lastName", "type": "string", "required": true },
+          { "name": "avatar", "type": "string", "required": false },
+          { "name": "roles", "type": "string[]", "default": "['User']" },
+          { "name": "isVerified", "type": "boolean", "default": false }
+        ]
+      },
+      {
+        "name": "Note",
+        "timestamps": true,
+        "fields": [
+          { "name": "title", "type": "string", "required": true },
+          { "name": "content", "type": "string", "required": true },
+          { "name": "color", "type": "string", "default": "#ffffff" },
+          { "name": "isPinned", "type": "boolean", "default": false },
+          { "name": "tags", "type": "string[]" }
+        ]
+      }
+    ],
+    "relationships": [
+      { "type": "one-to-many", "sourceModel": "User", "targetModel": "Note", "fieldName": "author", "inverseFieldName": "notes" }
+    ]
+  },
+
+  "authConfig": {
+    "enabled": true,
+    "method": "jwt",
+    "jwt": {
+      "accessTTL": "15m",
+      "refreshTTL": "30d",
+      "rotation": true,
+      "blacklist": true
+    },
+    "roles": ["User", "Admin"]
+  },
+
+  "featureSelection": {
+    "cors": true,
+    "helmet": true,
+    "compression": true,
+    "validation": true,
+    "logging": true,
+    "caching": true,
+    "swagger": true,
+    "health": true,
+    "rateLimit": true,
+    "versioning": false,
+    "queues": false,
+    "s3Upload": false,
+    "encryptionStrategy": "disabled",
+    "fieldLevelAccessControl": false,
+    "gitHooks": true,
+    "sonarQube": false,
+    "pushNotifications": true
+  },
+
+  "mobileConfig": {
+    "enabled": true,
+    "clientTypes": ["both"],
+    "disableCsrfForBearerAuth": true,
+    
+    "biometricAuth": {
+      "enabled": true,
+      "rpId": "example.com",
+      "rpName": "Mobile Backend Demo",
+      "allowedAuthenticators": ["platform"],
+      "userVerification": "required",
+      "attestation": "none",
+      "residentKey": "preferred",
+      "timeout": 60000
+    },
+    
+    "deviceManagement": {
+      "enabled": true,
+      "maxDevicesPerUser": 5,
+      "trackDeviceInfo": true,
+      "autoRevokeInactiveDays": 90,
+      "requireDeviceApproval": false
+    },
+    
+    "offlineSync": {
+      "enabled": true,
+      "conflictResolution": "last-write-wins",
+      "deltaSync": true,
+      "batchSize": 100,
+      "syncModels": ["Note"],
+      "idempotencyKeyTTL": 86400
+    }
+  },
+
+  "dockerConfig": {
+    "enabled": true,
+    "includeCompose": true,
+    "includeProd": true,
+    "healthCheck": true,
+    "nonRootUser": true,
+    "multiStage": true
+  },
+
+  "cicdConfig": {
+    "enabled": true,
+    "githubActions": true,
+    "gitlabCI": false,
+    "includeTests": true,
+    "includeE2E": true,
+    "includeSecurity": true,
+    "autoDockerBuild": true
+  },
+
+  "// REQUIRED_ENV_VARIABLES": {
+    "DATABASE_URL": "mongodb+srv://user:pass@cluster.mongodb.net/mobile-backend",
+    "JWT_SECRET": "your-256-bit-secret",
+    "JWT_REFRESH_SECRET": "your-refresh-secret",
+    "REDIS_URL": "redis://localhost:6379",
+    "WEBAUTHN_RP_ID": "example.com",
+    "WEBAUTHN_RP_NAME": "Mobile Backend Demo",
+    "WEBAUTHN_ORIGIN": "https://example.com",
+    "FIREBASE_PROJECT_ID": "your-firebase-project",
+    "FIREBASE_CLIENT_EMAIL": "firebase-adminsdk@project.iam.gserviceaccount.com",
+    "FIREBASE_PRIVATE_KEY": "-----BEGIN PRIVATE KEY-----..."
+  }
+}

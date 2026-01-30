@@ -1,0 +1,35 @@
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+{% if features.cache %}
+import { CacheModule } from '@nestjs/cache-manager';
+{% endif %}
+import { WebAuthnController } from './webauthn.controller';
+import { WebAuthnService } from './webauthn.service';
+import { WebAuthnCredential, WebAuthnCredentialSchema } from './credential.schema';
+import { AuthModule } from '../auth.module';
+
+/**
+ * WebAuthn Module
+ * 
+ * Provides FIDO2/WebAuthn biometric authentication:
+ * - Passkey registration and authentication
+ * - Credential management
+ * 
+ * @requires mobileConfig.biometricAuth.enabled = true
+ * @requires npm package: @simplewebauthn/server
+ */
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: WebAuthnCredential.name, schema: WebAuthnCredentialSchema },
+    ]),
+    {% if features.cache %}
+    CacheModule.register(),
+    {% endif %}
+    AuthModule, // For AuthService access
+  ],
+  controllers: [WebAuthnController],
+  providers: [WebAuthnService],
+  exports: [WebAuthnService],
+})
+export class WebAuthnModule {}

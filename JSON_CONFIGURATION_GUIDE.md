@@ -19,7 +19,8 @@ This guide provides **every single detail** needed to create a JSON configuratio
 7. [Feature Selection](#6-feature-selection)
 8. [Docker Configuration](#7-docker-configuration)
 9. [CI/CD Configuration](#8-cicd-configuration)
-10. [Complete Examples](#complete-examples)
+10. [Mobile Configuration](#9-mobile-configuration)
+11. [Complete Examples](#complete-examples)
 
 ---
 
@@ -50,6 +51,9 @@ This guide provides **every single detail** needed to create a JSON configuratio
   },
   "cicdConfig": {
     /* Section 8 - Optional */
+  },
+  "mobileConfig": {
+    /* Section 9 - Optional (Mobile Features) */
   }
 }
 ```
@@ -750,6 +754,165 @@ Examples: `"15m"`, `"1h"`, `"7d"`, `"30d"`
     "autoDockerBuild": true
   }
 }
+```
+
+---
+
+## 9. Mobile Configuration
+
+**Purpose**: Configure mobile-specific features for backend APIs serving mobile applications (Flutter, React Native, etc.).
+
+> **📱 Note**: This section enables powerful mobile features like biometric authentication, device management, and offline sync. See [MOBILE_INTEGRATION_GUIDE.md](./MOBILE_INTEGRATION_GUIDE.md) for client-side implementation examples.
+
+```json
+{
+  "mobileConfig": {
+    "enabled": boolean,
+    "clientTypes": ["web" | "mobile" | "both"],
+    "disableCsrfForBearerAuth": boolean,
+    "biometricAuth": { /* See below */ },
+    "deviceManagement": { /* See below */ },
+    "offlineSync": { /* See below */ }
+  }
+}
+```
+
+### Main Fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | ❌ No | `false` | Enable mobile features |
+| `clientTypes` | array | ❌ No | `["both"]` | Target client types: `"web"`, `"mobile"`, `"both"` |
+| `disableCsrfForBearerAuth` | boolean | ❌ No | `true` | Disable CSRF for JWT Bearer auth (recommended for mobile) |
+
+### 9.1 Biometric Authentication (WebAuthn/Passkeys)
+
+Configure FIDO2/WebAuthn for passwordless biometric login.
+
+```json
+{
+  "biometricAuth": {
+    "enabled": true,
+    "rpId": "example.com",
+    "rpName": "My App",
+    "allowedAuthenticators": ["platform"],
+    "userVerification": "required",
+    "attestation": "none",
+    "residentKey": "preferred",
+    "timeout": 60000
+  }
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | ❌ No | `false` | Enable WebAuthn/biometric auth |
+| `rpId` | string | ❌ No | - | Relying Party ID (your domain without protocol) |
+| `rpName` | string | ❌ No | projectName | Human-readable app name |
+| `allowedAuthenticators` | array | ❌ No | `["platform"]` | `"platform"` (device biometrics) or `"cross-platform"` (security keys) |
+| `userVerification` | string | ❌ No | `"required"` | `"required"`, `"preferred"`, or `"discouraged"` |
+| `attestation` | string | ❌ No | `"none"` | `"none"` (privacy-friendly), `"indirect"`, or `"direct"` |
+| `residentKey` | string | ❌ No | `"preferred"` | For usernameless login: `"required"`, `"preferred"`, `"discouraged"` |
+| `timeout` | number | ❌ No | `60000` | Challenge timeout in milliseconds |
+
+### 9.2 Device Management
+
+Configure multi-device session tracking and management.
+
+```json
+{
+  "deviceManagement": {
+    "enabled": true,
+    "maxDevicesPerUser": 5,
+    "trackDeviceInfo": true,
+    "autoRevokeInactiveDays": 90,
+    "requireDeviceApproval": false
+  }
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | ❌ No | `true` | Enable device tracking |
+| `maxDevicesPerUser` | number | ❌ No | `5` | Max concurrent devices per user (1-50) |
+| `trackDeviceInfo` | boolean | ❌ No | `true` | Track OS, app version, IP address |
+| `autoRevokeInactiveDays` | number | ❌ No | `90` | Auto-revoke after N days inactive (0 = never) |
+| `requireDeviceApproval` | boolean | ❌ No | `false` | Require user approval for new devices |
+
+### 9.3 Offline Sync
+
+Configure delta sync and conflict resolution for offline-first mobile apps.
+
+```json
+{
+  "offlineSync": {
+    "enabled": true,
+    "conflictResolution": "last-write-wins",
+    "deltaSync": true,
+    "batchSize": 100,
+    "syncModels": ["Note", "Task"],
+    "idempotencyKeyTTL": 86400
+  }
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | ❌ No | `false` | Enable offline sync endpoints |
+| `conflictResolution` | string | ❌ No | `"last-write-wins"` | Strategy: `"server-wins"`, `"client-wins"`, `"last-write-wins"`, `"manual"` |
+| `deltaSync` | boolean | ❌ No | `true` | Only sync changes since last sync |
+| `batchSize` | number | ❌ No | `100` | Max items per sync batch (10-1000) |
+| `syncModels` | array | ❌ No | `[]` | Model names to sync (empty = all) |
+| `idempotencyKeyTTL` | number | ❌ No | `86400` | Idempotency key TTL in seconds (24h default) |
+
+### Complete Mobile Config Example
+
+```json
+{
+  "mobileConfig": {
+    "enabled": true,
+    "clientTypes": ["both"],
+    "disableCsrfForBearerAuth": true,
+    "biometricAuth": {
+      "enabled": true,
+      "rpId": "example.com",
+      "rpName": "My Mobile App",
+      "allowedAuthenticators": ["platform"],
+      "userVerification": "required"
+    },
+    "deviceManagement": {
+      "enabled": true,
+      "maxDevicesPerUser": 5,
+      "trackDeviceInfo": true,
+      "autoRevokeInactiveDays": 90
+    },
+    "offlineSync": {
+      "enabled": true,
+      "conflictResolution": "last-write-wins",
+      "deltaSync": true,
+      "syncModels": ["Note", "Task"]
+    }
+  }
+}
+```
+
+### Required Environment Variables
+
+When mobile features are enabled, add these to your `.env`:
+
+```env
+# Biometric Auth (if enabled)
+WEBAUTHN_RP_ID=example.com
+WEBAUTHN_RP_NAME=My App
+WEBAUTHN_ORIGIN=https://example.com
+
+# Push Notifications (for device management)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
+
+# Caching (recommended for sync)
+REDIS_URL=redis://localhost:6379
 ```
 
 ---
