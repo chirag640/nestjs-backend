@@ -13,14 +13,14 @@ const env = nunjucks.configure(templatesPath, {
   throwOnUndefined: true,
   trimBlocks: true,
   lstripBlocks: true,
-  noCache: true, // Disable template caching for development
+  noCache: process.env.NODE_ENV === "development", // Enable caching in production
 });
 
 // Add custom filters
 env.addFilter("lower", (str: any) => String(str ?? "").toLowerCase());
 env.addFilter("upper", (str: any) => String(str ?? "").toUpperCase());
 env.addFilter("replace", (str: string, search: string, replace: string) =>
-  str.replace(new RegExp(search, "g"), replace)
+  str.replace(new RegExp(search, "g"), replace),
 );
 
 // Provide a default filter to avoid throwing on undefined values in templates
@@ -47,7 +47,7 @@ export interface TemplateContext {
  */
 export function renderTemplate(
   templatePath: string,
-  context: TemplateContext | Record<string, any>
+  context: TemplateContext | Record<string, any>,
 ): string {
   try {
     // Provide backward-compatible flat aliases for templates that still use them
@@ -94,7 +94,7 @@ export function renderTemplate(
  */
 export function renderString(
   template: string,
-  context: TemplateContext | Record<string, any>
+  context: TemplateContext | Record<string, any>,
 ): string {
   try {
     return nunjucks.renderString(template, context);

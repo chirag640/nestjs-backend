@@ -39,7 +39,28 @@ export class ValidationService {
   private templatesPath: string;
 
   constructor() {
-    this.templatesPath = join(__dirname, "..", "templates");
+    // Resolve templates path relative to this file's location
+    // Handles both tsx (ESM) runtime and compiled dist/ output
+    const fromImportMeta = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "templates",
+    );
+    const fromCwd = join(process.cwd(), "server", "templates");
+
+    if (existsSync(fromImportMeta)) {
+      this.templatesPath = fromImportMeta;
+    } else if (existsSync(fromCwd)) {
+      this.templatesPath = fromCwd;
+      console.log(
+        `[ValidationService] Using CWD-based templates path: ${fromCwd}`,
+      );
+    } else {
+      this.templatesPath = fromImportMeta; // fallback, will show proper errors
+      console.warn(
+        `[ValidationService] Templates directory not found at: ${fromImportMeta} or ${fromCwd}`,
+      );
+    }
   }
 
   /**
@@ -154,8 +175,8 @@ export class ValidationService {
 
       if (config.authConfig.method === "jwt") {
         templates.push(
-          "auth/jwt/jwt.strategy.njk",
-          "auth/jwt/jwt-auth.guard.njk",
+          "auth/strategies/jwt.strategy.njk",
+          "auth/guards/jwt-auth.guard.njk",
         );
       }
     }

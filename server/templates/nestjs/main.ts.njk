@@ -42,8 +42,10 @@ async function bootstrap() {
 
   {% if features.versioning %}
   // Enable URI-based API versioning (e.g., /v1/users, /v2/users)
+  // defaultVersion ensures all routes respond to /v1/ without needing @Version() decorator
   app.enableVersioning({
     type: VersioningType.URI,
+    defaultVersion: '1',
   });
   {% endif %}
 
@@ -119,19 +121,22 @@ async function bootstrap() {
   // Register response validation interceptor to ensure API responses match DTOs
   // Enable strict mode with: STRICT_RESPONSE_VALIDATION=true (fails on extra fields)
   // Adjust slow route threshold with: SLOW_ROUTE_THRESHOLD=1000 (default: 500ms)
+  {% if features.responseValidation %}
   const { ResponseValidationInterceptor } = await import('./common/response-validation.interceptor');
-  const { Reflector } = await import('@nestjs/core');
   app.useGlobalInterceptors(new ResponseValidationInterceptor(app.get(Reflector)));
+  {% endif %}
 
   // Register deprecated endpoint interceptor for API lifecycle management
   // Use @DeprecatedEndpoint() decorator to mark old endpoints
+  {% if features.deprecationWarnings %}
   const { DeprecatedInterceptor } = await import('./common/deprecated.interceptor');
   app.useGlobalInterceptors(new DeprecatedInterceptor(app.get(Reflector)));
+  {% endif %}
 
   // Register metrics interceptor for Prometheus monitoring
   // Metrics available at /metrics (Prometheus format) and /metrics/json (debugging)
-  const { MetricsInterceptor } = await import('./common/metrics.interceptor');
-  const { MetricsService } = await import('./features/metrics/metrics.service');
+  const { MetricsInterceptor } = await import('./health/metrics.interceptor');
+  const { MetricsService } = await import('./health/metrics.service');
   app.useGlobalInterceptors(new MetricsInterceptor(app.get(MetricsService)));
 
   {% if features.fieldLevelAccessControl %}

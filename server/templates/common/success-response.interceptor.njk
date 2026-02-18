@@ -71,10 +71,11 @@ export class SuccessResponseInterceptor<T>
         const statusCode = response.statusCode;
 
         // Handle pagination metadata if present
+        // PaginatedResponse uses 'data' key (matches createPaginatedResponse shape)
         let pagination;
-        if (data && typeof data === 'object' && 'items' in data && 'meta' in data) {
+        if (data && typeof data === 'object' && 'data' in data && 'meta' in data && Array.isArray((data as any).data)) {
           pagination = (data as any).meta;
-          data = (data as any).items;
+          data = (data as any).data;
         }
 
         return {

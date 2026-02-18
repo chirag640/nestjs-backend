@@ -1,0 +1,15 @@
+import { Module, Global } from '@nestjs/common';
+import { MetricsService } from './metrics.service';
+import { MetricsInterceptor } from './metrics.interceptor';
+
+/**
+ * MetricsModule — provides Prometheus-compatible metrics collection.
+ * Exposes MetricsService and MetricsInterceptor globally so they can be
+ * injected in main.ts via app.get(MetricsService) without module imports.
+ */
+@Global()
+@Module({
+  providers: [MetricsService, MetricsInterceptor],
+  exports: [MetricsService, MetricsInterceptor],
+})
+export class MetricsModule {}

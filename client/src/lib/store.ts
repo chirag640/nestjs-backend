@@ -32,6 +32,19 @@ interface WizardStore {
   setFeatureSelection: (data: WizardConfig["featureSelection"]) => void;
   setDockerConfig: (data: WizardConfig["dockerConfig"]) => void;
   setCICDConfig: (data: WizardConfig["cicdConfig"]) => void;
+  // Phase 4+ config setters
+  setMobileConfig: (data: WizardConfig["mobileConfig"]) => void;
+  setRealtimeConfig: (data: WizardConfig["realtimeConfig"]) => void;
+  setWebhookConfig: (data: WizardConfig["webhookConfig"]) => void;
+  setGraphqlConfig: (data: WizardConfig["graphqlConfig"]) => void;
+  setMultitenancyConfig: (data: WizardConfig["multitenancyConfig"]) => void;
+  setPaymentConfig: (data: WizardConfig["paymentConfig"]) => void;
+  setAnalyticsConfig: (data: WizardConfig["analyticsConfig"]) => void;
+  setFeatureFlagsConfig: (data: WizardConfig["featureFlagsConfig"]) => void;
+  setNotificationsConfig: (data: WizardConfig["notificationsConfig"]) => void;
+  setAiConfig: (data: WizardConfig["aiConfig"]) => void;
+  setReportsConfig: (data: WizardConfig["reportsConfig"]) => void;
+  setI18nConfig: (data: WizardConfig["i18nConfig"]) => void;
   resetWizard: () => void;
   isStepValid: (step: number) => boolean;
 }
@@ -278,6 +291,79 @@ export const useWizardStore = create<WizardStore>()(
       setCICDConfig: (data) => {
         set((state) => ({
           config: { ...state.config, cicdConfig: data },
+        }));
+      },
+
+      // Phase 4+ config setters
+      setMobileConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, mobileConfig: data },
+        }));
+      },
+
+      setRealtimeConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, realtimeConfig: data },
+        }));
+      },
+
+      setWebhookConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, webhookConfig: data },
+        }));
+      },
+
+      setGraphqlConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, graphqlConfig: data },
+        }));
+      },
+
+      setMultitenancyConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, multitenancyConfig: data },
+        }));
+      },
+
+      setPaymentConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, paymentConfig: data },
+        }));
+      },
+
+      setAnalyticsConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, analyticsConfig: data },
+        }));
+      },
+
+      setFeatureFlagsConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, featureFlagsConfig: data },
+        }));
+      },
+
+      setNotificationsConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, notificationsConfig: data },
+        }));
+      },
+
+      setAiConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, aiConfig: data },
+        }));
+      },
+
+      setReportsConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, reportsConfig: data },
+        }));
+      },
+
+      setI18nConfig: (data) => {
+        set((state) => ({
+          config: { ...state.config, i18nConfig: data },
         }));
       },
 

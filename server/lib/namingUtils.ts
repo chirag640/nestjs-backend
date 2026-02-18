@@ -273,7 +273,7 @@ export function getValidatorDecorator(field: {
           decorators.push(`Matches(/${field.pattern}/)`);
         } catch (error) {
           console.warn(
-            `Invalid regex pattern "${field.pattern}", skipping Matches decorator`
+            `Invalid regex pattern "${field.pattern}", skipping Matches decorator`,
           );
         }
       }
@@ -293,10 +293,12 @@ export function getValidatorDecorator(field: {
       decorators.push("IsBoolean()");
       break;
     case "date":
-      decorators.push("IsISO8601({ strict: false })"); // Accept multiple date formats
+      // @Type(() => Date) in DTO converts to Date object first, so use @IsDate()
+      decorators.push("IsDate()");
       break;
     case "datetime":
-      decorators.push("IsISO8601({ strict: false })"); // Accept multiple date formats
+      // @Type(() => Date) in DTO converts to Date object first, so use @IsDate()
+      decorators.push("IsDate()");
       break;
     case "string[]":
       decorators.push("IsArray()");

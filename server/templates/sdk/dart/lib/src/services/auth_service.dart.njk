@@ -43,9 +43,7 @@ class AuthService {
   /// 
   /// Returns [AuthResult] with access token, refresh token, and user data.
   /// 
-  /// Throws [ApiError] with code:
-  /// - `AUTH_1001`: Invalid credentials
-  /// - `AUTH_1008`: Account locked (too many attempts)
+  /// Throws [ApiError] with server-provided code (e.g. AUTH_1001, AUTH_1008)
   Future<AuthResult> login(String email, String password) async {
     final response = await _client.post(
       '/auth/login',
@@ -61,7 +59,8 @@ class AuthService {
       return response.data!;
     }
     
-    throw ApiError(
+    // Re-throw the server error with its original code so callers can distinguish
+    throw response.error ?? ApiError(
       code: 'AUTH_1001',
       message: 'Login failed',
       statusCode: 401,
@@ -72,22 +71,18 @@ class AuthService {
   /// 
   /// Returns [AuthResult] with tokens and user data.
   /// 
-  /// Throws [ApiError] with code:
-  /// - `VAL_4001`: Validation failed
-  /// - `USER_2002`: Email already exists
+  /// Throws [ApiError] with server-provided code (e.g. VAL_4001, USER_2002)
   Future<AuthResult> register({
     required String email,
     required String password,
-    required String firstName,
-    required String lastName,
+    required String name,
   }) async {
     final response = await _client.post(
       '/auth/register',
       data: {
         'email': email,
         'password': password,
-        'firstName': firstName,
-        'lastName': lastName,
+        'name': name,
       },
       fromJson: (data) => AuthResult.fromJson(data),
     );
@@ -100,7 +95,8 @@ class AuthService {
       return response.data!;
     }
     
-    throw ApiError(
+    // Re-throw the server error with its original code
+    throw response.error ?? ApiError(
       code: 'AUTH_ERROR',
       message: 'Registration failed',
       statusCode: 400,
@@ -110,10 +106,6 @@ class AuthService {
   /// Get current user's profile
   /// 
   /// Requires authentication.
-  /// 
-  /// Throws [ApiError] with code:
-  /// - `AUTH_1002`: Token expired (auto-refresh will be attempted)
-  /// - `AUTH_1004`: Not authenticated
   Future<User> getProfile() async {
     final response = await _client.get(
       '/auth/profile',
@@ -124,7 +116,7 @@ class AuthService {
       return response.data!;
     }
     
-    throw ApiError(
+    throw response.error ?? ApiError(
       code: 'USER_2001',
       message: 'Failed to get profile',
       statusCode: 404,

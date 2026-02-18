@@ -34,8 +34,8 @@ import { ErrorResponseDto } from '../../common/error-response.dto';
 {% if auth and auth.enabled %}
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 {% if auth.rbac and auth.rbac.enabled %}
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/rbac/roles.guard';
+import { Roles } from '../auth/rbac/roles.decorator';
 {% endif %}
 {% endif %}
 

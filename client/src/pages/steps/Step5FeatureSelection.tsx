@@ -19,6 +19,16 @@ import {
   GitBranch,
   ListTodo,
   CloudUpload,
+  // Phase 4 Enterprise icons
+  Wifi,
+  CreditCard,
+  BarChart3,
+  Bell,
+  Brain,
+  FileSpreadsheet,
+  Languages,
+  Share2,
+  Users,
 } from "lucide-react";
 
 const BASIC_FEATURES = [
@@ -147,6 +157,89 @@ const PRODUCTION_FEATURES = [
   },
 ];
 
+// Phase 4 Enterprise Features
+const ENTERPRISE_FEATURES = [
+  {
+    key: "realtime" as const,
+    icon: Wifi,
+    title: "Real-time WebSockets",
+    description: "Socket.io gateway with JWT auth, rooms, presence tracking, and Redis scaling",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "graphql" as const,
+    icon: Share2,
+    title: "GraphQL API",
+    description: "Apollo Server with auto-generated types, subscriptions, and complexity analysis",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "payments" as const,
+    icon: CreditCard,
+    title: "Payment Integration",
+    description: "Stripe and Razorpay support with subscriptions, invoicing, and webhooks",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "multitenancy" as const,
+    icon: Users,
+    title: "Multi-Tenancy",
+    description: "Tenant isolation via headers, subdomains, or JWT with separate databases/schemas",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "analytics" as const,
+    icon: BarChart3,
+    title: "API Analytics",
+    description: "Prometheus metrics for HTTP requests, latency, errors, and business KPIs",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "featureFlags" as const,
+    icon: GitBranch,
+    title: "Feature Flags",
+    description: "A/B testing with percentage rollout, user targeting, and variant tracking",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "notifications" as const,
+    icon: Bell,
+    title: "Multi-Channel Notifications",
+    description: "Email, SMS (Twilio), Push (FCM), and In-App notifications with templates",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "ai" as const,
+    icon: Brain,
+    title: "AI/ML Integration",
+    description: "OpenAI and Anthropic with embeddings, summarization, moderation, and recommendations",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "reports" as const,
+    icon: FileSpreadsheet,
+    title: "Report Generation",
+    description: "PDF, Excel, CSV export with scheduling and email delivery",
+    recommended: false,
+    badge: "Enterprise",
+  },
+  {
+    key: "i18n" as const,
+    icon: Languages,
+    title: "Internationalization",
+    description: "Multi-language support with date/number/currency formatting and RTL",
+    recommended: false,
+    badge: "Enterprise",
+  },
+];
 const ENCRYPTION_STRATEGIES = [
   {
     value: "disabled" as const,
@@ -198,7 +291,8 @@ export default function Step5FeatureSelection() {
   const totalFeatures =
     BASIC_FEATURES.length +
     ADVANCED_FEATURES.length +
-    PRODUCTION_FEATURES.length;
+    PRODUCTION_FEATURES.length +
+    ENTERPRISE_FEATURES.length;
   const enabledCount = Object.values(features).filter(Boolean).length;
 
   return (
@@ -396,6 +490,70 @@ export default function Step5FeatureSelection() {
                     checked={isEnabled}
                     onCheckedChange={(checked) =>
                       updateFeature(feature.key, checked)
+                    }
+                    data-testid={`toggle-${feature.key}`}
+                  />
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Enterprise Features Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-4 h-4 text-purple-500" />
+            <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+              🚀 Enterprise Features
+            </h3>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-100 font-medium">
+              Phase 4
+            </span>
+          </div>
+          {ENTERPRISE_FEATURES.map((feature) => {
+            const Icon = feature.icon;
+            const isEnabled = (features as any)[feature.key];
+
+            return (
+              <Card
+                key={feature.key}
+                className={`p-5 transition-all duration-200 ${
+                  isEnabled ? "border-purple-500/30 bg-purple-500/5" : "border-border"
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      isEnabled
+                        ? "bg-purple-500/20 border border-purple-500/30"
+                        : "bg-secondary/50"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-5 h-5 ${
+                        isEnabled ? "text-purple-500" : "text-muted-foreground"
+                      }`}
+                    />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-base">
+                        {feature.title}
+                      </h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-100 font-medium">
+                        {feature.badge}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {feature.description}
+                    </p>
+                  </div>
+
+                  <Switch
+                    checked={isEnabled}
+                    onCheckedChange={(checked) =>
+                      updateFeatureSelection({ [feature.key]: checked } as any)
                     }
                     data-testid={`toggle-${feature.key}`}
                   />

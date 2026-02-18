@@ -36,7 +36,7 @@ export class {{ model.name }}Repository extends BaseRepository<{{ model.name }}D
 
   async update(id: string, data: Partial<{{ model.name }}>): Promise<{{ model.name }} | null> {
     return this.{{ model.nameCamel }}Model
-      .findByIdAndUpdate(id, data, { new: true })
+      .findByIdAndUpdate(id, { $set: data }, { new: true })
       .lean()
       .exec() as Promise<{{ model.name }} | null>;
   }

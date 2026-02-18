@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { geminiCache } from "./geminiCache.js";
 
 interface FieldValidationRules {
   minLength?: number;
@@ -37,7 +38,7 @@ export class GeminiService {
       console.log("✅ Gemini AI enabled for intelligent generation");
     } else {
       console.log(
-        "ℹ️  Gemini AI disabled (no API key). Using fallback smart defaults."
+        "ℹ️  Gemini AI disabled (no API key). Using fallback smart defaults.",
       );
     }
   }
@@ -49,14 +50,41 @@ export class GeminiService {
     fieldName: string,
     fieldType: string,
     modelName: string,
-    modelDescription?: string
+    modelDescription?: string,
   ): Promise<ValidationResult> {
     // Fallback to smart defaults if Gemini is disabled
     if (!this.enabled) {
       return this.getFallbackValidation(fieldName, fieldType);
     }
 
+    // Use cache to avoid redundant API calls
+    return geminiCache.wrap(
+      fieldName,
+      fieldType,
+      async () =>
+        this._generateFieldValidationInternal(
+          fieldName,
+          fieldType,
+          modelName,
+          modelDescription,
+        ),
+      modelName,
+    );
+  }
+
+  /**
+   * Internal method that actually calls Gemini API (used by cache)
+   */
+  private async _generateFieldValidationInternal(
+    fieldName: string,
+    fieldType: string,
+    modelName: string,
+    modelDescription?: string,
+  ): Promise<ValidationResult> {
     try {
+      console.log(
+        `🤖 Calling Gemini API for field: ${fieldName} (${fieldType})`,
+      );
       const prompt = `You are an API validation expert. Generate validation rules and an example for this field:
 
 Field Name: ${fieldName}
@@ -117,7 +145,7 @@ Rules:
       };
     } catch (error) {
       console.warn(
-        `⚠️  Gemini API error for field '${fieldName}': ${error}. Using fallback.`
+        `⚠️  Gemini API error for field '${fieldName}': ${error}. Using fallback.`,
       );
       return this.getFallbackValidation(fieldName, fieldType);
     }
@@ -129,14 +157,14 @@ Rules:
   async generateBatchValidations(
     fields: Array<{ name: string; type: string }>,
     modelName: string,
-    modelDescription?: string
+    modelDescription?: string,
   ): Promise<Map<string, ValidationResult>> {
     if (!this.enabled || fields.length === 0) {
       const results = new Map<string, ValidationResult>();
       fields.forEach((field) => {
         results.set(
           field.name,
-          this.getFallbackValidation(field.name, field.type)
+          this.getFallbackValidation(field.name, field.type),
         );
       });
       return results;
@@ -184,7 +212,7 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
         } else {
           results.set(
             field.name,
-            this.getFallbackValidation(field.name, field.type)
+            this.getFallbackValidation(field.name, field.type),
           );
         }
       }
@@ -195,7 +223,7 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
       fields.forEach((field) => {
         results.set(
           field.name,
-          this.getFallbackValidation(field.name, field.type)
+          this.getFallbackValidation(field.name, field.type),
         );
       });
       return results;
@@ -207,7 +235,7 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
    */
   private getFallbackValidation(
     fieldName: string,
-    fieldType: string
+    fieldType: string,
   ): ValidationResult {
     const lowerName = fieldName.toLowerCase();
     const rules: FieldValidationRules = {};
@@ -404,6 +432,15 @@ Rules: Same as before - realistic validation and examples for production APIs.`;
    */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Log cache statistics (useful for debugging and monitoring)
+   */
+  logCacheStats(): void {
+    if (this.enabled) {
+      geminiCache.logStats();
+    }
   }
 }
 

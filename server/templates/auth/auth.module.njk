@@ -14,6 +14,10 @@ import { EmailVerificationService } from './email-verification.service';
 import { EmailVerificationController } from './email-verification.controller';
 import { EmailVerifiedGuard } from './guards/email-verified.guard';
 import { EmailModule } from '../../email/email.module';
+{% if auth.jwt and auth.jwt.refreshToken %}
+import { RefreshToken, RefreshTokenSchema } from './refresh-token.schema';
+import { RefreshTokenService } from './refresh-token.service';
+{% endif %}
 {% if oauth and oauth.enabled %}
 // OAuth imports
 {% for provider in oauth.providers %}
@@ -45,7 +49,12 @@ import { OAuthController } from './oauth/oauth.controller';
         };
       },
     }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+{% if auth.jwt and auth.jwt.refreshToken %}
+      { name: RefreshToken.name, schema: RefreshTokenSchema },
+{% endif %}
+    ]),
   ],
   controllers: [
     AuthController,
@@ -62,12 +71,15 @@ import { OAuthController } from './oauth/oauth.controller';
     EmailVerifiedGuard,
     JwtStrategy,
     UserRepository,
+{% if auth.jwt and auth.jwt.refreshToken %}
+    RefreshTokenService,
+{% endif %}
 {% if oauth and oauth.enabled %}
 {% for provider in oauth.providers %}
     {{ provider.strategyName }},
 {% endfor %}
 {% endif %}
   ],
-  exports: [AuthService, JwtStrategy, PassportModule, EmailVerifiedGuard],
+  exports: [AuthService, JwtStrategy, PassportModule, EmailVerifiedGuard{% if auth.jwt and auth.jwt.refreshToken %}, RefreshTokenService{% endif %}],
 })
 export class AuthModule {}

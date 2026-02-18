@@ -30,10 +30,16 @@ import { CleanupProducer } from './producers/cleanup.producer';
 
 // Queue Configuration
 import { QueueConfigService } from './queue.config';
+{% if auth and auth.enabled %}
+import { EmailModule } from '../email/email.module';
+{% endif %}
 
 @Global()
 @Module({
   imports: [
+    {% if auth and auth.enabled %}
+    EmailModule, // Required by NotificationProcessor to send email notifications
+    {% endif %}
     // BullMQ Core Configuration
     BullModule.forRootAsync({
       imports: [ConfigModule],

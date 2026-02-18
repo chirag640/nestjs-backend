@@ -8,8 +8,15 @@ export class {{ model.outputDtoName }} {
   id!: string;
 
 {% for field in model.fields %}
-  {# Exclude sensitive fields from output DTOs #}
-  {% if field.name !== 'password' and field.name !== 'refreshToken' and field.name !== 'passwordResetToken' and field.name !== 'emailVerificationToken' %}
+  {# Exclude sensitive/internal fields from output DTOs - never expose these to API callers #}
+  {% if field.name !== 'password' 
+     and field.name !== 'passwordResetToken'
+     and field.name !== 'emailVerificationToken'
+     and field.name !== 'pinHash'
+     and field.name !== 'verificationToken'
+     and field.name !== 'passwordResetExpires'
+     and field.sensitive !== true
+     and not (field.name === 'refreshToken' and model.name === 'User') %}
   {% if field.apiExample %}
   @ApiProperty({
     description: '{{ field.apiDescription | default(field.name) }}',

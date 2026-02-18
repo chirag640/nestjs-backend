@@ -3,13 +3,13 @@ import { WizardLayout } from "@/components/wizard/WizardLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Edit2, Copy, Download, Loader2, AlertCircle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useToast } from "@/hooks/use-toast";
+import { useValidation } from "@/hooks/use-validation";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { projectSetupSchema, databaseConfigSchema } from "@shared/schema";
 
 export default function Step6Review() {
   const { config, goToStep } = useWizardStore();
@@ -17,28 +17,11 @@ export default function Step6Review() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+
+  // Use debounced validation hook (reduces API calls by 20x)
+  const { isValidating, errors, warnings } = useValidation(config, 1000);
 
   const configJson = JSON.stringify(config, null, 2);
-
-  // Validate Steps 1-2 on mount and config changes
-  useEffect(() => {
-    const errors: string[] = [];
-
-    const step1Validation = projectSetupSchema.safeParse(config.projectSetup);
-    if (!step1Validation.success) {
-      errors.push("Step 1 (Project Setup) is incomplete or invalid");
-    }
-
-    const step2Validation = databaseConfigSchema.safeParse(
-      config.databaseConfig
-    );
-    if (!step2Validation.success) {
-      errors.push("Step 2 (Database Config) is incomplete or invalid");
-    }
-
-    setValidationErrors(errors);
-  }, [config]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(configJson);
@@ -226,20 +209,59 @@ export default function Step6Review() {
             </SyntaxHighlighter>
           </div>
 
+          {/* Validation Status */}
+          {isValidating && (
+            <Alert>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <AlertTitle>Validating configuration...</AlertTitle>
+              <AlertDescription>
+                Checking your configuration for errors and warnings.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Validation Errors */}
-          {validationErrors.length > 0 && (
+          {!isValidating && errors.length > 0 && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Configuration Incomplete</AlertTitle>
+              <AlertTitle>Configuration Errors</AlertTitle>
               <AlertDescription>
                 <ul className="list-disc list-inside space-y-1 mt-2">
-                  {validationErrors.map((error, idx) => (
-                    <li key={idx}>{error}</li>
+                  {errors.map((error, idx) => (
+                    <li key={idx}>
+                      <strong>{error.path}:</strong>{" "}
+                      {error.issue ?? error.message}
+                      {error.suggestion && (
+                        <span className="text-xs block ml-4 mt-1">
+                          💡 {error.suggestion}
+                        </span>
+                      )}
+                    </li>
                   ))}
                 </ul>
                 <p className="mt-2 text-sm">
-                  Please complete the required steps before generating your
-                  project.
+                  Please fix these errors before generating your project.
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Validation Warnings */}
+          {!isValidating && warnings.length > 0 && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Configuration Warnings</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc list-inside space-y-1 mt-2">
+                  {warnings.map((warning, idx) => (
+                    <li key={idx}>
+                      <strong>{warning.path}:</strong> {warning.message}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-sm">
+                  These warnings won't prevent generation but may need
+                  attention.
                 </p>
               </AlertDescription>
             </Alert>

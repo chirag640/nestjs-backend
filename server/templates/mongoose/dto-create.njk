@@ -24,7 +24,6 @@ import {
 } from 'class-validator';
 import { Transform{% if hasDateFields %}, Type{% endif %} } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import sanitizeHtml from 'sanitize-html';
 
 export class {{ model.createDtoName }} {
 {% for field in model.fields %}
@@ -41,32 +40,16 @@ export class {{ model.createDtoName }} {
   })
   {% endif %}
   {% if field.required and not field.defaultValue %}
-  {% if field.type === 'string' %}
-  @Transform(({ value }) => {
-    if (!value) return value;
-    const trimmed = value.trim();
-    // Sanitize HTML to prevent XSS attacks
-    return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
-  })
-  {% elif field.tsType === 'Date' %}
-  @Transform(({ value }) => {
-    if (!value) return value;
-    // Handle various date formats
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return value; // Let validator handle invalid dates
-    return date.toISOString(); // Normalize to ISO 8601
-  })
-  {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
   {% endfor %}
+  {% if field.tsType === 'Date' %}
+  @Type(() => Date)
+  {% endif %}
   {% if field.enhancedValidators %}
   {% for enhancedValidator in field.enhancedValidators %}
   @{{ enhancedValidator }}()
   {% endfor %}
-  {% endif %}
-  {% if field.tsType === 'Date' %}
-  @Type(() => Date)
   {% endif %}
   {{ field.name }}!: {{ field.tsType }};
   {% else %}
@@ -74,20 +57,11 @@ export class {{ model.createDtoName }} {
   @Transform(({ value }) => {
     // Handle string "null" from frontend forms
     if (value === 'null' || value === 'undefined' || value === '') return undefined;
-    if (!value) return value;
-    {% if field.type === 'string' %}
-    const trimmed = value.trim();
-    // Sanitize HTML to prevent XSS attacks
-    return sanitizeHtml(trimmed, { allowedTags: [], allowedAttributes: {} });
-    {% elif field.tsType === 'Date' %}
-    // Handle various date formats
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return value; // Let validator handle invalid dates
-    return date.toISOString(); // Normalize to ISO 8601
-    {% else %}
     return value;
-    {% endif %}
   })
+  {% if field.tsType === 'Date' %}
+  @Type(() => Date)
+  {% endif %}
   {% for validator in field.validators %}
   @{{ validator }}
   {% endfor %}
@@ -95,9 +69,6 @@ export class {{ model.createDtoName }} {
   {% for enhancedValidator in field.enhancedValidators %}
   @{{ enhancedValidator }}()
   {% endfor %}
-  {% endif %}
-  {% if field.tsType === 'Date' %}
-  @Type(() => Date)
   {% endif %}
   {{ field.name }}?: {{ field.tsType }};
   {% endif %}

@@ -216,7 +216,11 @@ export interface DeviceManagementIR {
  */
 export interface OfflineSyncIR {
   enabled: boolean;
-  conflictResolution: "server-wins" | "client-wins" | "last-write-wins" | "manual";
+  conflictResolution:
+    | "server-wins"
+    | "client-wins"
+    | "last-write-wins"
+    | "manual";
   deltaSync: boolean;
   batchSize: number;
   syncModels: string[];
@@ -648,6 +652,27 @@ function buildFieldIR(field: Field): ModelFieldIR {
   // Use 'values' if provided, fallback to 'enum' for backward compatibility
   const enumValues = (field as any).values ?? field.enum;
 
+  const baseValidators = getValidatorDecorator({
+    type: field.type,
+    name: field.name, // Pass name for email detection
+    minLength,
+    maxLength,
+    min,
+    max,
+    pattern,
+    enum: field.enum,
+    values: enumValues,
+  });
+
+  // Deduplicate enhancedValidators against baseValidators to prevent double-decorating
+  // e.g. IsEmail() is emitted by getValidatorDecorator AND getSmartFieldDefaults
+  const baseValidatorNames = new Set(
+    baseValidators.map((v) => v.split("(")[0].trim()),
+  );
+  const deduplicatedEnhanced = (
+    smartDefaults.additionalValidators || []
+  ).filter((v) => !baseValidatorNames.has(v.split("(")[0].trim()));
+
   return {
     name: field.name, // Already camelCase from validation
     type: field.type,
@@ -657,25 +682,15 @@ function buildFieldIR(field: Field): ModelFieldIR {
     unique: field.unique ?? false,
     indexed: field.indexed ?? false,
     defaultValue,
-    validators: getValidatorDecorator({
-      type: field.type,
-      name: field.name, // Pass name for email detection
-      minLength,
-      maxLength,
-      min,
-      max,
-      pattern,
-      enum: field.enum,
-      values: enumValues,
-    }),
+    validators: baseValidators,
     minLength,
     maxLength,
     min,
     max,
     pattern,
     enum: enumValues,
-    // Enhanced validators
-    enhancedValidators: smartDefaults.additionalValidators || [],
+    // Enhanced validators (deduplicated)
+    enhancedValidators: deduplicatedEnhanced,
     // API Documentation
     apiExample: formatApiExample(smartDefaults.exampleValue, field.type),
     apiDescription: smartDefaults.description || field.name,
@@ -691,7 +706,7 @@ function buildFieldIR(field: Field): ModelFieldIR {
  */
 function getSmartRbacRoles(
   modelName: string,
-  fields: Field[]
+  fields: Field[],
 ): {
   create?: string[];
   read?: string[];
@@ -780,7 +795,7 @@ function getSmartRbacRoles(
 
 function getSmartFieldDefaults(
   fieldName: string,
-  fieldType: string
+  fieldType: string,
 ): {
   minLength?: number;
   maxLength?: number;
@@ -852,14 +867,14 @@ function getSmartFieldDefaults(
         description: "Title or heading",
       };
     }
-    // Description/content fields
+    // Description/content fields — use MinLength(1) not 10 (min 10 is too strict for optional notes)
     if (
       lowerName.includes("description") ||
       lowerName.includes("content") ||
       lowerName.includes("body")
     ) {
       return {
-        minLength: 10,
+        minLength: 1,
         maxLength: 5000,
         exampleValue: "'This is a sample description text'",
         description: "Description or content",
@@ -892,6 +907,23 @@ function getSmartFieldDefaults(
         maxLength: 7,
         exampleValue: "'#FF5733'",
         description: "Hex color code",
+      };
+    }
+    // Password fields — enforce security minimum (must come before default string fallback)
+    if (
+      lowerName === "password" ||
+      lowerName === "newpassword" ||
+      lowerName === "confirmpassword" ||
+      lowerName === "currentpassword" ||
+      lowerName.endsWith("password")
+    ) {
+      return {
+        minLength: 8,
+        maxLength: 72, // bcrypt max effective length
+        pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$",
+        exampleValue: "'SecurePass1!'",
+        description:
+          "Password (min 8 chars, must include uppercase, lowercase, and number)",
       };
     }
     // Default string
@@ -952,8 +984,27 @@ function getSmartFieldDefaults(
         description: "Rating score",
       };
     }
-    // Percentage detection
-    if (lowerName.includes("percent") || lowerName.includes("rate")) {
+    // Hourly/monetary rate detection (e.g. hourlyRate, ratePerHour) — unbounded monetary value
+    if (
+      lowerName.includes("rate") ||
+      lowerName.includes("wage") ||
+      lowerName.includes("salary")
+    ) {
+      return {
+        min: 0,
+        max: 100000,
+        additionalValidators: ["IsPositive"],
+        exampleValue: "25.50",
+        description: "Monetary rate value",
+      };
+    }
+    // Percentage detection — only match fields explicitly about percentages
+    // Do NOT match 'rate', 'hourlyRate', etc. (those are unbounded monetary values)
+    if (
+      lowerName.includes("percent") ||
+      lowerName === "discount" ||
+      lowerName.endsWith("pct")
+    ) {
       return {
         min: 0,
         max: 100,
@@ -983,10 +1034,15 @@ function getSmartFieldDefaults(
     };
   }
 
-  // Date field
-  if (fieldType === "Date") {
+  // Date field — use @Type(() => Date) + @IsDate() in the DTO template
+  // The @Transform to ISO string is NOT used (conflicts with @Type(() => Date))
+  if (
+    fieldType === "Date" ||
+    fieldType === "date" ||
+    fieldType === "datetime"
+  ) {
     return {
-      additionalValidators: ["IsISO8601({ strict: false })"],
+      additionalValidators: ["IsDate"],
       exampleValue: "'2024-01-01T00:00:00.000Z'",
       description:
         "Date and time in ISO 8601 format (YYYY-MM-DD or full timestamp)",
@@ -1045,7 +1101,7 @@ function validateModels(models: Model[]): void {
     // Check model name follows PascalCase convention
     if (!/^[A-Z][a-zA-Z0-9]*$/.test(model.name)) {
       errors.push(
-        `Model name "${model.name}" must be PascalCase (start with uppercase, alphanumeric only)`
+        `Model name "${model.name}" must be PascalCase (start with uppercase, alphanumeric only)`,
       );
     }
 
@@ -1053,14 +1109,14 @@ function validateModels(models: Model[]): void {
     model.fields.forEach((field) => {
       if (isReservedFieldName(field.name)) {
         errors.push(
-          `Reserved field name "${field.name}" in model "${model.name}"`
+          `Reserved field name "${field.name}" in model "${model.name}"`,
         );
       }
 
       // Check field name follows camelCase convention
       if (!/^[a-z][a-zA-Z0-9]*$/.test(field.name)) {
         errors.push(
-          `Field name "${field.name}" in model "${model.name}" must be camelCase (start with lowercase, alphanumeric only)`
+          `Field name "${field.name}" in model "${model.name}" must be camelCase (start with lowercase, alphanumeric only)`,
         );
       }
     });
@@ -1070,7 +1126,7 @@ function validateModels(models: Model[]): void {
     model.fields.forEach((field) => {
       if (fieldNames.has(field.name)) {
         errors.push(
-          `Duplicate field name "${field.name}" in model "${model.name}"`
+          `Duplicate field name "${field.name}" in model "${model.name}"`,
         );
       }
       fieldNames.add(field.name);
@@ -1090,7 +1146,7 @@ function buildAuthIR(config: WizardConfig): AuthIR {
 
   if (authConfig.enabled && !authConfig.jwt) {
     throw new Error(
-      "JWT configuration is required when authentication is enabled"
+      "JWT configuration is required when authentication is enabled",
     );
   }
 
@@ -1158,9 +1214,12 @@ function buildMobileIR(config: WizardConfig): MobileIR {
     ir.biometricAuth = {
       enabled: true,
       rpId: mobileConfig.biometricAuth.rpId,
-      rpName: mobileConfig.biometricAuth.rpName || config.projectSetup!.projectName,
-      allowedAuthenticators: mobileConfig.biometricAuth.allowedAuthenticators || ["platform"],
-      userVerification: mobileConfig.biometricAuth.userVerification || "required",
+      rpName:
+        mobileConfig.biometricAuth.rpName || config.projectSetup!.projectName,
+      allowedAuthenticators: mobileConfig.biometricAuth
+        .allowedAuthenticators || ["platform"],
+      userVerification:
+        mobileConfig.biometricAuth.userVerification || "required",
       attestation: mobileConfig.biometricAuth.attestation || "none",
       residentKey: mobileConfig.biometricAuth.residentKey || "preferred",
       timeout: mobileConfig.biometricAuth.timeout || 60000,
@@ -1173,8 +1232,10 @@ function buildMobileIR(config: WizardConfig): MobileIR {
       enabled: mobileConfig.deviceManagement?.enabled ?? true,
       maxDevicesPerUser: mobileConfig.deviceManagement?.maxDevicesPerUser ?? 5,
       trackDeviceInfo: mobileConfig.deviceManagement?.trackDeviceInfo ?? true,
-      autoRevokeInactiveDays: mobileConfig.deviceManagement?.autoRevokeInactiveDays ?? 90,
-      requireDeviceApproval: mobileConfig.deviceManagement?.requireDeviceApproval ?? false,
+      autoRevokeInactiveDays:
+        mobileConfig.deviceManagement?.autoRevokeInactiveDays ?? 90,
+      requireDeviceApproval:
+        mobileConfig.deviceManagement?.requireDeviceApproval ?? false,
     };
   }
 
@@ -1182,7 +1243,8 @@ function buildMobileIR(config: WizardConfig): MobileIR {
   if (mobileConfig.offlineSync?.enabled) {
     ir.offlineSync = {
       enabled: true,
-      conflictResolution: mobileConfig.offlineSync.conflictResolution || "last-write-wins",
+      conflictResolution:
+        mobileConfig.offlineSync.conflictResolution || "last-write-wins",
       deltaSync: mobileConfig.offlineSync.deltaSync ?? true,
       batchSize: mobileConfig.offlineSync.batchSize ?? 100,
       syncModels: mobileConfig.offlineSync.syncModels || [],
@@ -1198,7 +1260,7 @@ function buildMobileIR(config: WizardConfig): MobileIR {
  */
 function buildRealtimeIR(config: WizardConfig): RealtimeIR {
   const realtimeConfig = config.realtimeConfig!;
-  
+
   return {
     enabled: realtimeConfig.enabled,
     provider: realtimeConfig.provider || "socket.io",
@@ -1218,7 +1280,7 @@ function buildRealtimeIR(config: WizardConfig): RealtimeIR {
  */
 function buildWebhookIR(config: WizardConfig): WebhookIR {
   const webhookConfig = config.webhookConfig!;
-  
+
   return {
     enabled: webhookConfig.enabled,
     events: webhookConfig.events || [],
@@ -1235,7 +1297,7 @@ function buildWebhookIR(config: WizardConfig): WebhookIR {
  */
 function buildAuditIR(config: WizardConfig): AuditIR {
   const auditConfig = config.auditConfig!;
-  
+
   return {
     enabled: auditConfig.enabled,
     storage: auditConfig.storage || "database",
@@ -1252,7 +1314,7 @@ function buildAuditIR(config: WizardConfig): AuditIR {
  */
 function buildGraphQLIR(config: WizardConfig): GraphQLIR {
   const graphqlConfig = config.graphqlConfig!;
-  
+
   return {
     enabled: graphqlConfig.enabled,
     playground: graphqlConfig.playground ?? true,
@@ -1273,7 +1335,7 @@ function buildGraphQLIR(config: WizardConfig): GraphQLIR {
  */
 function buildMultitenancyIR(config: WizardConfig): MultitenancyIR {
   const mtConfig = config.multitenancyConfig!;
-  
+
   return {
     enabled: mtConfig.enabled,
     strategy: mtConfig.strategy || "row",
@@ -1289,7 +1351,7 @@ function buildMultitenancyIR(config: WizardConfig): MultitenancyIR {
  */
 function buildPaymentIR(config: WizardConfig): PaymentIR {
   const paymentConfig = config.paymentConfig!;
-  
+
   const ir: PaymentIR = {
     enabled: paymentConfig.enabled,
     providers: paymentConfig.providers || [],
@@ -1318,7 +1380,7 @@ function buildPaymentIR(config: WizardConfig): PaymentIR {
  */
 function buildAnalyticsIR(config: WizardConfig): AnalyticsIR {
   const analyticsConfig = config.analyticsConfig!;
-  
+
   return {
     enabled: analyticsConfig.enabled,
     metrics: analyticsConfig.metrics || ["requests", "latency", "errors"],
@@ -1332,7 +1394,7 @@ function buildAnalyticsIR(config: WizardConfig): AnalyticsIR {
  */
 function buildFeatureFlagsIR(config: WizardConfig): FeatureFlagsIR {
   const ffConfig = config.featureFlagsConfig!;
-  
+
   return {
     enabled: ffConfig.enabled,
     provider: ffConfig.provider || "internal",
@@ -1349,7 +1411,7 @@ function buildFeatureFlagsIR(config: WizardConfig): FeatureFlagsIR {
  */
 function buildNotificationsIR(config: WizardConfig): NotificationsIR {
   const notifConfig = config.notificationsConfig!;
-  
+
   return {
     enabled: notifConfig.enabled,
     channels: {
@@ -1368,7 +1430,7 @@ function buildNotificationsIR(config: WizardConfig): NotificationsIR {
  */
 function buildAiIR(config: WizardConfig): AiIR {
   const aiConfig = config.aiConfig!;
-  
+
   return {
     enabled: aiConfig.enabled,
     providers: aiConfig.providers || [],
@@ -1387,7 +1449,7 @@ function buildAiIR(config: WizardConfig): AiIR {
  */
 function buildReportsIR(config: WizardConfig): ReportsIR {
   const reportsConfig = config.reportsConfig!;
-  
+
   return {
     enabled: reportsConfig.enabled,
     formats: reportsConfig.formats || ["pdf", "csv"],
@@ -1401,7 +1463,7 @@ function buildReportsIR(config: WizardConfig): ReportsIR {
  */
 function buildI18nIR(config: WizardConfig): I18nIR {
   const i18nConfig = config.i18nConfig!;
-  
+
   return {
     enabled: i18nConfig.enabled,
     defaultLocale: i18nConfig.defaultLocale || "en",
@@ -1466,12 +1528,12 @@ function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
   allRelationships.forEach((rel) => {
     if (rel.sourceModel && !modelNames.has(rel.sourceModel)) {
       throw new Error(
-        `Relationship references non-existent source model: ${rel.sourceModel}`
+        `Relationship references non-existent source model: ${rel.sourceModel}`,
       );
     }
     if (!modelNames.has(rel.targetModel)) {
       throw new Error(
-        `Relationship references non-existent target model: ${rel.targetModel}`
+        `Relationship references non-existent target model: ${rel.targetModel}`,
       );
     }
   });
@@ -1491,7 +1553,7 @@ function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
     // Build attributes if provided for M:N relationships
     if (rel.attributes && rel.attributes.length > 0) {
       relationshipIR.attributes = rel.attributes.map((field) =>
-        buildFieldIR(field)
+        buildFieldIR(field),
       );
     }
 
@@ -1522,7 +1584,9 @@ function buildRelationshipsIR(config: WizardConfig): RelationshipIR[] {
       // One-to-Many: Inject FK into Target model (e.g., User -> Posts, inject userId into Post)
       const targetModel = models.find((m) => m.name === rel.targetModel);
       if (targetModel) {
-        const fkName = rel.foreignKeyName || `${toCamelCase(rel.sourceModel || "Unknown")}Id`;
+        const fkName =
+          rel.foreignKeyName ||
+          `${toCamelCase(rel.sourceModel || "Unknown")}Id`;
         // Check if field already exists to avoid duplicates
         if (!targetModel.fields.find((f) => f.name === fkName)) {
           targetModel.fields.push({
@@ -1616,7 +1680,7 @@ export interface ModelSeedingMetadata {
   relationships: {
     fieldName: string;
     targetModel: string;
-    type: 'one' | 'many' | 'array';
+    type: "one" | "many" | "array";
   }[];
 }
 
@@ -1635,14 +1699,14 @@ export function buildSeedingMetadata(ir: ProjectIR): SeedingMetadata {
   // First pass: Identify dependencies
   for (const model of ir.models) {
     const deps = new Set<string>();
-    
+
     for (const field of model.fields) {
       // Check if field is a relationship (has ref property)
       if ((field as any).ref) {
         deps.add((field as any).ref);
       }
     }
-    
+
     modelDependencies.set(model.name, deps);
   }
 
@@ -1669,28 +1733,32 @@ export function buildSeedingMetadata(ir: ProjectIR): SeedingMetadata {
   // Second pass: Build seeding strategies
   for (let i = 0; i < order.length; i++) {
     const modelName = order[i];
-    const model = ir.models.find(m => m.name === modelName);
+    const model = ir.models.find((m) => m.name === modelName);
     if (!model) continue;
 
     const fieldStrategies: FieldSeedingStrategy[] = [];
-    const relationships: ModelSeedingMetadata['relationships'] = [];
+    const relationships: ModelSeedingMetadata["relationships"] = [];
 
     for (const field of model.fields) {
       // Skip relationship fields - they'll be handled separately
       if ((field as any).isRelationship) {
         const ref = (field as any).ref;
-        const isArray = field.type.includes('[]');
-        
+        const isArray = field.type.includes("[]");
+
         relationships.push({
           fieldName: field.name,
           targetModel: ref,
-          type: isArray ? 'array' : 'one',
+          type: isArray ? "array" : "one",
         });
         continue;
       }
 
       // Skip auto-managed fields
-      if (field.name === 'id' || field.name === 'createdAt' || field.name === 'updatedAt') {
+      if (
+        field.name === "id" ||
+        field.name === "createdAt" ||
+        field.name === "updatedAt"
+      ) {
         continue;
       }
 
@@ -1715,12 +1783,15 @@ export function buildSeedingMetadata(ir: ProjectIR): SeedingMetadata {
 /**
  * Generate data generation strategy for a single field
  */
-function generateFieldStrategy(field: ModelFieldIR, modelName: string): FieldSeedingStrategy | null {
+function generateFieldStrategy(
+  field: ModelFieldIR,
+  modelName: string,
+): FieldSeedingStrategy | null {
   const { name, type } = field;
 
   // Handle enums first
   if (field.enum && field.enum.length > 0) {
-    const values = field.enum.map(v => `'${v}'`).join(', ');
+    const values = field.enum.map((v) => `'${v}'`).join(", ");
     return {
       fieldName: name,
       generator: `[${values}][Math.floor(Math.random() * ${field.enum.length})]`,
@@ -1729,27 +1800,34 @@ function generateFieldStrategy(field: ModelFieldIR, modelName: string): FieldSee
 
   // Type-based generation
   switch (type) {
-    case 'string':
+    case "string":
       // Special cases based on field name
-      if (name.toLowerCase().includes('email')) {
+      if (name.toLowerCase().includes("email")) {
         return {
           fieldName: name,
           generator: `\`user\${i + 1}@${modelName.toLowerCase()}.com\``,
         };
       }
-      if (name.toLowerCase().includes('name') || name.toLowerCase().includes('title')) {
+      if (
+        name.toLowerCase().includes("name") ||
+        name.toLowerCase().includes("title")
+      ) {
         return {
           fieldName: name,
           generator: `'${modelName} ' + (i + 1)`,
         };
       }
-      if (name.toLowerCase().includes('url')) {
+      if (name.toLowerCase().includes("url")) {
         return {
           fieldName: name,
           generator: `'https://example.com/${name}/' + (i + 1)`,
         };
       }
-      if (name.toLowerCase().includes('description') || name.toLowerCase().includes('bio') || name.toLowerCase().includes('content')) {
+      if (
+        name.toLowerCase().includes("description") ||
+        name.toLowerCase().includes("bio") ||
+        name.toLowerCase().includes("content")
+      ) {
         return {
           fieldName: name,
           generator: `'Sample ${name} for ${modelName} #' + (i + 1)`,
@@ -1761,14 +1839,17 @@ function generateFieldStrategy(field: ModelFieldIR, modelName: string): FieldSee
         generator: `'${name}_' + (i + 1)`,
       };
 
-    case 'number':
-      if (name.toLowerCase().includes('price') || name.toLowerCase().includes('amount')) {
+    case "number":
+      if (
+        name.toLowerCase().includes("price") ||
+        name.toLowerCase().includes("amount")
+      ) {
         return {
           fieldName: name,
           generator: `Math.floor(Math.random() * 10000) / 100`, // 0-100 with 2 decimals
         };
       }
-      if (name.toLowerCase().includes('age')) {
+      if (name.toLowerCase().includes("age")) {
         return {
           fieldName: name,
           generator: `Math.floor(Math.random() * 80) + 18`, // 18-97
@@ -1779,26 +1860,26 @@ function generateFieldStrategy(field: ModelFieldIR, modelName: string): FieldSee
         generator: `Math.floor(Math.random() * 1000)`,
       };
 
-    case 'boolean':
+    case "boolean":
       return {
         fieldName: name,
         generator: `Math.random() > 0.5`,
       };
 
-    case 'date':
-    case 'datetime':
+    case "date":
+    case "datetime":
       return {
         fieldName: name,
         generator: `new Date(Date.now() - Math.floor(Math.random() * 365 * 24 * 60 * 60 * 1000))`, // Random date within last year
       };
 
-    case 'string[]':
+    case "string[]":
       return {
         fieldName: name,
         generator: `['${name}_1', '${name}_2', '${name}_3'].slice(0, Math.floor(Math.random() * 3) + 1)`,
       };
 
-    case 'json':
+    case "json":
       return {
         fieldName: name,
         generator: `{ key: 'value', index: i + 1 }`,

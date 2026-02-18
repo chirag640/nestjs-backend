@@ -1,3 +1,5 @@
+import 'api_error.dart';
+
 /// Standardized API Response wrapper
 /// 
 /// All API responses follow this structure:
@@ -15,6 +17,8 @@ class ApiResponse<T> {
   final T? data;
   final ApiMeta meta;
   final ApiPagination? pagination;
+  /// Non-null when [isError] is true — contains the server error details
+  final ApiError? error;
   
   ApiResponse({
     required this.status,
@@ -22,6 +26,7 @@ class ApiResponse<T> {
     this.data,
     required this.meta,
     this.pagination,
+    this.error,
   });
   
   /// Whether the request was successful
@@ -36,6 +41,7 @@ class ApiResponse<T> {
   }) {
     final metaJson = json['meta'] as Map<String, dynamic>? ?? {};
     final paginationJson = metaJson['pagination'] as Map<String, dynamic>?;
+    final errorJson = json['error'] as Map<String, dynamic>?;
     
     return ApiResponse<T>(
       status: json['status'] ?? 'unknown',
@@ -46,6 +52,14 @@ class ApiResponse<T> {
       meta: ApiMeta.fromJson(metaJson),
       pagination: paginationJson != null 
           ? ApiPagination.fromJson(paginationJson) 
+          : null,
+      error: errorJson != null
+          ? ApiError(
+              code: errorJson['code'] ?? 'UNKNOWN_ERROR',
+              message: errorJson['message'] ?? 'An error occurred',
+              statusCode: json['statusCode'] ?? 0,
+              details: errorJson['details'],
+            )
           : null,
     );
   }

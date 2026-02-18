@@ -26,6 +26,7 @@ describe('{{ model.name }} CRUD (e2e)', () => {
       .send({
         email: 'test-{{ model.nameCamel }}@example.com',
         password: 'Test123!@#',
+        name: 'Test User',
       });
     accessToken = authRes.body.accessToken;
 {% endif %}
@@ -39,11 +40,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should create a new {{ model.nameCamel }}', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .post('/{{ model.route }}')
+        .post('{{ model.route }}')
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .post('/{{ model.route }}')
+        .post('{{ model.route }}')
 {% endif %}
         .send({
 {% for field in model.fields %}
@@ -56,7 +57,7 @@ describe('{{ model.name }} CRUD (e2e)', () => {
         .expect((res) => {
           expect(res.body).toHaveProperty('id');
 {% for field in model.fields %}
-  {% if not field.isPrimary and not field.isTimestamp %}
+  {% if not field.isPrimary and not field.isTimestamp and field.name != 'password' and field.name != 'passwordHash' and field.name != 'refreshToken' and field.name != 'resetToken' and field.name != 'verificationToken' %}
           expect(res.body).toHaveProperty('{{ field.name }}');
   {% endif %}
 {% endfor %}
@@ -67,11 +68,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should reject invalid data', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .post('/{{ model.route }}')
+        .post('{{ model.route }}')
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .post('/{{ model.route }}')
+        .post('{{ model.route }}')
 {% endif %}
         .send({
           // Missing required fields
@@ -82,7 +83,7 @@ describe('{{ model.name }} CRUD (e2e)', () => {
 {% if auth and auth.enabled %}
     it('should reject unauthenticated request', () => {
       return request(app.getHttpServer())
-        .post('/{{ model.route }}')
+        .post('{{ model.route }}')
         .send({
 {% for field in model.fields %}
   {% if not field.isPrimary and not field.isTimestamp and field.required %}
@@ -99,11 +100,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should get all {{ model.namePlural }}', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .get('/{{ model.route }}')
+        .get('{{ model.route }}')
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .get('/{{ model.route }}')
+        .get('{{ model.route }}')
 {% endif %}
         .expect(200)
         .expect((res) => {
@@ -115,11 +116,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should support pagination', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .get('/{{ model.route }}?page=1&limit=10')
+        .get('{{ model.route }}?page=1&limit=10')
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .get('/{{ model.route }}?page=1&limit=10')
+        .get('{{ model.route }}?page=1&limit=10')
 {% endif %}
         .expect(200)
         .expect((res) => {
@@ -132,11 +133,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should get a single {{ model.nameCamel }} by id', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .get(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .get(`{{ model.route }}/${created{{ model.name }}Id}`)
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .get(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .get(`{{ model.route }}/${created{{ model.name }}Id}`)
 {% endif %}
         .expect(200)
         .expect((res) => {
@@ -147,11 +148,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should return 404 for non-existent id', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .get('/{{ model.route }}/nonexistent-id')
+        .get('{{ model.route }}/nonexistent-id')
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .get('/{{ model.route }}/nonexistent-id')
+        .get('{{ model.route }}/nonexistent-id')
 {% endif %}
         .expect(404);
     });
@@ -161,11 +162,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should update a {{ model.nameCamel }}', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .patch(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .patch(`{{ model.route }}/${created{{ model.name }}Id}`)
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .patch(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .patch(`{{ model.route }}/${created{{ model.name }}Id}`)
 {% endif %}
         .send({
 {% set _firstUpdated = false %}
@@ -185,11 +186,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should return 404 for non-existent id', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .patch('/{{ model.route }}/nonexistent-id')
+        .patch('{{ model.route }}/nonexistent-id')
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .patch('/{{ model.route }}/nonexistent-id')
+        .patch('{{ model.route }}/nonexistent-id')
 {% endif %}
         .send({})
         .expect(404);
@@ -200,11 +201,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should delete a {{ model.nameCamel }}', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .delete(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .delete(`{{ model.route }}/${created{{ model.name }}Id}`)
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .delete(`/{{ model.route }}/${created{{ model.name }}Id}`)
+        .delete(`{{ model.route }}/${created{{ model.name }}Id}`)
 {% endif %}
         .expect(204);
     });
@@ -212,11 +213,11 @@ describe('{{ model.name }} CRUD (e2e)', () => {
     it('should return 404 when deleting non-existent id', () => {
 {% if auth and auth.enabled %}
       return request(app.getHttpServer())
-        .delete('/{{ model.route }}/nonexistent-id')
+        .delete('{{ model.route }}/nonexistent-id')
         .set('Authorization', `Bearer ${accessToken}`)
 {% else %}
       return request(app.getHttpServer())
-        .delete('/{{ model.route }}/nonexistent-id')
+        .delete('{{ model.route }}/nonexistent-id')
 {% endif %}
         .expect(404);
     });

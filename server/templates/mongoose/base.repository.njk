@@ -31,14 +31,18 @@ export abstract class BaseRepository<T extends Document> {
     const session = await this.connection.startSession();
     
     try {
-      let result: R;
+      let result: R | undefined;
       
       await session.withTransaction(async () => {
         result = await callback(session);
       });
       
+      if (result === undefined) {
+        throw new Error('Transaction callback did not produce a result');
+      }
+      
       this.logger.log('Transaction completed successfully');
-      return result!;
+      return result;
     } catch (error) {
       const err = error as Error;
       this.logger.error(`Transaction failed: ${err.message}`, err.stack);

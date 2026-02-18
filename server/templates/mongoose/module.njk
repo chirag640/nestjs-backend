@@ -4,10 +4,16 @@ import { {{ model.name }}, {{ model.name }}Schema } from './schemas/{{ model.fil
 import { {{ model.name }}Controller } from './{{ model.fileName }}.controller';
 import { {{ model.name }}Service } from './{{ model.fileName }}.service';
 import { {{ model.name }}Repository } from './{{ model.fileName }}.repository';
+{% if model.encryptedFields and model.encryptedFields.length > 0 %}
+import { EncryptionModule } from '../../common/encryption.module';
+{% endif %}
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: {{ model.name }}.name, schema: {{ model.name }}Schema }]),
+    {% if model.encryptedFields and model.encryptedFields.length > 0 %}
+    EncryptionModule,
+    {% endif %}
   ],
   controllers: [{{ model.name }}Controller],
   providers: [{{ model.name }}Service, {{ model.name }}Repository],

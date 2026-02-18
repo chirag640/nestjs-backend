@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException{% if model.fields | selectattr('unique') | list | length > 0 %}, ConflictException{% endif %} } from '@nestjs/common';
 import { {{ model.name }}Repository } from './{{ model.fileName }}.repository';
 import { {{ model.createDtoName }} } from './dto/create-{{ model.fileName }}.dto';
 import { {{ model.updateDtoName }} } from './dto/update-{{ model.fileName }}.dto';
@@ -6,6 +6,11 @@ import { {{ model.outputDtoName }} } from './dto/{{ model.fileName }}-output.dto
 import { PaginatedResponse, createPaginatedResponse } from '../../pagination.dto';
 {% if model.encryptedFields and model.encryptedFields.length > 0 %}
 import { EncryptionService } from '../../common/encryption.service';
+{% endif %}
+{% set hasPasswordField = false %}
+{% for field in model.fields %}{% if field.name == 'password' or field.name == 'passwordHash' %}{% set hasPasswordField = true %}{% endif %}{% endfor %}
+{% if hasPasswordField %}
+import * as bcrypt from 'bcryptjs';
 {% endif %}
 
 @Injectable()
@@ -18,10 +23,27 @@ export class {{ model.name }}Service {
   ) {}
 
   async create(dto: {{ model.createDtoName }}): Promise<{{ model.outputDtoName }}> {
+    {% for field in model.fields %}{% if field.unique %}
+    // Enforce unique constraint for '{{ field.name }}' with a clean ConflictException
+    const existing{{ field.name | capitalize }} = await this.{{ model.nameCamel }}Repository.findBy{{ field.name | capitalize }}((dto as Record<string, unknown>)['{{ field.name }}'] as {{ field.tsType }});
+    if (existing{{ field.name | capitalize }}) {
+      throw new ConflictException(`{{ model.name }} with {{ field.name }} '${(dto as Record<string, unknown>)['{{ field.name }}']}' already exists`);
+    }
+    {% endif %}{% endfor %}
+    {% if hasPasswordField %}
+    // Hash the plain-text password before persisting — NEVER store passwords in plain text
+    const dtoWithHash = { ...dto } as Record<string, unknown>;
+    if (typeof dtoWithHash['password'] === 'string') {
+      dtoWithHash['password'] = await bcrypt.hash(dtoWithHash['password'] as string, 10);
+    }
+    const dtoToSave = dtoWithHash as {{ model.createDtoName }};
+    {% else %}
+    const dtoToSave = dto;
+    {% endif %}
     {% if model.encryptedFields and model.encryptedFields.length > 0 %}
     // Encrypt sensitive fields before storing
     const encrypted = await this.encryptionService.encryptRecord(
-      dto,
+      dtoToSave,
       [{% for field in model.encryptedFields %}'{{ field }}'{% if not loop.last %}, {% endif %}{% endfor %}],
     );
     const created = await this.{{ model.nameCamel }}Repository.create(encrypted);
@@ -33,7 +55,7 @@ export class {{ model.name }}Service {
     );
     return this.mapToOutput(decrypted);
     {% else %}
-    const created = await this.{{ model.nameCamel }}Repository.create(dto);
+    const created = await this.{{ model.nameCamel }}Repository.create(dtoToSave);
     return this.mapToOutput(created);
     {% endif %}
   }
@@ -131,7 +153,14 @@ export class {{ model.name }}Service {
     return {
       id: item._id?.toString() || item.id,
 {% for field in model.fields %}
-{% if field.name != 'password' and field.name != 'refreshToken' and field.name != 'passwordResetToken' and field.name != 'emailVerificationToken' %}
+{% if field.name != 'password'
+   and field.name != 'passwordResetToken'
+   and field.name != 'emailVerificationToken'
+   and field.name != 'pinHash'
+   and field.name != 'verificationToken'
+   and field.name != 'passwordResetExpires'
+   and field.sensitive != true
+   and not (field.name == 'refreshToken' and model.name == 'User') %}
       {{ field.name }}: item.{{ field.name }},
 {% endif %}
 {% endfor %}

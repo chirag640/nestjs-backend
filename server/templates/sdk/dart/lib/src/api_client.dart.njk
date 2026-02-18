@@ -119,9 +119,22 @@ class ApiClient {
         }
         return true;
       }
-    } catch (_) {}
-    
-    return false;
+      // Server returned non-success — clear tokens and report failure
+      clearTokens();
+      return false;
+    } on DioException catch (e) {
+      // Token refresh failed (network error or server error) — clear tokens
+      // Callers will see isAuthenticated=false and can prompt re-login
+      clearTokens();
+      // Re-throw only non-401 errors (401 is expected when refresh token is expired)
+      if (e.response?.statusCode != null && e.response!.statusCode != 401) {
+        throw _handleError(e);
+      }
+      return false;
+    } catch (e) {
+      clearTokens();
+      return false;
+    }
   }
   
   /// Make a GET request
